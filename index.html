@@ -327,7 +327,7 @@ let coins = 0, coinsTotal = 5, score = 0;
 let grid = null, spawnPt = { x: 0, y: 0 }, exitPt = { x: 0, y: 0 };
 let coinList = [], emitters = [], propsXY = [];
 let bots = [], noise = [];
-let meter = 0, seenTimer = 0, caughtTimer = 0, freeze = 0;
+let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
 let exitOpen = false, blackout = 0, nextBlackout = 999;
 let shake = 0, redPulse = 0, unlockFlash = 0;
 let name = '';
@@ -446,7 +446,7 @@ function loadMap(idx) {
   emitters.push({ x: exitPt.x, y: exitPt.y, r: 95, col: '#4dffb8', flick: rand(0, 9), kind: 'exit', base: .7 });
   coinsTotal = coinList.length; coins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
-  meter = 0; seenTimer = 0; exitOpen = false; noise = [];
+  meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5;
   blackout = 0; nextBlackout = M.theme === 'ward' ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -462,9 +462,15 @@ function spawnBots() {
   const want = Math.min(M.bots + loop, 5);
   for (let i = 0; i < want; i++) {
     const route = (M.routes && M.routes[i % M.routes.length]) || fallbackRoute();
+    /* start each bot at the waypoint farthest from the player's spawn */
+    let fi = 0, fd = -1;
+    route.forEach((p, k) => {
+      const d = Math.hypot((p[0] + .5) * T.TILE - spawnPt.x, (p[1] + .5) * T.TILE - spawnPt.y);
+      if (d > fd) { fd = d; fi = k; }
+    });
     bots.push({
-      x: (route[0][0] + .5) * T.TILE, y: (route[0][1] + .5) * T.TILE, r: 13,
-      face: rand(0, TAU), route, wp: 1 % route.length, path: [], pathT: 0,
+      x: (route[fi][0] + .5) * T.TILE, y: (route[fi][1] + .5) * T.TILE, r: 13,
+      face: rand(0, TAU), route, wp: (fi + 1) % route.length, path: [], pathT: 0,
       state: 'patrol', tgt: null, stateT: 0, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
       half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0
@@ -599,6 +605,7 @@ function update(dt) {
   time += dt;
   if (mode !== 'playing' || paused) return;
   runT += dt;
+  invuln = Math.max(0, invuln - dt);
 
   /* player input */
   let mvx = 0, mvy = 0, mag = 0;
@@ -638,7 +645,7 @@ function update(dt) {
     if (Math.hypot(c.x - player.x, c.y - player.y) < 20) {
       c.got = true; coins++;
       score += Math.round(T.COIN_VALUE * (1 + loop * 0.5));
-      sfx.pickup(); burst(c.x, c.y, gold, 12, 150);
+      sfx.pickup(); burst(c.x, c.y, glowGoldS, 12, 150);
       makeNoise(c.x, c.y, T.NOISE_PICKUP);
       if (coins >= coinsTotal) { exitOpen = true; unlockFlash = 1; sfx.unlock(); }
       hud();
@@ -749,7 +756,7 @@ function botSees(b) {
 
 function updateMeter(dt) {
   let anySees = false;
-  for (const b of bots) if (botSees(b)) anySees = true;
+  if (invuln <= 0) for (const b of bots) if (botSees(b)) anySees = true;
   if (anySees) {
     seenTimer = 0;
     let mult = 1;
@@ -861,6 +868,7 @@ function renderMapCanvas() {
     if (!w) {
       g.fillStyle = (srand() < 0.12) ? TH.floor2 : TH.floor;
       g.fillRect(px, py, T.TILE, T.TILE);
+      g.strokeStyle = 'rgba(0,0,0,.16)'; g.lineWidth = 1; g.strokeRect(px + .5, py + .5, 39, 39);
       if (theme === 'house') {
         g.strokeStyle = 'rgba(0,0,0,.16)'; g.lineWidth = 1;
         g.beginPath(); g.moveTo(px, py + 13.5); g.lineTo(px + 40, py + 13.5);
@@ -878,21 +886,22 @@ function renderMapCanvas() {
         g.strokeStyle = 'rgba(0,0,0,.14)'; g.strokeRect(px + .5, py + .5, 39, 39);
       }
       if (y > 0 && grid[(y - 1) * T.COLS + x]) {
-        const ao = g.createLinearGradient(0, py, 0, py + 12);
-        ao.addColorStop(0, 'rgba(0,0,0,0.4)'); ao.addColorStop(1, 'rgba(0,0,0,0)');
-        g.fillStyle = ao; g.fillRect(px, py, 40, 12);
+        const ao = g.createLinearGradient(0, py, 0, py + 14);
+        ao.addColorStop(0, 'rgba(0,0,0,0.5)'); ao.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = ao; g.fillRect(px, py, 40, 14);
       }
       if (srand() < 0.14) { g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(px + srand() * 30, py + srand() * 30, 3, 2); }
     } else {
       g.fillStyle = TH.wall; g.fillRect(px, py, T.TILE, T.TILE);
       const gw = g.createLinearGradient(0, py, 0, py + T.TILE);
-      gw.addColorStop(0, 'rgba(255,255,255,0.06)'); gw.addColorStop(1, 'rgba(0,0,0,0.28)');
+      gw.addColorStop(0, 'rgba(255,255,255,0.10)'); gw.addColorStop(1, 'rgba(0,0,0,0.16)');
       g.fillStyle = gw; g.fillRect(px, py, T.TILE, T.TILE);
       if (y === 0 || !grid[(y - 1) * T.COLS + x]) {
-        g.fillStyle = TH.wallTop; g.fillRect(px, py, T.TILE, 7);
-        g.fillStyle = 'rgba(255,255,255,.09)'; g.fillRect(px, py, T.TILE, 2);
+        g.fillStyle = TH.wallTop; g.fillRect(px, py, T.TILE, 10);
+        g.fillStyle = 'rgba(255,255,255,.16)'; g.fillRect(px, py, T.TILE, 2);
+        g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(px, py + 10, T.TILE, 2);
       }
-      g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(px, py + T.TILE - 6, T.TILE, 6);
+      g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(px, py + T.TILE - 6, T.TILE, 6);
       if (theme === 'city' && srand() < 0.10) { g.fillStyle = 'rgba(255,230,150,.55)'; g.fillRect(px + 8 + srand() * 16, py + 12 + srand() * 12, 5, 7); }
       else if (theme === 'ward' && srand() < 0.12) { g.strokeStyle = 'rgba(0,0,0,.3)'; g.strokeRect(px + 5, py + 8, 30, 24); }
       else if (theme === 'house' && srand() < 0.10) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(px + 10, py + 18, 20, 12); }
@@ -913,22 +922,71 @@ function renderMapCanvas() {
 
 function drawProp(g, p) {
   g.save(); g.translate(p.x, p.y); g.rotate(p.r);
+  const outline = () => { g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineWidth = 1.4; g.stroke(); };
+  const shine = (x, y, w) => { g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(x, y, w, 2); };
   switch (p.k) {
-    case 'sofa': g.fillStyle = '#5a3f4f'; rr(g, -16, -9, 32, 18, 5); g.fill(); g.fillStyle = '#6d4d5f'; rr(g, -16, -9, 32, 6, 3); g.fill(); break;
-    case 'plant': g.fillStyle = '#7a4a2e'; rr(g, -5, -2, 10, 10, 2); g.fill(); g.fillStyle = '#2f6b3f'; g.beginPath(); g.arc(0, -6, 8, 0, TAU); g.fill(); break;
-    case 'rug': g.fillStyle = 'rgba(150,70,80,0.35)'; rr(g, -22, -14, 44, 28, 4); g.fill(); break;
-    case 'tv': g.fillStyle = '#11141c'; rr(g, -12, -8, 24, 16, 2); g.fill(); g.fillStyle = 'rgba(120,180,255,0.25)'; rr(g, -10, -6, 20, 12, 1); g.fill(); break;
-    case 'crate': g.fillStyle = '#4a4232'; rr(g, -11, -11, 22, 22, 2); g.fill(); g.strokeStyle = 'rgba(0,0,0,.5)'; g.strokeRect(-11, -11, 22, 22); g.beginPath(); g.moveTo(-11, -11); g.lineTo(11, 11); g.moveTo(11, -11); g.lineTo(-11, 11); g.stroke(); break;
-    case 'barrel': g.fillStyle = '#5d4632'; g.beginPath(); g.arc(0, 0, 10, 0, TAU); g.fill(); g.strokeStyle = 'rgba(0,0,0,.55)'; g.beginPath(); g.arc(0, 0, 6, 0, TAU); g.stroke(); break;
-    case 'pallet': g.fillStyle = '#3d3629'; rr(g, -15, -9, 30, 18, 1); g.fill(); g.fillStyle = TH.floor; for (let i = 0; i < 3; i++) g.fillRect(-15, -9 + i * 7, 30, 3); break;
-    case 'stall': g.fillStyle = '#3a2f52'; rr(g, -14, -10, 28, 20, 3); g.fill(); g.fillStyle = 'rgba(255,80,140,.5)'; g.fillRect(-14, -10, 28, 5); break;
-    case 'ac': g.fillStyle = '#2c3342'; rr(g, -11, -8, 22, 16, 2); g.fill(); g.strokeStyle = 'rgba(0,0,0,.6)'; for (let i = -5; i <= 5; i += 5) { g.beginPath(); g.moveTo(-8, i); g.lineTo(8, i); g.stroke(); } break;
-    case 'bench': g.fillStyle = '#38324a'; rr(g, -13, -5, 26, 10, 3); g.fill(); break;
-    case 'holo': g.fillStyle = 'rgba(62,240,255,0.4)'; rr(g, -4, -12, 8, 24, 2); g.fill(); break;
-    case 'gurney': g.fillStyle = '#3a4a46'; rr(g, -14, -6, 28, 12, 3); g.fill(); g.fillStyle = '#51655f'; rr(g, -14, -6, 8, 12, 3); g.fill(); break;
-    case 'chair': g.fillStyle = '#444f4b'; rr(g, -6, -6, 12, 12, 2); g.fill(); break;
-    case 'locker': g.fillStyle = '#333f3b'; rr(g, -8, -12, 16, 24, 1); g.fill(); g.strokeStyle = 'rgba(0,0,0,.6)'; g.beginPath(); g.moveTo(0, -12); g.lineTo(0, 12); g.stroke(); break;
-    default: g.fillStyle = 'rgba(140,180,170,.2)'; g.beginPath(); g.arc(0, 0, rand(3, 7), 0, TAU); g.fill();
+    case 'sofa':
+      g.fillStyle = '#5d4640'; rr(g, -15, -8, 30, 16, 5); g.fill(); outline();
+      g.fillStyle = '#6d534b'; rr(g, -15, -8, 30, 6, 3); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.moveTo(0, -2); g.lineTo(0, 8); g.stroke();
+      break;
+    case 'plant':
+      g.fillStyle = '#6e4a30'; rr(g, -4.5, -1, 9, 9, 2); g.fill(); outline();
+      g.fillStyle = '#2f6b3f'; g.beginPath(); g.arc(0, -6, 7.5, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(120,220,140,.25)'; g.beginPath(); g.arc(-2, -8, 3, 0, TAU); g.fill();
+      break;
+    case 'rug':
+      g.fillStyle = 'rgba(140,70,80,0.30)'; g.beginPath(); g.ellipse(0, 0, 21, 13, 0, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(220,170,140,.18)'; g.lineWidth = 1.5;
+      g.beginPath(); g.ellipse(0, 0, 15, 8.5, 0, 0, TAU); g.stroke();
+      break;
+    case 'tv':
+      g.fillStyle = '#0c0f16'; rr(g, -11, -8, 22, 15, 2); g.fill(); outline();
+      g.fillStyle = 'rgba(110,170,255,' + (0.10 + 0.06 * Math.sin(p.r * 9)) + ')'; rr(g, -9, -6, 18, 11, 1); g.fill();
+      g.fillStyle = '#1a1e28'; g.fillRect(-3, 7, 6, 3);
+      break;
+    case 'crate':
+      g.fillStyle = '#4a4232'; rr(g, -10, -10, 20, 20, 2); g.fill(); outline();
+      g.strokeStyle = 'rgba(0,0,0,.5)'; g.beginPath(); g.moveTo(-10, -10); g.lineTo(10, 10); g.moveTo(10, -10); g.lineTo(-10, 10); g.stroke();
+      shine(-10, -10, 20);
+      break;
+    case 'barrel':
+      g.fillStyle = '#5d4632'; g.beginPath(); g.arc(0, 0, 9.5, 0, TAU); g.fill(); outline();
+      g.strokeStyle = 'rgba(0,0,0,.55)'; g.beginPath(); g.arc(0, 0, 5.5, 0, TAU); g.stroke();
+      break;
+    case 'pallet':
+      g.fillStyle = '#3d3629'; rr(g, -14, -8, 28, 16, 1); g.fill(); outline();
+      g.fillStyle = 'rgba(0,0,0,.45)'; for (let i = 0; i < 3; i++) g.fillRect(-14, -8 + i * 6, 28, 2.5);
+      break;
+    case 'stall':
+      g.fillStyle = '#332a4a'; rr(g, -13, -9, 26, 18, 3); g.fill(); outline();
+      g.fillStyle = 'rgba(255,80,140,.55)'; g.fillRect(-13, -9, 26, 4);
+      break;
+    case 'ac':
+      g.fillStyle = '#2c3342'; rr(g, -10, -8, 20, 16, 2); g.fill(); outline();
+      g.strokeStyle = 'rgba(0,0,0,.6)'; for (let i = -4; i <= 4; i += 4) { g.beginPath(); g.moveTo(-7, i); g.lineTo(7, i); g.stroke(); }
+      break;
+    case 'bench':
+      g.fillStyle = '#332e44'; rr(g, -12, -4.5, 24, 9, 3); g.fill(); outline();
+      shine(-12, -4.5, 24);
+      break;
+    case 'holo':
+      g.fillStyle = 'rgba(62,240,255,0.35)'; rr(g, -3.5, -11, 7, 22, 2); g.fill();
+      g.strokeStyle = 'rgba(62,240,255,.6)'; g.strokeRect(-3.5, -11, 7, 22);
+      break;
+    case 'gurney':
+      g.fillStyle = '#3a4a46'; rr(g, -13, -5.5, 26, 11, 3); g.fill(); outline();
+      g.fillStyle = '#51655f'; rr(g, -13, -5.5, 8, 11, 3); g.fill();
+      break;
+    case 'chair':
+      g.fillStyle = '#414c48'; rr(g, -5.5, -5.5, 11, 11, 2); g.fill(); outline();
+      break;
+    case 'locker':
+      g.fillStyle = '#333f3b'; rr(g, -7.5, -11, 15, 22, 1); g.fill(); outline();
+      g.strokeStyle = 'rgba(0,0,0,.6)'; g.beginPath(); g.moveTo(0, -11); g.lineTo(0, 11); g.stroke();
+      break;
+    default:
+      g.fillStyle = 'rgba(140,180,170,.25)'; g.beginPath(); g.arc(0, 0, 4.5, 0, TAU); g.fill(); outline();
   }
   g.restore();
 }
@@ -1178,15 +1236,16 @@ function drawBotCone(b) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   const gr = ctx.createRadialGradient(b.x, b.y, 6, b.x, b.y, range);
-  const base = chase ? 0.20 : invest ? 0.13 : 0.11;
-  const pulse = chase ? 0.05 * Math.sin(time * 15) : 0.02 * Math.sin(time * 3 + b.sweepP);
-  gr.addColorStop(0, 'rgba(255,60,60,' + (base + pulse + 0.08) + ')');
-  gr.addColorStop(1, 'rgba(255,30,40,0.015)');
+  const base = chase ? 0.15 : invest ? 0.095 : 0.075;
+  const pulse = chase ? 0.04 * Math.sin(time * 15) : 0.015 * Math.sin(time * 3 + b.sweepP);
+  gr.addColorStop(0, 'rgba(255,70,60,' + (base + pulse + 0.05) + ')');
+  gr.addColorStop(0.45, 'rgba(255,50,50,' + ((base + pulse) * 0.55) + ')');
+  gr.addColorStop(1, 'rgba(255,30,40,0.004)');
   fanPath(ctx, b.x, b.y, rays, T.BOT_RAYS, b.half, range, b.face);
   ctx.fillStyle = gr; ctx.fill();
   /* edges */
-  ctx.strokeStyle = 'rgba(255,80,70,' + (chase ? 0.5 : 0.28) + ')';
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = 'rgba(255,90,80,' + (chase ? 0.32 : 0.17) + ')';
+  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(b.x, b.y);
   for (let k = 0; k <= T.BOT_RAYS; k += 4) {
@@ -1283,6 +1342,13 @@ function drawPlayer() {
   ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55;
   ctx.drawImage(glowWhiteS, 11.5, -4, 8, 8);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  /* floor-start grace ring */
+  if (invuln > 0) {
+    ctx.globalAlpha = 0.35 + 0.3 * Math.sin(time * 12);
+    ctx.strokeStyle = 'rgba(120,240,255,0.9)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   ctx.restore();
 }
 
@@ -1333,7 +1399,6 @@ function drawSticks() {
 }
 
 /* ---------- particles ---------- */
-const COLS_GOLD = [255, 210, 110];
 function burst(x, y, col, n, sp) {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * TAU, v = rand(0.2, 1) * sp;

@@ -85,8 +85,15 @@ await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'd', code: 'KeyD' });
 const p1 = await evl('JSON.stringify(__fp.pos)');
 ok('WASD moves player', JSON.parse(p1).x - JSON.parse(p0).x > 40, `${p0} -> ${p1}`);
 
+/* live coin pickup: drives the real collect path (burst, noise, hud) */
+const cp = JSON.parse(await evl('JSON.stringify(coinList.find(c => !c.got))'));
+await evl(`__fp.teleport(${cp.x}, ${cp.y})`);
+await sleep(350);
+await eq('live coin pickup counts', '__fp.coins', 1);
+
 /* detection: place bot 150px away facing the player on clear ground */
 await evl(`(function(){
+  invuln = 0;
   const b = __fp.placeBotNear(player.x + 150, player.y);
   player.x = spawnPt.x; player.y = spawnPt.y;
   for (let k = 0; k < 40 && isWall(player.x + 150, player.y); k++) player.x -= 8;
