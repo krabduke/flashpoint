@@ -144,10 +144,50 @@ await evl('__fp.forceBlackout()');
 await sleep(150);
 const bo = await evl('__fp.blackout');
 ok('blackout fires on ward', bo > 0, 'blackout=' + bo?.toFixed?.(2));
+
+/* museum searchlights */
+await evl('mapIdx = 4; loadMap(4);');
+await sleep(300);
+ok('museum has searchlights', (await evl('__fp.searchN')) >= 2);
+
+/* server laser grid */
+await evl('mapIdx = 5; loadMap(5);');
+await sleep(300);
+await eq('server has 4 laser gates', '__fp.lasersN', 4);
+const lm = JSON.parse(await evl('JSON.stringify(__fp.laserMid)'));
+await evl('invuln = 0; meter = 0;');
+await evl(`__fp.teleport(${lm.x}, ${lm.y})`);
+await sleep(400);
+const lz = await evl('__fp.meter');
+ok('laser zap spikes meter', lz > 0.3, 'meter=' + lz?.toFixed?.(2));
+
+/* bank siren sweep */
+await evl('mapIdx = 6; loadMap(6);');
+await sleep(300);
+await evl('__fp.forceSiren()');
+await sleep(200);
+await eq('siren sweep active', '__fp.sirenT > 0', true);
+
+/* docks fog bank shrinks the beam */
+await evl('mapIdx = 7; loadMap(7);');
+await sleep(300);
+await evl('__fp.forceFog()');
+await sleep(1400);
+const fs = await evl('__fp.flScale');
+ok('fog shrinks the beam', fs < 0.75, 'flScale=' + fs?.toFixed?.(2));
+
+/* core: blackouts on the final floor */
+await evl('mapIdx = 8; loadMap(8);');
+await sleep(300);
+await evl('__fp.forceBlackout()');
+await sleep(150);
+await eq('core blackouts', '__fp.blackout > 0', true);
 await evl('mapIdx = 1; loadMap(1);');
 
 /* full campaign -> win -> endless */
-for (let i = 0; i < 4; i++) {
+await eq('campaign has 9 floors', 'MAPS.length', 9);
+const nMaps = await evl('MAPS.length');
+for (let i = 0; i < nMaps; i++) {
   await evl('__fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);');
   await sleep(500);
 }

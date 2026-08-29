@@ -26,11 +26,11 @@ what their light sees, and nothing else.
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
   so sweeping is mapping.
-- **Caught = run over.** One meter-fill and it's done. Four floors to clear,
+- **Caught = run over.** One meter-fill and it's done. Nine floors to clear,
   then endless loops. Your name rides on a device-local leaderboard (no login,
   no accounts, nothing leaves the browser).
 
-## The four floors
+## The nine floors
 
 | # | Floor | Light | Threat |
 |---|-------|-------|--------|
@@ -38,8 +38,13 @@ what their light sees, and nothing else.
 | 2 | The Warehouse | swaying hang-lamps, dust shafts | 1 fast patroller |
 | 3 | Neon Heights | rain, flickering neon pools | 2 bots, crossing loops |
 | 4 | The Abandoned | near-dark, random 4s blackouts | 2 bots in the black |
+| 5 | The Museum | marble slabs, golden calm | 2 bots + **sweeping searchlights** — stand in one and the meter fills |
+| 6 | The Server Farm | cold raised panels, LED racks | 2 bots + **pulsing laser gates** — a live beam spikes detection and screams your position |
+| 7 | The Bank Vault | brass-lit vault rooms | 3 bots + **siren sweeps** — periodically every drone wakes and its cone grows |
+| 8 | The Fog Docks | rain, amber dock lamps | 3 bots + **fog banks** — your beam strangles to a candle for six seconds |
+| 9 | The CORE | red emergency gloom | 3 fast bots + blackouts + sirens + searchlights. Everything listens. |
 
-Clear all four → **YOU ESCAPED** → endless mode: the rotation repeats, loops
+Clear all nine → **YOU ESCAPED** → endless mode: the rotation repeats, loops
 add bots and speed, and your best depth per device is kept.
 
 ## Controls
@@ -93,10 +98,11 @@ node test/flashpoint.cdp.mjs
 
 A dependency-free CDP harness (Node ≥ 22, native WebSocket) drives real
 headless Chrome through the real game loop and asserts actual state:
-map connectivity, mouse aim, WASD + thumbstick movement, cone detection
-filling → caught → card, LOS hiding draining, coin → exit → advance,
-ward blackouts, full campaign → win → endless escalation, leaderboard
-persistence, touch stick lifecycle, portrait viewport, zero console errors.
+map connectivity (all nine floors), mouse aim, live coin pickup, cone
+detection filling → caught → card, LOS hiding draining, searchlight exposure,
+laser-gate zap, siren sweep, fog beam-shrink, blackouts, full campaign → win →
+endless escalation, leaderboard persistence, twin thumbstick touch lifecycle,
+portrait viewport, and zero console errors.
 
 ## Privacy
 
