@@ -1049,7 +1049,7 @@ function render() {
   /* flashlight hole */
   if (flHits.length) {
     const gr = darkCtx.createRadialGradient(player.x, player.y, 10, player.x, player.y, T.FL_RANGE);
-    gr.addColorStop(0, 'rgba(0,0,0,0.95)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    gr.addColorStop(0, 'rgba(0,0,0,0.82)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
     fanPath(darkCtx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, T.FL_RANGE, player.aim);
     darkCtx.fillStyle = gr; darkCtx.fill();
     /* bubble */
@@ -1141,7 +1141,7 @@ function render() {
   ctx.globalCompositeOperation = 'lighter';
   if (flHits.length) {
     const gr = ctx.createRadialGradient(player.x, player.y, 8, player.x, player.y, T.FL_RANGE);
-    gr.addColorStop(0, 'rgba(255,236,190,0.16)'); gr.addColorStop(1, 'rgba(255,236,190,0)');
+    gr.addColorStop(0, 'rgba(255,236,190,0.11)'); gr.addColorStop(1, 'rgba(255,236,190,0)');
     fanPath(ctx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, T.FL_RANGE, player.aim);
     ctx.fillStyle = gr; ctx.fill();
   }
