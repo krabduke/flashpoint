@@ -1818,48 +1818,92 @@ function drawPlayer() {
   const spd = Math.hypot(player.vx, player.vy);
   const bob = Math.sin(time * (spd > 20 ? 11 : 3.2)) * (spd > 20 ? 0.7 : 0.35);
   ctx.save(); ctx.translate(x, y + bob);
-  ctx.globalAlpha = 0.45; ctx.fillStyle = 'rgba(0,0,0,.6)';
-  ctx.beginPath(); ctx.ellipse(1.5, 7, 9.5, 4, 0, 0, TAU); ctx.fill();
+
+  /* contact shadow */
+  ctx.globalAlpha = 0.5; ctx.fillStyle = 'rgba(0,0,0,.7)';
+  ctx.beginPath(); ctx.ellipse(1.5, 7.4, 9.8, 4.2, 0, 0, TAU); ctx.fill();
   ctx.globalAlpha = 1;
+
   ctx.rotate(a);
+
   if (spd > 150) {
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.3 + 0.2 * Math.sin(time * 30);
-    ctx.drawImage(glowWhiteS, -18, -5, 10, 10);
+    ctx.globalAlpha = 0.26 + 0.18 * Math.sin(time * 30);
+    ctx.drawImage(glowWhiteS, -19, -5, 10, 10);
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   }
-  /* backpack + air tank */
-  ctx.fillStyle = '#232839'; rr(ctx, -11.5, -6.5, 8, 13, 3); ctx.fill();
-  ctx.fillStyle = '#c9a227'; rr(ctx, -13, -4, 2.6, 8, 1.3); ctx.fill();
-  /* suit */
-  const bg = ctx.createLinearGradient(0, -9, 0, 9);
-  bg.addColorStop(0, '#3d6b8e'); bg.addColorStop(1, '#1f3a52');
-  ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(0, 0, 8.6, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(10,16,26,0.85)'; ctx.lineWidth = 1.4; ctx.stroke();
-  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.2;
-  ctx.beginPath(); ctx.arc(0, 0, 5.8, -0.9, 0.9); ctx.stroke();
-  /* helmet + visor */
-  ctx.fillStyle = '#e8ecf8'; ctx.beginPath(); ctx.arc(1.5, 0, 5.6, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#0c1626'; ctx.beginPath(); ctx.arc(3, 0, 4.4, -1.15, 1.15); ctx.fill();
-  ctx.fillStyle = 'rgba(120,220,255,0.9)'; ctx.beginPath(); ctx.arc(4.6, -1.4, 1.1, 0, TAU); ctx.fill();
-  /* arm gripping the flashlight */
-  ctx.strokeStyle = '#2a4f6d'; ctx.lineWidth = 2.6;
-  ctx.beginPath(); ctx.moveTo(4, 3.4); ctx.lineTo(11, 2.2); ctx.stroke();
-  ctx.fillStyle = '#141824'; rr(ctx, 8.5, -2.4, 7.5, 5, 2); ctx.fill();
-  ctx.fillStyle = '#39405a'; rr(ctx, 8.5, -2.4, 3, 5, 1.5); ctx.fill();
-  ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.arc(15.8, 0.1, 1.8, 0, TAU); ctx.fill();
-  ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55;
-  ctx.drawImage(glowWhiteS, 11.5, -4, 8, 8);
+
+  /* ---- the haul: a satchel that fills with gold as the floor empties ---- */
+  const haul = coinsTotal ? Math.min(1, coins / coinsTotal) : 0;
+  const bagX = -12.6, bagY = -5.6, bagW = 7.2, bagH = 11.2;
+  ctx.fillStyle = '#1d1929'; rr(ctx, bagX, bagY, bagW, bagH, 2.6); ctx.fill();
+  if (haul > 0) {
+    ctx.save();
+    ctx.beginPath(); rr(ctx, bagX, bagY, bagW, bagH, 2.6); ctx.clip();
+    const gl = ctx.createLinearGradient(0, bagY + bagH, 0, bagY);
+    gl.addColorStop(0, '#c8862a'); gl.addColorStop(1, '#ffe9a8');
+    ctx.fillStyle = gl;
+    const h = bagH * haul;
+    ctx.fillRect(bagX, bagY + bagH - h, bagW, h);
+    ctx.restore();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.14 + 0.10 * Math.sin(time * 2.6);
+    ctx.drawImage(glowGoldS, bagX - 4, -9, 16, 16);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  }
+  ctx.strokeStyle = 'rgba(6,5,12,.85)'; ctx.lineWidth = 1;
+  rr(ctx, bagX, bagY, bagW, bagH, 2.6); ctx.stroke();
+
+  /* ---- shoulders: an oval across the line of travel, not a ball ---- */
+  const bg = ctx.createLinearGradient(5, -9, -5, 9);
+  bg.addColorStop(0, '#262539'); bg.addColorStop(1, '#0e0d17');
+  ctx.fillStyle = bg;
+  ctx.beginPath(); ctx.ellipse(-0.6, 0, 7.7, 9.1, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(5,4,10,.9)'; ctx.lineWidth = 1.3; ctx.stroke();
+
+  /* strap over the shoulder, the one warm line on the body */
+  ctx.strokeStyle = 'rgba(160,124,58,.85)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-8.4, -4.6); ctx.lineTo(3.4, 5.2); ctx.stroke();
+
+  /* cold rim light down the leading shoulder - reads the direction of travel
+     without ever competing with the torch */
+  ctx.strokeStyle = 'rgba(178,190,232,.5)'; ctx.lineWidth = 1.1;
+  ctx.beginPath(); ctx.ellipse(-0.6, 0, 7.7, 9.1, 0, -1.15, 1.15); ctx.stroke();
+
+  /* ---- hood: no face. anonymity is the point ---- */
+  ctx.fillStyle = '#15141f';
+  ctx.beginPath(); ctx.ellipse(2.1, 0, 5.6, 5.2, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(150,160,200,.34)'; ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.ellipse(2.1, 0, 5.6, 5.2, 0, -1.05, 1.05); ctx.stroke();
+  /* the hood opening: a sliver of nothing, warmed only by their own torch */
+  ctx.fillStyle = '#07060d';
+  ctx.beginPath(); ctx.ellipse(4.4, 0, 2.7, 3.2, 0, 0, TAU); ctx.fill();
+  ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.4;
+  ctx.fillStyle = 'rgba(255,220,150,.5)';
+  ctx.beginPath(); ctx.ellipse(5.5, 0, 1.5, 2.1, 0, 0, TAU); ctx.fill();
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+
+  /* ---- the arm and the torch: the brightest thing on the character ---- */
+  ctx.strokeStyle = '#201f2e'; ctx.lineWidth = 2.8; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(3.4, 4.2); ctx.lineTo(10.6, 2.0); ctx.stroke();
+  ctx.lineCap = 'butt';
+  ctx.fillStyle = '#0f0e16'; rr(ctx, 8.8, -2.3, 7.4, 4.8, 1.8); ctx.fill();
+  ctx.fillStyle = '#33314a'; rr(ctx, 8.8, -2.3, 2.6, 4.8, 1.3); ctx.fill();
+  ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.arc(16.0, 0.1, 1.9, 0, TAU); ctx.fill();
+  ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.6;
+  ctx.drawImage(glowWhiteS, 11.6, -4.2, 8.6, 8.6);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+
   /* floor-start grace ring */
   if (invuln > 0) {
-    ctx.globalAlpha = 0.35 + 0.3 * Math.sin(time * 12);
-    ctx.strokeStyle = 'rgba(120,240,255,0.9)'; ctx.lineWidth = 1.6;
+    ctx.globalAlpha = 0.3 + 0.26 * Math.sin(time * 12);
+    ctx.strokeStyle = 'rgba(255,209,102,0.85)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.stroke();
     ctx.globalAlpha = 1;
   }
   ctx.restore();
 }
+
 
 function drawVignette() {
   const m = mode === 'playing' ? meter : 0;

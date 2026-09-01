@@ -24,6 +24,9 @@ either. They see what their light sees, and nothing else.
   ring you can navigate back to. Stand close and you'll catch a faint glint off
   one you haven't found yet. Coins sitting in a lamp pool are visible without
   your torch — and standing in that pool is what gets you caught.
+- **You are carrying it** — the satchel on your back fills with gold as the floor
+  empties, so a glance at yourself tells you how much of the haul is already on
+  you and how much of the room is left to sweep.
 - **Sound is a currency** — sprinting and grabbing coins make noise. Bots hear
   noise, walk to it, and swing their cones while investigating. Walk (or tilt
   the stick a little) to go quiet.
@@ -75,7 +78,7 @@ DPR cap and particle budgets automatically. Haptics fire where supported
 ## How it works
 
 - **Lighting stack**: the world renders under a soft darkness layer, punched
-  open by the flashlight fan and lamp pools. The exit beacon and your diver ride
+  open by the flashlight fan and lamp pools. The exit beacon and your thief ride
   *above* the darkness and stay readable; drones and coins render only where
   light actually reaches them — your cone, or a lamp pool. Darkness means "one of
   them might be standing right there, and so might the money".
