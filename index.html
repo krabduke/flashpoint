@@ -63,6 +63,7 @@
     animation:flick 6s linear infinite;
   }
   @keyframes flick{0%,100%{opacity:1}91%{opacity:1}91.5%{opacity:.55}92%{opacity:1}96%{opacity:1}96.4%{opacity:.7}96.8%{opacity:1}}
+  @keyframes searchPulse{0%{transform:translate(-50%,-50%) scale(0)}50%{transform:translate(-50%,-50%) scale(1)}100%{transform:translate(-50%,-50%) scale(0)}}
   h1.red{background:linear-gradient(180deg,#fff 5%,#ff9c8a 45%,#ff2e4c 105%);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 0 30px rgba(255,60,80,.5))}
   h1.green{background:linear-gradient(180deg,#fff 5%,#a8ffd8 45%,#2ecf9a 105%);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 0 30px rgba(60,255,170,.45))}
   .tag{font-size:clamp(13px,2.3vw,16px);color:#b9b3d6;max-width:520px;line-height:1.7}
@@ -139,6 +140,9 @@
       <div id="hudBtns">
         <button class="ibtn" id="muteBtn">🔊</button>
         <button class="ibtn" id="pauseBtn">II</button>
+        <div id="searchlightIndicator" style="width:24px;height:24px;background:rgba(255,70,60,.3);border:1px solid rgba(255,70,60,.6);border-radius:50;position:relative;transition:background .2s">
+          <div id="searchlightPulse" style="position:absolute;width:8px;height:8px;background:#ff4646;border-radius:50;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);animation:searchPulse 2s ease infinite"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1803,6 +1807,13 @@ function startGame() {
   parts = []; flHits = new Float32Array(T.FL_RAYS + 1);
   mouseWX = player.x; mouseWY = player.y - 100; aimMode = 'mouse';
   hud();
+  
+  /* tutorial hint for first map */
+  if (mapIdx === 0 && completedLevels.length === 0) {
+    setTimeout(() => {
+      toast('MOVE with WASD · AIM with MOUSE · COLLECT coins · AVOID the red cones · When the meter fills you\'re CAUGHT', 8);
+    }, 500);
+  }
 }
 
 function startFromFloor(floorIdx) {
@@ -1843,6 +1854,15 @@ function hud() {
   $('score').textContent = score;
   mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name;
   whoEl.textContent = name || 'ANON';
+  /* searchlight indicator */
+  const searchlightEl = $('searchlightIndicator');
+  const searchlightPulse = $('searchlightPulse');
+  const hasSearch = emitters.some(e => e.kind === 'search');
+  searchlightEl.style.display = hasSearch ? 'block' : 'none';
+  if (hasSearch) {
+    searchlightEl.style.background = 'rgba(255,70,60,.4)';
+    searchlightPulse.style.animation = 'searchPulse 2s ease infinite';
+  }
 }
 
 /* ================= input ================= */
