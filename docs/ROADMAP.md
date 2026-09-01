@@ -1,0 +1,272 @@
+# Flashpoint — build brief
+
+A worklist for an agent working on `index.html`. Every task names its file, its
+anchor, the decision already made, and the command that proves it is done. Do not
+substitute your own design; if a task seems to require a decision that is not
+written here, stop and say so rather than inventing one.
+
+---
+
+## Rules — these are not optional
+
+The whole game is one file with no build step, and `main` deploys straight to
+production on both Vercel and GitHub Pages. A broken commit is a black screen for
+everyone. On 01/09/2026 a stray `}` shipped and killed the entire `<script>`.
+
+1. **Syntax-check after every single edit.** Not at the end — after each one:
+
+   ```sh
+   cd ~/Projects/flashpoint
+   a=$(grep -n '^<script>' index.html | cut -d: -f1)
+   b=$(grep -n '^</script>' index.html | cut -d: -f1)
+   sed -n "$((a+1)),$((b-1))p" index.html > /tmp/fp.js && node --check /tmp/fp.js
+   ```
+
+2. **Never commit unless the harness prints `ALL CHECKS PASSED`:**
+
+   ```sh
+   node test/flashpoint.cdp.mjs
+   ```
+
+3. **Never delete a line you did not mean to change.** The last run destroyed
+   `function frame(now) {` and `let last = performance.now();` while editing
+   beside them, and the game did not run at all for hours afterwards. After an
+   edit, re-read the lines immediately above and below your change.
+
+4. **One task per session.** Do not batch tasks. Commit between them.
+
+5. **Do not touch these, ever.** `frame()`, `update()`, `render()`, `castCone`,
+   `inFan`, `losClear`, `pathFind`, `moveCircle`, or the order of drawing calls
+   inside `render()`. If a task looks like it needs one of them, stop and report.
+
+6. **Maps are exactly 28 columns × 18 rows.** Every row string must be exactly 28
+   characters. `validateMaps()` rejects anything else at boot.
+
+---
+
+## Tile vocabulary (current)
+
+Defined in `loadMap()`, `index.html:638`. Adding a tile means adding a branch
+there *and* a branch in `validateMaps()` (`:711`) if it affects walkability.
+
+| Char | Meaning |
+|---|---|
+| `#` | wall |
+| `.` | floor |
+| `P` | player spawn (exactly one) |
+| `E` | exit (exactly one) |
+| `c` | coin — the count must equal the map's `coins:` field |
+| `L` | lamp pool |
+| `N` | neon sign |
+| `S` | sweeping searchlight |
+| `x` | prop, picked from the theme's `props` list |
+
+Themes live in `THEMES`, `index.html:593`. Valid keys: `house`, `warehouse`,
+`city`, `ward`, `museum`, `server`, `bank`, `docks`, `core`. **Reuse an existing
+theme key.** Inventing a new one means writing a full render theme; that is not
+part of any task below.
+
+---
+
+## Phase 1 — three new floors
+
+Pure data. No engine changes. The validator and harness catch every mistake, so
+this is the safest work in the plan and should be done first.
+
+### Task 1.1 — add floors 10, 11 and 12
+
+Append three entries to the `MAPS` array in `index.html`, after `THE CORE`.
+
+| # | Name | `depth` | `theme` | `coins` | `bots` | `spd` | Extras |
+|---|---|---|---|---|---|---|---|
+| 10 | `THE GALLERY` | `GALLERY` | `museum` | 12 | 3 | 1.28 | `siren: true` |
+| 11 | `THE COLD STORE` | `COLD` | `docks` | 13 | 3 | 1.32 | `fog: true` |
+| 12 | `THE PENTHOUSE` | `PENTHOUSE` | `city` | 14 | 4 | 1.38 | `siren: true, blackout: true` |
+
+The array starts at `index.html:315`; `THE CORE` is the last entry, at `:477`.
+Copy the exact shape of `THE HOUSE` at `index.html:316` — it is the simplest.
+Each needs `rows` (18 strings of 28 chars) and `routes`.
+
+Design constraints for the layouts — these are requirements, not suggestions:
+
+- Exactly one `P` and one `E`, placed far apart, ideally opposite corners.
+- The number of `c` characters must equal the `coins:` field exactly.
+- Every `c` and the `E` must be reachable from `P` by orthogonal movement.
+- Every coordinate in `routes` must be a non-wall tile reachable from `P`.
+  Route points are `[column, row]`, zero-indexed, column first.
+- Give each floor 3–5 `L` lamps. Lamps matter more than they used to: coins
+  inside a lamp pool are visible without the player's torch, so a lamp is a free
+  hint and a trap at once. Put roughly a third of each floor's coins in lamp
+  light and hide the rest in dead dark.
+- One route per bot, so floor 12 needs four route arrays.
+
+**Done when:** `node test/flashpoint.cdp.mjs` prints `ALL CHECKS PASSED` — the
+harness runs `validateMaps()` across every floor and plays the whole campaign
+through to the win screen.
+
+### Task 1.2 — everywhere that hard-codes "nine"
+
+Adding floors silently breaks these. Do all of them in the same commit as 1.1.
+
+1. `test/flashpoint.cdp.mjs` — `await eq('campaign has 9 floors', 'MAPS.length', 9);`
+   Change the expected value to 12 and the label to match.
+2. `index.html` — the floor-select grid CSS: `#floorGrid{...grid-template-columns:repeat(9,1fr)...}`.
+   Change to `repeat(auto-fit,minmax(30px,1fr))` so it keeps working at any count.
+3. `index.html` — the mobile block `@media (max-width:430px)` under it; check the
+   boxes are still at least 28px wide at 390px viewport.
+4. `README.md` — four separate places, all verified present: line 41 "Nine floors
+   to clear", line 45 the heading "## The nine floors" and the table under it,
+   line 59 "Clear all nine", and line 113 "map connectivity (all nine floors)".
+
+Find any others before you finish:
+
+```sh
+grep -rn -i 'nine\|9 floors\|repeat(9' README.md index.html test/
+```
+
+**Done when:** harness passes, and at 390px wide the floor grid does not overflow
+horizontally.
+
+---
+
+## Phase 2 — new tile types
+
+Small, contained engine work. One tile per commit.
+
+### Task 2.1 — `G`, glass
+
+Blocks movement, does not block sight. Gives level design a way to show you a
+room full of gold you cannot reach yet, and to let a drone see you through a
+wall you thought was cover.
+
+- `loadMap()` `:638`: treat `G` as a wall for `grid` (so `isWall` is true).
+- `losClear` must *not* stop on it. That means glass needs its own array, e.g.
+  `glassAt = new Uint8Array(T.COLS * T.ROWS)`, and `castCone`/`losClear` must
+  test walls excluding glass. **This touches `losClear`, which Rule 5 forbids —
+  so stop here and hand this task back rather than editing it.**
+- `validateMaps()` `:711`: treat `G` as a wall for reachability.
+- Render: draw glass as a pale translucent block in `renderMapCanvas`.
+
+### Task 2.2 — `V`, vent
+
+The player fits, drones do not. Rewards knowing the map.
+
+- `loadMap()`: `V` is walkable floor for the player.
+- `pathFind` is used only by bots — make it treat `V` as blocked. Check whether
+  that can be done by passing a flag rather than editing `pathFind` itself; if
+  not, stop and report.
+- `validateMaps()`: `V` is walkable, so coins behind a vent still count as
+  reachable.
+- Render: a grille — four short parallel lines over a darker floor tile.
+
+### Task 2.3 — `C`, fixed camera
+
+A searchlight that does not sweep. Cheaper to place, and readable: the player
+learns "this cone never moves, so there is a safe side".
+
+The alarm behaviour already exists — `updateMeter()` handles `kind === 'search'`
+and raises the alarm through `searchLit`. A camera is the same emitter with
+`spin: 0` and a narrower radius. Add to `loadMap()`:
+
+```js
+if (ch === 'C') emitters.push({ x: cx, y: cy, r: 190, col: '#ffe9b0', flick: 0,
+  kind: 'search', ang: rand(0, TAU), spin: 0, rays: new Float32Array(17) });
+```
+
+**Done when:** a floor using `C` passes the harness and `__fp.searchN` counts it.
+
+---
+
+## Phase 3 — items
+
+The player currently has three verbs: move, aim, sprint. This is the biggest gap
+in the game. Build them in this order — each one is useful alone.
+
+### Task 3.1 — torch battery
+
+Makes light a resource. Everything else in this phase leans on it.
+
+- New constants in `T`: `BATT_MAX: 100`, `BATT_DRAIN: 4.2` (per second, beam on),
+  `BATT_RECOVER: 1.6` (per second, beam off).
+- New state: `let batt = T.BATT_MAX, beamOn = true;`
+- Toggle on `F`. Add to the existing key handler; do not restructure it.
+- In `update()`: drain when `beamOn`, recover when not. At zero, force `beamOn`
+  false until it recovers past 15.
+- `flRange()` is a one-line arrow at `index.html:745`:
+  `const flRange = () => T.FL_RANGE * flScale;`
+  Change it to `() => T.FL_RANGE * flScale * (beamOn ? 1 : 0)`. That is the whole
+  integration: a zero-length cone means `coinLight` finds no lit coins and
+  `revealed()` finds no drones, both through code that already exists. Do not
+  edit `coinLight` or `revealed`.
+- HUD: a thin bar under the coin counter. Match the existing HUD type — Orbitron,
+  9px, `letter-spacing:.3em`, label colour `#6a5f7e`.
+- Pickup tile `B` restores 40.
+
+**Done when:** harness passes, plus a new assertion that the beam range falls to
+0 when the battery empties and recovers afterwards.
+
+### Task 3.2 — flares
+
+The counter-play to a dead battery and to light-gated coins.
+
+- Throw with `Q` toward the aim direction, landing at min(220px, first wall).
+- A flare is an emitter: `kind: 'lamp'`, `r: 150`, with a lifetime of 11s and a
+  fade over the last 2s. Because it is a lamp, coins inside it become visible
+  through code that already exists — do not write new coin logic.
+- It is loud: `makeNoise(x, y, 480)` on landing, so drones come to look.
+- Start each floor with 2. Show them in the HUD as pips, not a number.
+
+### Task 3.3 — coin toss
+
+- Press `E` to throw one collected coin up to 300px along the aim.
+- Costs one coin from `coins` and its score value — the point is that a
+  distraction is expensive.
+- `makeNoise(x, y, 520)` where it lands.
+- Refuse the throw at `coins === 0`; play the existing `sfx.ui()` and nothing else.
+
+---
+
+## Phase 4 — systems
+
+Only after Phase 3 works.
+
+- **Heavy pockets.** Footstep noise radius scales with carried gold:
+  `T.STEP_R * (1 + 0.5 * coins / coinsTotal)`. One line, at `index.html:871`.
+  Makes the walk back to the exit the tense part.
+- **They can see your beam.** A drone with line of sight to the floor your beam
+  is lighting becomes suspicious, even if it cannot see you. This is the single
+  best remaining idea in the game — it makes the torch a real risk instead of a
+  free tool — but it needs care in `botSees`/`updateBots`, so it is an Opus task,
+  not a worker task.
+- **Run alert level.** A per-run counter that rises each time you are detected and
+  permanently raises `botSpd` for the rest of the run. Cheap to build, and it
+  makes a sloppy early floor cost you later.
+
+---
+
+## Do not hand these to a worker
+
+They need judgement across the whole file, or they break everything when wrong:
+
+- Anything inside `render()`, `frame()`, `update()`, or the raycast helpers.
+- The lighting model — `coinLight`, `revealed`, `drawBotCone`, the darkness layer.
+- Bot detection maths in `botSees` and `updateMeter`.
+- Anything visual: sprite design, HUD layout, colour, copy, the floor-select
+  panel. Those are design tasks and a worker optimising for "the feature is
+  present" will produce something that technically satisfies the brief and is
+  bad to play.
+- The Supabase backend, when it happens — it touches credentials.
+
+---
+
+## Verification, every time
+
+```sh
+cd ~/Projects/flashpoint
+a=$(grep -n '^<script>' index.html | cut -d: -f1)
+b=$(grep -n '^</script>' index.html | cut -d: -f1)
+sed -n "$((a+1)),$((b-1))p" index.html > /tmp/fp.js && node --check /tmp/fp.js  # must be silent
+node test/flashpoint.cdp.mjs                                                    # must say ALL CHECKS PASSED
+```
+
+Both green, or it does not get committed.
