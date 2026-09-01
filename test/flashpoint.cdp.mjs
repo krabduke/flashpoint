@@ -5,7 +5,16 @@ import { writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const PORT = Number(process.env.PORT || 9335);
+// A fixed port lets a crashed run's Chrome linger and be re-attached to by the next
+// run, which then tests a stale page and reports already-fixed errors. Pick a free one.
+const PORT = Number(process.env.PORT || 0) || await (async () => {
+  const { createServer } = await import('node:net');
+  return new Promise((res, rej) => {
+    const srv = createServer();
+    srv.on('error', rej);
+    srv.listen(0, '127.0.0.1', () => { const { port } = srv.address(); srv.close(() => res(port)); });
+  });
+})();
 const FILE = new URL('../index.html', import.meta.url).href;
 const PROFILE = `${tmpdir()}/flashpoint-cdp-profile`;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -16,6 +25,11 @@ const chrome = spawn(CHROME, [
   '--no-first-run', '--mute-audio', '--autoplay-policy=no-user-gesture-required',
   '--window-size=980,700', 'about:blank'
 ], { stdio: 'ignore' });
+/* never leave a headless Chrome holding the debug port, whatever kills this run */
+const killChrome = () => { try { chrome.kill(); } catch (e) {} };
+process.on('exit', killChrome);
+process.on('uncaughtException', e => { console.log('FATAL ::', e && e.message); killChrome(); process.exit(1); });
+process.on('unhandledRejection', e => { console.log('FATAL ::', e && e.message); killChrome(); process.exit(1); });
 
 let target = null;
 for (let i = 0; i < 60 && !target; i++) {
