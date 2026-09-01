@@ -162,7 +162,7 @@
           const isCompleted = completedLevels.includes(i);
           const lockClass = isCompleted ? '' : 'lock';
           const lockText = isCompleted ? '' : 'LOCK';
-          return `<div class="floor-btn ${lockClass}" style="background:rgba(255,255,255,.1);color:${isCompleted?'#ffe9a8':'#5e5679'};font-weight:${isCompleted?'700':'400'};padding:6px;border-radius:6;text-align:center;cursor:${isCompleted?'pointer':'default'}" onclick="startFromFloor(${i})">${i + 1}</div>${!isCompleted ? '<span class="lock-overlay" style="position:absolute;width:100%;height:100%;background:rgba(30,30,30,.8);border-radius:6"></span>' : ''}`;
+          return `<div class="floor-btn ${lockClass}" style="background:rgba(255,255,255,.1);color:${isCompleted?'#ffe9a8':'#5e5679'};font-weight:${isCompleted?'700':'400'};padding:6px;border-radius:6;text-align:center;cursor:${isCompleted?'pointer':'default'}" onclick="startFromFloor(${i})">${i + 1}</div>${!isCompleted ? '<span class="lock-overlay" style="position:absolute;width:100%;height:100%;background:rgba(30,30,30,.8);border-radius:6;pointer-events:none"></span>' : ''}`;
         }).join('')}
       </div>
     </div>
