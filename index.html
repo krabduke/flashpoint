@@ -1816,14 +1816,17 @@ function startGame() {
 function startFromFloor(floorIdx) {
   setName($('nameInput').value || name);
   if (completedLevels.includes(floorIdx)) {
-    /* resume from a completed floor */
-    mapIdx = completedLevels.length;
+    /* resume from the selected completed floor */
+    mapIdx = floorIdx;
     loop = Math.floor(mapIdx / MAPS.length);
     mapIdx = mapIdx % MAPS.length;
   } else {
-    /* start new game from this floor - mark all previous floors as not completed */
+    /* start new game from this floor - clear all progress */
     completedLevels = [];
     try { localStorage.removeItem('flashpoint.levels'); } catch (e) {}
+    mapIdx = floorIdx;
+    loop = Math.floor(mapIdx / MAPS.length);
+    mapIdx = mapIdx % MAPS.length;
   }
   endless = false; runT = 0; score = 0; totalRunCoins = 0;
   mode = 'playing'; paused = false;
