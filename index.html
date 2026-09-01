@@ -156,16 +156,13 @@
       <div class="progress-fill" style="width:0%;height:100%;background:#ffe9a8;transition:width .3s ease"></div>
     </div>
     <div class="level-select hidden" style="position:relative;max-width:500px;margin:20px auto">
-      <p class="hint" style="font-size:11px;letter-spacing:.1em;color:#6a5f7e;margin-bottom:12px;text-align:center">SELECT FLOOR</p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:8px;max-height:400px;overflow:auto">
+      <p class="hint" style="font-size:11px;letter-spacing:.1em;color:#6a5f7e;margin-bottom:8px;text-align:center">SELECT FLOOR</p>
+      <div style="display:grid;grid-template-columns:repeat(9, 44px);gap:6px;justify-content:center">
         ${MAPS.map((M, i) => {
           const isCompleted = completedLevels.includes(i);
-          const unlockStyle = isCompleted ? '' : 'pointer-events:none;opacity:.4';
-          const lockBadge = isCompleted ? '' : '<div class="lock-badge" style="position:absolute;top:4px;left:4px;width:32px;height:32px;background:rgba(30,30,30,.8);border:2px solid rgba(255,255,255,.2);border-radius:50%;font-size:11px;color:#6a5f7e;line-height:32px">LOCK</div>';
-          const bgStyle = isCompleted ? 'rgba(255,255,255,.15)' : 'rgba(255,255,255,.05)';
-          const textColor = isCompleted ? '#ffe9a8' : '#5e5679';
-          const fontWeight = isCompleted ? '700' : '400';
-          return `<div class="level-btn" style="padding:12px;border-radius:12;text-align:center;background:${bgStyle};color:${textColor};font-weight:${fontWeight};cursor:${isCompleted?'pointer':'default'}" onclick="startFromFloor(${i})">${M.name.split(' ')[0]}</div>${lockBadge}`;
+          const lockClass = isCompleted ? '' : 'lock';
+          const lockText = isCompleted ? '' : 'LOCK';
+          return `<div class="floor-btn ${lockClass}" style="background:rgba(255,255,255,.1);color:${isCompleted?'#ffe9a8':'#5e5679'};font-weight:${isCompleted?'700':'400'};padding:6px;border-radius:6;text-align:center;cursor:${isCompleted?'pointer':'default'}" onclick="startFromFloor(${i})">${i + 1}</div>${!isCompleted ? '<span class="lock-overlay" style="position:absolute;width:100%;height:100%;background:rgba(30,30,30,.8);border-radius:6"></span>' : ''}`;
         }).join('')}
       </div>
     </div>
