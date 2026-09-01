@@ -289,6 +289,27 @@ await evl(`(() => { const p = __fp.coinPoints()[0]; __fp.aimAt(2 * __fp.pos.x - 
 await sleep(300);
 ok('a coin you found stays marked', (await evl('__fp.coinsMarked')) > 0, `marked=${await evl('__fp.coinsMarked')}`);
 
+/* pixels, not just predicates: a lit coin has to actually be brighter than the
+   floor it sits on. Asserting coinLight() alone once passed while nothing drew. */
+const coinPixels = `(() => {
+  const c = coinList.find(x => !x.got);
+  const sx = (c.x - camNow.cx) * Z, sy = (c.y - camNow.cy) * Z;
+  const rd = (ox) => {
+    const d = ctx.getImageData((sx + ox - 9) * DPR, (sy - 9) * DPR, 18 * DPR, 18 * DPR).data;
+    let m = 0; for (let i = 0; i < d.length; i += 4) { const b = d[i]+d[i+1]+d[i+2]; if (b > m) m = b; }
+    return m;
+  };
+  return JSON.stringify({ state: coinLight(c), coin: rd(0), floor: rd(100) });
+})()`;
+await evl(`(() => { const c = coinList.find(x=>!x.got); player.x = c.x - 70; player.y = c.y; mouseWX = c.x; mouseWY = c.y; aimMode='mouse'; })()`);
+await sleep(400);
+const litPx = JSON.parse(await evl(coinPixels));
+ok('a lit coin is visibly brighter than the floor', litPx.state === 'lit' && litPx.coin - litPx.floor > 200, `coin=${litPx.coin} floor=${litPx.floor}`);
+await evl(`(() => { const c = coinList.find(x=>!x.got); player.x = c.x - 320; player.y = c.y; mouseWX = player.x - 200; mouseWY = player.y; })()`);
+await sleep(400);
+const markPx = JSON.parse(await evl(coinPixels));
+ok('a remembered coin is still findable', markPx.state === 'mark' && markPx.coin - markPx.floor > 60, `coin=${markPx.coin} floor=${markPx.floor}`);
+
 /* ---- chase speed closes the gap, and scales with depth ---- */
 const walk = await evl('__fp.walkSpeed'), sprint = await evl('__fp.sprintSpeed');
 await evl('mapIdx = 0; loadMap(0); hud();');

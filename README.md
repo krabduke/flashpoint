@@ -20,9 +20,10 @@ either. They see what their light sees, and nothing else.
   red beam is a corner between you and a red beam. Peek around it with the
   mouse without leaning your body into the light.
 - **Gold does not glow** — an unlit coin is not on your screen at all. Sweep a
-  room to find its coins, and they stay pinned as faint marks once your beam has
-  touched them. Coins sitting in a lamp pool are visible without your torch —
-  and standing in that pool is what gets you caught.
+  room to find its coins; once your beam has touched one it stays pinned as a
+  ring you can navigate back to. Stand close and you'll catch a faint glint off
+  one you haven't found yet. Coins sitting in a lamp pool are visible without
+  your torch — and standing in that pool is what gets you caught.
 - **Sound is a currency** — sprinting and grabbing coins make noise. Bots hear
   noise, walk to it, and swing their cones while investigating. Walk (or tilt
   the stick a little) to go quiet.

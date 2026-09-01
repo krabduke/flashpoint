@@ -289,7 +289,7 @@ const T = {
      Capped just under SPRINT so sprinting is always an escape - a loud one. */
   CHASE_FLOOR: 0.045, CHASE_LOOP: 0.10, CHASE_ADREN: 0.18, CHASE_ADREN_T: 4,
   CHASE_CAP: 0.94, RADIO_R: 400, RADIO_FLOOR: 4,
-  ALARM_AT: 0.62,
+  ALARM_AT: 0.62, COIN_NEAR: 150,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -1735,17 +1735,37 @@ function coinLight(c) {
       if (Math.hypot(e.x - c.x, e.y - c.y) < e.r * 0.72) { c.seen = true; return 'lit'; }
     }
   }
-  return c.seen ? 'mark' : 'dark';
+  if (c.seen) return 'mark';
+  /* close enough to catch a glint off it without the beam - stops you walking
+     straight past gold in a room you are standing in */
+  if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
+  return 'dark';
 }
 
 function drawCoin(c) {
   const vis = coinLight(c);
   if (vis === 'dark') return;
+  if (vis === 'near') {
+    /* a glint, not a coin: enough to make you turn the beam that way */
+    ctx.save();
+    const d = Math.hypot(c.x - player.x, c.y - player.y);
+    ctx.globalAlpha = (1 - d / T.COIN_NEAR) * (0.18 + 0.10 * Math.sin(time * 3.4 + c.ph));
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath(); ctx.arc(c.x, c.y, 2.2, 0, TAU); ctx.fill();
+    ctx.restore();
+    return;
+  }
   if (vis === 'mark') {
-    /* remembered, not seen: a scuff of gold where you know one is */
-    ctx.save(); ctx.globalAlpha = 0.20 + 0.06 * Math.sin(time * 2 + c.ph);
-    ctx.fillStyle = '#8a6f34';
-    ctx.beginPath(); ctx.arc(c.x, c.y, 2.4, 0, TAU); ctx.fill();
+    /* found once and remembered: readable enough to navigate back to, but
+       plainly not the lit coin itself */
+    ctx.save();
+    const pu = 0.5 + 0.5 * Math.sin(time * 2 + c.ph);
+    ctx.globalAlpha = 0.34 + 0.12 * pu;
+    ctx.strokeStyle = '#d8a94a'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(c.x, c.y, 5.4, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.5 + 0.16 * pu;
+    ctx.fillStyle = '#d8a94a';
+    ctx.beginPath(); ctx.arc(c.x, c.y, 1.9, 0, TAU); ctx.fill();
     ctx.restore();
     return;
   }
@@ -2213,6 +2233,7 @@ window.__fp = {
   get coinsLit() { return coinList.filter(c => !c.got && coinLight(c) === 'lit').length; },
   get coinsDark() { return coinList.filter(c => !c.got && coinLight(c) === 'dark').length; },
   get coinsMarked() { return coinList.filter(c => !c.got && coinLight(c) === 'mark').length; },
+  get coinsNear() { return coinList.filter(c => !c.got && coinLight(c) === 'near').length; },
   forgetCoins() { for (const c of coinList) c.seen = false; },
   /* chase tuning */
   chaseSpeedNow(adrenT) {
