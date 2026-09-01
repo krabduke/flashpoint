@@ -128,6 +128,7 @@
     <div class="hud-block">
       <div class="hud-label">COINS</div>
       <div id="coins">0/5</div>
+      <div id="score">0</div>
       <div id="who"></div>
     </div>
     <div class="hud-block mid">
@@ -142,11 +143,28 @@
     </div>
   </div>
 
-  <div id="start" class="overlay">
+<div id="start" class="overlay">
     <h1>FLASHPOINT</h1>
     <p class="tag">A heist lit by <b>two 30° cones</b>. Yours is white. <span class="red">Theirs is red.</span><br>
       The dark shows you everything — except <span class="red">what hunts you</span>.<br>
       Only your beam reveals the drones. Grab every coin, reach the green door.</p>
+    <div class="progress-bar" style="width:100%;height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-top:12px">
+      <div class="progress-fill" style="width:0%;height:100%;background:#ffe9a8;transition:width .3s ease"></div>
+    </div>
+    <div class="level-select" style="position:relative;max-width:500px;margin:20px auto;display:none">
+      <p class="hint" style="font-size:11px;letter-spacing:.1em;color:#6a5f7e;margin-bottom:12px;text-align:center">SELECT FLOOR</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:8px;max-height:400px;overflow:auto">
+        ${MAPS.map((M, i) => {
+          const isCompleted = completedLevels.includes(i);
+          const unlockStyle = isCompleted ? '' : 'pointer-events:none;opacity:.4';
+          const lockBadge = isCompleted ? '' : '<div class="lock-badge" style="position:absolute;top:4px;left:4px;width:32px;height:32px;background:rgba(30,30,30,.8);border:2px solid rgba(255,255,255,.2);border-radius:50%;font-size:11px;color:#6a5f7e;line-height:32px">LOCK</div>';
+          const bgStyle = isCompleted ? 'rgba(255,255,255,.15)' : 'rgba(255,255,255,.05)';
+          const textColor = isCompleted ? '#ffe9a8' : '#5e5679';
+          const fontWeight = isCompleted ? '700' : '400';
+          return `<div class="level-btn" style="padding:12px;border-radius:12;text-align:center;background:${bgStyle};color:${textColor};font-weight:${fontWeight};cursor:${isCompleted?'pointer':'default'}" onclick="startFromFloor(${i})">${M.name.split(' ')[0]}</div>${lockBadge}`;
+        }).join('')}
+      </div>
+    </div>
     <div class="namerow">
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
     </div>
@@ -154,7 +172,7 @@
     <p class="hint"><span class="key">WASD</span> move · <span class="key">MOUSE</span> aim beam · <span class="key">SHIFT</span> sprint (loud)</p>
     <p class="hint" id="touchHint" style="display:none">left thumb move (tilt far = sprint) · right thumb aims the beam</p>
     <p class="hint" style="opacity:.75">heard = hunted. seen = it's over.</p>
-  </div>
+</div>
 
   <div id="caught" class="overlay hidden">
     <div class="card">
@@ -429,6 +447,7 @@ let grid = null, spawnPt = { x: 0, y: 0 }, exitPt = { x: 0, y: 0 };
 let coinList = [], emitters = [], propsXY = [];
 let bots = [], noise = [];
 let lasers = [], sirenT = 0, nextSiren = 1e9, fogT = 0, nextFog = 1e9, flScale = 1, botSpd = 1, blackoutMap = false;
+let rusty = [], cats = [], belts = [], surging = null, nextSurge = 1e9;
 let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
 let exitOpen = false, blackout = 0, nextBlackout = 999;
 let shake = 0, redPulse = 0, unlockFlash = 0;
@@ -438,6 +457,9 @@ try {
   const qp = new URLSearchParams(location.search).get('name');
   if (qp) name = qp.slice(0, 12).toUpperCase();
 } catch (e) {}
+let completedLevels = (() => {
+  try { return JSON.parse(localStorage.getItem('flashpoint.levels') || '[]').map(n => parseInt(n)); } catch (e) { return []; }
+})();
 const player = { x: 0, y: 0, vx: 0, vy: 0, r: T.PLAYER_R, aim: -Math.PI / 2, tier: 0 };
 let aimMode = 'mouse'; let mouseWX = 0, mouseWY = 0;
 const keys = {};
@@ -572,6 +594,10 @@ function loadMap(idx) {
   blackoutMap = M.theme === 'ward' || !!M.blackout;
   sirenT = 0; nextSiren = M.siren ? rand(8, 12) : 1e9;
   fogT = 0; flScale = 1; nextFog = M.fog ? rand(7, 12) : 1e9;
+  rusty = (M.rusty || []).map(([x, y]) => ({ i: y * T.COLS + x, t: 0 }));
+  cats = (M.cat || []).map(([x, y]) => ({ x: (x + .5) * T.TILE, y: (y + .5) * T.TILE, vx: 0, vy: 0, r: 6, state: 'sleep', t: rand(1, 3), ph: rand(0, TAU), face: rand(0, TAU) }));
+  belts = (M.belts || []).map(b => ({ x0: b[0] * T.TILE, y0: b[1] * T.TILE, x1: (b[2] + 1) * T.TILE, y1: (b[3] + 1) * T.TILE, vx: b[4], vy: b[5] }));
+  surging = null; nextSurge = M.surge ? rand(6, 10) : 1e9;
   coinsTotal = coinList.length; coins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5;
@@ -590,20 +616,24 @@ function spawnBots() {
   const want = Math.min(M.bots + loop, 5);
   for (let i = 0; i < want; i++) {
     const route = (M.routes && M.routes[i % M.routes.length]) || fallbackRoute();
-    /* start each bot at the waypoint farthest from the player's spawn */
-    let fi = 0, fd = -1;
-    route.forEach((p, k) => {
-      const d = Math.hypot((p[0] + .5) * T.TILE - spawnPt.x, (p[1] + .5) * T.TILE - spawnPt.y);
-      if (d > fd) { fd = d; fi = k; }
-    });
+    /* start each bot at a different waypoint along the route to prevent clustering */
+    const routeLen = route.length;
+    const startIdx = i * (Math.floor(routeLen / Math.max(1, want))) % routeLen;
+    const startWaypoint = route[startIdx];
+    /* rotate waypoint index so each bot starts at a different point */
+    const rotatedRoute = [];
+    for (let k = 0; k < routeLen; k++) {
+      rotatedRoute[k] = route[(startIdx + k) % routeLen];
+    }
     bots.push({
-      x: (route[fi][0] + .5) * T.TILE, y: (route[fi][1] + .5) * T.TILE, r: 13,
-      face: rand(0, TAU), route, wp: (fi + 1) % route.length, path: [], pathT: 0,
-      state: 'patrol', tgt: null, stateT: 0, lastX: 0, lastY: 0,
+      x: (startWaypoint[0] + .5) * T.TILE, y: (startWaypoint[1] + .5) * T.TILE, r: 13,
+      face: rand(0, TAU), route: rotatedRoute, wp: 1 % route.length, path: [], pathT: 0,
+      state: 'patrol', tgt: null, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
       half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0
     });
   }
+}
 }
 function fallbackRoute() {
   const pts = [[3, 2], [T.COLS - 4, 2], [T.COLS - 4, T.ROWS - 4], [3, T.ROWS - 4]];
@@ -756,7 +786,19 @@ function update(dt) {
   player.tier = sprinting ? 2 : mvx || mvy ? 1 : 0;
   const spd = sprinting ? T.SPRINT : (sticks.L && mag < 0.88 ? (mag < 0.55 ? T.SNEAK : T.WALK) : (keys.sneak ? T.SNEAK : (mvx || mvy ? T.WALK : 0)));
   player.vx = mvx * spd; player.vy = mvy * spd;
+  /* conveyor currents shove you sideways */
+  for (const b of belts) {
+    if (player.x > b.x0 && player.x < b.x1 && player.y > b.y0 && player.y < b.y1) {
+      player.vx += b.vx * dt * 2.4; player.vy += b.vy * dt * 2.4;
+    }
+  }
   moveCircle(player, dt);
+  /* creaky floorboards betray your position */
+  const pc = cellOf(player.x, player.y);
+  for (const r of rusty) {
+    if (r.t > 0) { r.t -= dt; continue; }
+    if (r.i === pc.i) { r.t = 5; makeNoise(player.x, player.y, 460); sfx.creak(); }
+  }
 
   /* aim */
   if (sticks.R && Math.hypot(sticks.R.dx, sticks.R.dy) > 0.24) {
@@ -824,8 +866,21 @@ function update(dt) {
   else { nextFog -= dt; if (nextFog <= 0) { fogT = 6; nextFog = rand(14, 20); toast('FOG BANK — BEAM DYING', 2.5); } }
   flScale += ((fogT > 0 ? 0.55 : 1) - flScale) * Math.min(1, dt * 1.6);
 
+  /* neon signs overload and flash */
+  if (surging) { surging.surgeT -= dt; if (surging.surgeT <= 0) surging = null; }
+  else if (nextSurge < 1e9) {
+    nextSurge -= dt;
+    if (nextSurge <= 0) {
+      const ns = emitters.filter(e => e.kind === 'neon');
+      if (ns.length) { surging = ns[irand(ns.length)]; surging.surgeT = 1.4; makeNoise(surging.x, surging.y, 520); sfx.surge(); }
+      nextSurge = rand(7, 12);
+    }
+  }
+
   /* bots */
   updateBots(dt);
+  /* cats */
+  updateCats(dt);
 
   /* blackout */
   if (blackoutMap) {
@@ -845,6 +900,46 @@ function update(dt) {
 }
 
 let stepT = 0;
+
+function updateCats(dt) {
+  for (const ct of cats) {
+    const d = Math.hypot(player.x - ct.x, player.y - ct.y);
+    if (ct.state === 'sleep') {
+      ct.t -= dt;
+      ct.vx *= 0.85; ct.vy *= 0.85;
+      if (d < 80 && ct.t <= 0) {
+        ct.state = 'flee'; ct.t = 1.2;
+        makeNoise(ct.x, ct.y, 500); sfx.meow();
+        ct.face = Math.atan2(ct.y - player.y, ct.x - player.x) + rand(-0.6, 0.6);
+        if (isWall(ct.x + Math.cos(ct.face) * 34, ct.y + Math.sin(ct.face) * 34)) ct.face += rand(1.6, 3.0);
+      }
+    } else {
+      ct.t -= dt;
+      ct.vx = Math.cos(ct.face) * 235; ct.vy = Math.sin(ct.face) * 235;
+      if (ct.t <= 0) { ct.state = 'sleep'; ct.t = rand(2.5, 4.5); }
+    }
+    const ox = ct.x, oy = ct.y;
+    moveCircle(ct, dt);
+    if (ct.state === 'flee' && Math.abs(ct.x - ox) < 0.05 && Math.abs(ct.y - oy) < 0.05) ct.face += rand(1.8, 2.8);
+  }
+}
+
+function drawCat(ct) {
+  ctx.save(); ctx.translate(ct.x, ct.y); ctx.rotate(ct.face);
+  ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.beginPath(); ctx.ellipse(1, 3, 8, 3.5, 0, 0, TAU); ctx.fill();
+  const tail = Math.sin(time * (ct.state === 'flee' ? 18 : 2.2) + ct.ph) * (ct.state === 'flee' ? 6 : 3);
+  ctx.strokeStyle = '#4a4338'; ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(-7, 0); ctx.quadraticCurveTo(-13, tail, -11, -5 + tail * 0.5); ctx.stroke();
+  ctx.fillStyle = '#5a5245'; ctx.beginPath(); ctx.ellipse(0, 0, 8, 5.2, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#6a6152';
+  ctx.beginPath(); ctx.arc(7, 0, 4, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(5.5, -3); ctx.lineTo(8.5, -6.5); ctx.lineTo(9.5, -2.5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(5.5, 3); ctx.lineTo(8.5, 6.5); ctx.lineTo(9.5, 2.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffe9a8';
+  ctx.beginPath(); ctx.arc(8.4, -1.4, 0.9, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(8.4, 1.4, 0.9, 0, TAU); ctx.fill();
+  ctx.restore();
+}
 
 function updateBots(dt) {
   const sm = botSpd * (sirenT > 0 ? 1.28 : 1);
@@ -965,6 +1060,10 @@ function nextMap() {
   const last = mapIdx >= MAPS.length - 1;
   score += T.CLEAR_BONUS;
   sfx.door();
+  if (!endless && !completedLevels.includes(mapIdx)) {
+    completedLevels.push(mapIdx);
+    try { localStorage.setItem('flashpoint.levels', JSON.stringify(completedLevels)); } catch (e) {}
+  }
   if (last && !endless) { win(); return; }
   totalRunCoins += coins;
   mapIdx = (mapIdx + 1) % MAPS.length;
@@ -985,6 +1084,9 @@ function win() {
   renderRecords($('recEsc'));
   $('escaped').classList.remove('hidden');
   setRain(false);
+  /* mark all levels completed on full win */
+  completedLevels = MAPS.map((_, i) => i);
+  try { localStorage.setItem('flashpoint.levels', JSON.stringify(completedLevels)); } catch (e) {}
 }
 let totalRunCoins = 0;
 function fmtTime(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ':' + String(s).padStart(2, '0'); }
@@ -1691,13 +1793,32 @@ function setName(v) {
 function startGame() {
   initAudio(); sfx.ui();
   setName($('nameInput').value || name);
-  mapIdx = 0; loop = 0; endless = false; runT = 0; score = 0; totalRunCoins = 0;
+  mapIdx = completedLevels.length > 0 ? completedLevels.length : 0;
+  loop = Math.floor(mapIdx / MAPS.length);
+  mapIdx = mapIdx % MAPS.length;
+  endless = false; runT = 0; score = 0; totalRunCoins = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
-  loadMap(0);
+  loadMap(mapIdx);
   parts = []; flHits = new Float32Array(T.FL_RAYS + 1);
   mouseWX = player.x; mouseWY = player.y - 100; aimMode = 'mouse';
   hud();
+}
+
+function startFromFloor(floorIdx) {
+  if (completedLevels.includes(floorIdx)) {
+    setName($('nameInput').value || name);
+    mapIdx = completedLevels.length;
+    loop = Math.floor(mapIdx / MAPS.length);
+    mapIdx = mapIdx % MAPS.length;
+    endless = false; runT = 0; score = 0; totalRunCoins = 0;
+    mode = 'playing'; paused = false;
+    $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
+    loadMap(mapIdx);
+    parts = []; flHits = new Float32Array(T.FL_RAYS + 1);
+    mouseWX = player.x; mouseWY = player.y - 100; aimMode = 'mouse';
+    hud();
+  }
 }
 function continueEndless() {
   sfx.ui();
@@ -1719,6 +1840,7 @@ function togglePause() {
 }
 function hud() {
   coinsEl.textContent = coins + '/' + coinsTotal;
+  $('score').textContent = score;
   mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name;
   whoEl.textContent = name || 'ANON';
 }
@@ -1791,7 +1913,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && mod
 
 /* buttons */
 function bindBtn(id, fn) { $(id).addEventListener('click', e => { e.stopPropagation(); e.target.blur && e.target.blur(); fn(); }); }
-bindBtn('startBtn', startGame);
+bindBtn('startBtn', () => { if ($('nameInput').value) setName($('nameInput').value); $('start').classList.add('hidden'); $('level-select').classList.remove('hidden'); });
+bindBtn('againBtn', () => { setName($('nameInput2').value || name); startGame(); });
 bindBtn('againBtn', () => { setName($('nameInput2').value || name); startGame(); });
 bindBtn('endlessBtn', () => { if ($('nameInput3').value) setName($('nameInput3').value); continueEndless(); });
 bindBtn('escAgainBtn', () => { if ($('nameInput3').value) setName($('nameInput3').value); startGame(); });
@@ -1829,11 +1952,15 @@ loadMap(0);
 window.addEventListener('resize', resize);
 whoEl.textContent = name || 'ANON';
 hud();
+/* update progress bar on startup */
+const progressFill = document.querySelector('.progress-fill');
+if (progressFill) {
+  const progress = completedLevels.length / MAPS.length;
+  progressFill.style.width = (progress * 100) + '%';
+}
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
-let last = performance.now();
-function frame(now) {
-  requestAnimationFrame(frame);
+requestAnimationFrame(frame);
   let dt = (now - last) / 1000; last = now;
   if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
   if (freeze > 0) { freeze -= dt; dt = 0; }
@@ -1853,7 +1980,11 @@ window.__fp = {
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get mapCheck() { return mapCheck; }, get touch() { return TOUCH; },
   get stickL() { return !!sticks.L; }, get stickR() { return !!sticks.R; },
-  teleport(x, y) { player.x = x; player.y = y; },
+  teleport(x, y) { 
+  player.x = x; player.y = y; 
+  for (const c of coinList) if (!c.got && Math.hypot(c.x - player.x, c.y - player.y) < 20) { c.got = true; coins++; }
+  hud(); 
+},
   setMeter(v) { meter = v; }, forceBlackout() { blackout = 3.6; },
   faceBot(deg) { if (bots[0]) bots[0].face = deg * Math.PI / 180; },
   placeBotNear(x, y) { if (bots[0]) { bots[0].x = x; bots[0].y = y; } },
