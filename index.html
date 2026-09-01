@@ -1969,15 +1969,9 @@ if (mapCheck !== 'ok') console.warn('FLASHPOINT map validation:', mapCheck);
 
 resize();
 loadMap(0);
-window.addEventListener('resize', resize);
-whoEl.textContent = name || 'ANON';
+/* auto-start the game on load */
+setName(name || 'ANON');
 hud();
-/* update progress bar on startup */
-const progressFill = document.querySelector('.progress-fill');
-if (progressFill) {
-  const progress = completedLevels.length / MAPS.length;
-  progressFill.style.width = (progress * 100) + '%';
-}
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
 requestAnimationFrame(frame);
