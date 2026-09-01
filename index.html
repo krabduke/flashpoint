@@ -235,7 +235,7 @@ const T = {
   BOT_PATROL: 56, BOT_INVEST: 92, BOT_CHASE: 122, BOT_TURN: 2.2, BOT_SWEEP: 0.35,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
-  COIN_VALUE: 50, CLEAR_BONUS: 500, WIN_BONUS: 1500,
+  COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
   AFTERGLOW_STAMP: 0.055, AFTERGLOW_FADE: 0.016, AFTERGLOW_DRAW: 0.15,
   DARK: 0.5,
 };
@@ -823,7 +823,7 @@ function update(dt) {
     if (c.got) continue;
     if (Math.hypot(c.x - player.x, c.y - player.y) < 20) {
       c.got = true; coins++;
-      score += Math.round(T.COIN_VALUE * (1 + loop * 0.5));
+      score += Math.round(T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
       sfx.pickup(); burst(c.x, c.y, glowGoldS, 12, 150);
       makeNoise(c.x, c.y, T.NOISE_PICKUP);
       if (coins >= coinsTotal) { exitOpen = true; unlockFlash = 1; sfx.unlock(); }
@@ -1093,6 +1093,10 @@ let totalRunCoins = 0;
 function fmtTime(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ':' + String(s).padStart(2, '0'); }
 function addRecord() {
   records.push({ n: name || 'ANON', s: score, d: loop * MAPS.length + mapIdx + 1, c: totalRunCoins, t: Math.floor(runT) });
+  /* track high score */
+  let highScore = 0;
+  try { highScore = JSON.parse(localStorage.getItem('flashpoint.highScore') || '0'); } catch (e) {}
+  if (score > highScore) { highScore = score; try { localStorage.setItem('flashpoint.highScore', JSON.stringify(highScore)); } catch (e) {} }
   records.sort((a, b) => b.s - a.s);
   records = records.slice(0, 8);
   saveRecords();
