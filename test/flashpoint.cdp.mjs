@@ -262,6 +262,60 @@ await evl('(function(){ const e = emitters[0]; player.x = e.x; player.y = e.y + 
 await sleep(1400);
 await shot('play');
 
+/* ---- light-gated coins: gold only exists where light falls on it ---- */
+await send('Emulation.clearDeviceMetricsOverride');
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 0; loadMap(0); hud(); __fp.forgetCoins();');
+await sleep(300);
+/* stand well clear of any lamp pool, beam pointed away from every coin */
+await evl(`(() => {
+  const p = __fp.coinPoints()[0];
+  __fp.aimAt(2 * __fp.pos.x - p.x, 2 * __fp.pos.y - p.y);
+})()`);
+await sleep(300);
+const darkN = await evl('__fp.coinsDark');
+ok('unlit coins are not drawn', darkN > 0, `${darkN} hidden of ${await evl('__fp.coinsTotal')}`);
+
+await evl(`(() => {
+  const p = __fp.coinPoints()[0];
+  __fp.teleport(p.x - 70, p.y); __fp.aimAt(p.x, p.y);
+})()`);
+await sleep(300);
+const litN = await evl('__fp.coinsLit');
+ok('the beam reveals a coin', litN > 0, `lit=${litN}`);
+
+await evl(`(() => { const p = __fp.coinPoints()[0]; __fp.aimAt(2 * __fp.pos.x - p.x, 2 * __fp.pos.y - p.y); })()`);
+await sleep(300);
+ok('a coin you found stays marked', (await evl('__fp.coinsMarked')) > 0, `marked=${await evl('__fp.coinsMarked')}`);
+
+/* ---- chase speed closes the gap, and scales with depth ---- */
+const walk = await evl('__fp.walkSpeed'), sprint = await evl('__fp.sprintSpeed');
+await evl('mapIdx = 0; loadMap(0); hud();');
+await sleep(300);
+const f1 = await evl('__fp.chaseSpeedNow(0)');
+const f1a = await evl('__fp.chaseSpeedNow(99)');
+ok('adrenaline speeds a long chase', f1a > f1, `${f1?.toFixed(0)} -> ${f1a?.toFixed(0)}`);
+await evl('mapIdx = 8; loadMap(8); hud();');
+await sleep(300);
+const f9 = await evl('__fp.chaseSpeedNow(99)');
+ok('deeper floors chase harder', f9 > f1a, `floor1=${f1a?.toFixed(0)} floor9=${f9?.toFixed(0)}`);
+ok('a committed chase outruns a walk', f9 > walk, `chase=${f9?.toFixed(0)} walk=${walk}`);
+ok('sprinting still escapes', f9 < sprint, `chase=${f9?.toFixed(0)} sprint=${sprint}`);
+
+/* ---- a searchlight raises the alarm instead of silently filling the meter ---- */
+await evl('mapIdx = 4; loadMap(4); hud();');
+await sleep(400);
+ok('museum floor has searchlights', (await evl('__fp.searchN')) > 0, `n=${await evl('__fp.searchN')}`);
+await evl('for (const b of bots) { b.state = "patrol"; b.alerted = false; b.path = []; }');
+const parked = await evl('__fp.lightMeWithSearch()');
+ok('player parked inside a searchlight beam', parked === true);
+await sleep(1200);
+ok('searchlight registers you as lit', (await evl('__fp.searchLit')) === true);
+const states = await evl('JSON.stringify(__fp.botState)');
+ok('searchlight wakes the drones', !/^\["patrol"(,"patrol")*\]$/.test(states), `states=${states}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

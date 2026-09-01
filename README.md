@@ -12,13 +12,17 @@ runtime.
 
 Sweep a dark complex of rooms, aisles and neon streets with your flashlight,
 grab every coin, and reach the door — while security drones patrol with their
-own 30° vision cones. The layout is always faintly readable; **only the hunters
-hide in the dark** — your beam is the only thing that reveals them. They see
-what their light sees, and nothing else.
+own 30° vision cones. The layout is always faintly readable, but **the hunters
+and the gold both hide in the dark** — your beam is the only thing that reveals
+either. They see what their light sees, and nothing else.
 
 - **True occlusion** — both cones are raycasts. A corner between you and a
   red beam is a corner between you and a red beam. Peek around it with the
   mouse without leaning your body into the light.
+- **Gold does not glow** — an unlit coin is not on your screen at all. Sweep a
+  room to find its coins, and they stay pinned as faint marks once your beam has
+  touched them. Coins sitting in a lamp pool are visible without your torch —
+  and standing in that pool is what gets you caught.
 - **Sound is a currency** — sprinting and grabbing coins make noise. Bots hear
   noise, walk to it, and swing their cones while investigating. Walk (or tilt
   the stick a little) to go quiet.
@@ -26,6 +30,10 @@ what their light sees, and nothing else.
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
   so sweeping is mapping.
+- **They get better as you go deeper** — a drone that spots you accelerates the
+  longer it holds you, floor by floor, until only a sprint escapes it. From the
+  Museum down they run a radio net: one drone seeing you sends the rest.
+  Searchlights are part of that net — stand in one and it screams your position.
 - **Caught = run over.** One meter-fill and it's done. Nine floors to clear,
   then endless loops. Your name rides on a device-local leaderboard (no login,
   no accounts, nothing leaves the browser).
@@ -66,10 +74,10 @@ DPR cap and particle budgets automatically. Haptics fire where supported
 ## How it works
 
 - **Lighting stack**: the world renders under a soft darkness layer, punched
-  open by the flashlight fan and lamp pools. Coins, the exit beacon and your
-  diver ride *above* the darkness — always readable — while drones render only
-  inside your occluded raycast cone. Darkness means "one of them might be
-  standing right there".
+  open by the flashlight fan and lamp pools. The exit beacon and your diver ride
+  *above* the darkness and stay readable; drones and coins render only where
+  light actually reaches them — your cone, or a lamp pool. Darkness means "one of
+  them might be standing right there, and so might the money".
 - **Vision**: both cones are grid raycasts; detection = in-cone + clear LOS +
   distance. Bots path with A* on the 28×18 tile grid; the bot that heard you
   walks to the noise, not to you — you are never aimbot-tracked, only hunted.

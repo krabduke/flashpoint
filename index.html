@@ -210,7 +210,8 @@
     <h1>FLASHPOINT</h1>
     <p class="tag">A heist lit by <b>two 30° cones</b>. Yours is white. <span class="red">Theirs is red.</span><br>
       The dark shows you everything — except <span class="red">what hunts you</span>.<br>
-      Only your beam reveals the drones. Grab every coin, reach the green door.</p>
+      Your beam is the only thing that reveals <span class="red">the drones</span> — and <b>the gold</b>.<br>
+      Sweep every room, take every coin, reach the green door.</p>
     <div id="floorPanel">
       <p class="floor-eyebrow">Select floor</p>
       <div id="floorGrid" role="group" aria-label="Floor select"></div>
@@ -283,7 +284,12 @@ const T = {
   PLAYER_R: 10, WALK: 138, SNEAK: 72, SPRINT: 212,
   FL_HALF: 15.5 * Math.PI / 180, FL_RANGE: 345, FL_RAYS: 49, FL_BUBBLE: 74,
   BOT_HALF: 15.5 * Math.PI / 180, BOT_RANGE: 300, BOT_RAYS: 41,
-  BOT_PATROL: 56, BOT_INVEST: 92, BOT_CHASE: 122, BOT_TURN: 2.2, BOT_SWEEP: 0.35,
+  BOT_PATROL: 56, BOT_INVEST: 92, BOT_CHASE: 132, BOT_TURN: 2.2, BOT_SWEEP: 0.35,
+  /* chase scaling: per floor, per loop, and adrenaline the longer a chase runs.
+     Capped just under SPRINT so sprinting is always an escape - a loud one. */
+  CHASE_FLOOR: 0.045, CHASE_LOOP: 0.10, CHASE_ADREN: 0.18, CHASE_ADREN_T: 4,
+  CHASE_CAP: 0.94, RADIO_R: 400, RADIO_FLOOR: 4,
+  ALARM_AT: 0.62,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -503,6 +509,7 @@ let rusty = [], cats = [], belts = [], surging = null, nextSurge = 1e9;
 let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
 let exitOpen = false, blackout = 0, nextBlackout = 999;
 let shake = 0, redPulse = 0, unlockFlash = 0;
+let searchLit = false;
 let name = '';
 try { name = (localStorage.getItem('flashpoint.name') || '').slice(0, 12); } catch (e) {}
 try {
@@ -631,7 +638,7 @@ function loadMap(idx) {
     if (ch === '#') grid[y * T.COLS + x] = 1;
     if (ch === 'P') spawnPt = { x: cx, y: cy };
     if (ch === 'E') exitPt = { x: cx, y: cy };
-    if (ch === 'c') coinList.push({ x: cx, y: cy, ph: rand(0, TAU), got: false });
+    if (ch === 'c') coinList.push({ x: cx, y: cy, ph: rand(0, TAU), got: false, seen: false });
     if (ch === 'L') emitters.push({ x: cx, y: cy, r: rand(130, 175), col: TH.lamp, flick: rand(0, 9), kind: 'lamp', base: 1 });
     if (ch === 'N') emitters.push({ x: cx, y: cy, r: rand(95, 140), col: Math.random() < 0.5 ? TH.lamp : TH.accent, flick: rand(0, 9), kind: 'neon', base: 1 });
     if (ch === 'S') emitters.push({ x: cx, y: cy, r: 250, col: '#ffe9b0', flick: 0, kind: 'search', ang: rand(0, TAU), spin: rand(0.45, 0.8) * (Math.random() < 0.5 ? -1 : 1), rays: new Float32Array(17) });
@@ -652,7 +659,7 @@ function loadMap(idx) {
   surging = null; nextSurge = M.surge ? rand(6, 10) : 1e9;
   coinsTotal = coinList.length; coins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
-  meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5;
+  meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -682,7 +689,7 @@ function spawnBots() {
       face: rand(0, TAU), route: rotatedRoute, wp: 1 % route.length, path: [], pathT: 0,
       state: 'patrol', tgt: null, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
-      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0
+      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0
     });
   }
 }
@@ -1000,12 +1007,17 @@ function updateBots(dt) {
     const sees = botSees(b);
 
     if (sees) {
+      const fresh = b.state !== 'chase';
       b.state = 'chase'; b.stateT = 0;
+      b.chaseT += dt;
       b.lastX = player.x; b.lastY = player.y;
       if (b.eyeGlint <= 0 && b.alerted !== true) { b.alerted = true; sfx.alert(); }
       retarget(b, player.x, player.y);
-      speed = T.BOT_CHASE * sm + loop * 6;
+      speed = chaseSpeed(b, sm);
+      /* deeper floors run a radio net: one drone seeing you sends the others */
+      if (fresh && (mapIdx >= T.RADIO_FLOOR || loop > 0)) radio(b);
     } else {
+      b.chaseT = Math.max(0, b.chaseT - dt * 1.5);
       if (b.state === 'chase') {
         b.stateT += dt;
         if (b.stateT > 2.2) { b.state = 'invest'; b.alerted = false; retarget(b, b.lastX, b.lastY); }
@@ -1044,6 +1056,23 @@ function updateBots(dt) {
     castCone(b.rays, b.x, b.y, b.face, b.half, T.BOT_RAYS, botRange(b));
   }
 }
+/* A chasing drone gets faster the deeper you are, the more loops you've run, and
+   the longer it has been on you - but never quite as fast as a sprint. */
+function chaseSpeed(b, sm) {
+  const floorGain = 1 + mapIdx * T.CHASE_FLOOR + loop * T.CHASE_LOOP;
+  const adren = 1 + Math.min(1, b.chaseT / T.CHASE_ADREN_T) * T.CHASE_ADREN;
+  return Math.min(T.BOT_CHASE * sm * floorGain * adren, T.SPRINT * T.CHASE_CAP);
+}
+/* Radio net: the drone that saw you tells everyone in earshot where you were. */
+function radio(src) {
+  const r = T.RADIO_R + mapIdx * 30;
+  for (const o of bots) {
+    if (o === src || o.state === 'chase') continue;
+    if (Math.hypot(o.x - src.x, o.y - src.y) > r) continue;
+    o.state = 'invest'; o.stateT = 0;
+    retarget(o, player.x, player.y);
+  }
+}
 function advanceWp(b) { if (b.route.length) b.wp = (b.wp + 1) % b.route.length; }
 function retarget(b, x, y) { b.path = pathFind(b.x, b.y, x, y); }
 function faceToward(b, x, y, dt) {
@@ -1075,6 +1104,26 @@ function updateMeter(dt) {
       if (e.kind === 'search' && inFan(player.x, player.y, e.x, e.y, e.ang, 0.13, e.r, e.rays, 16)) { anySees = true; searchOnly = true; break; }
     }
   }
+  /* A searchlight used to fill the meter and nothing else - the drones never knew.
+     Now being lit raises the alarm: it screams your position, and on deeper floors
+     the nearest drone comes hunting rather than merely investigating. */
+  if (searchOnly && !searchLit) {
+    searchLit = true;
+    makeNoise(player.x, player.y, 620);
+    sfx.alert();
+    toast('SPOTLIGHT — YOU ARE LIT', 2);
+    let near = null, nd = 1e9;
+    for (const b of bots) { const d = Math.hypot(b.x - player.x, b.y - player.y); if (d < nd) { nd = d; near = b; } }
+    if (near) {
+      const hunt = mapIdx >= T.RADIO_FLOOR || loop > 0;
+      near.state = hunt ? 'chase' : 'invest';
+      near.stateT = 0; near.alerted = true;
+      near.lastX = player.x; near.lastY = player.y;
+      retarget(near, player.x, player.y);
+      if (hunt) radio(near);
+    }
+  } else if (!searchOnly) searchLit = false;
+
   if (anySees) {
     seenTimer = 0;
     let mult = searchOnly ? 0.7 : 1;
@@ -1477,7 +1526,7 @@ function render() {
   if (mode !== 'menu') { for (const b of bots) drawBotBody(b); }
   ctx.globalCompositeOperation = 'lighter';
   for (const c of coinList) {
-    if (c.got) continue;
+    if (c.got || coinLight(c) !== 'lit') continue;
     const tw = 0.5 + 0.5 * Math.sin(time * 2.4 + c.ph);
     ctx.globalAlpha = 0.30 + 0.28 * tw;
     ctx.drawImage(glowGoldS, c.x - 11, c.y - 11, 22, 22);
@@ -1674,11 +1723,34 @@ function drawBotCone(b) {
   ctx.restore();
 }
 
+/* Gold does not glow on its own. A coin exists on screen only where light falls on
+   it: your beam, or a lamp pool someone else left burning. Once your beam has found
+   one it stays pinned as a faint mark, so sweeping a room is how you map it. */
+function coinLight(c) {
+  if (mode === 'menu') return 'lit';
+  if (inFan(c.x, c.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS)) { c.seen = true; return 'lit'; }
+  if (blackout <= 0) {
+    for (const e of emitters) {
+      if (e.kind === 'search' || e.kind === 'exit') continue;
+      if (Math.hypot(e.x - c.x, e.y - c.y) < e.r * 0.72) { c.seen = true; return 'lit'; }
+    }
+  }
+  return c.seen ? 'mark' : 'dark';
+}
+
 function drawCoin(c) {
-  const lit = mode === 'playing' && inFan(c.x, c.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS);
+  const vis = coinLight(c);
+  if (vis === 'dark') return;
+  if (vis === 'mark') {
+    /* remembered, not seen: a scuff of gold where you know one is */
+    ctx.save(); ctx.globalAlpha = 0.20 + 0.06 * Math.sin(time * 2 + c.ph);
+    ctx.fillStyle = '#8a6f34';
+    ctx.beginPath(); ctx.arc(c.x, c.y, 2.4, 0, TAU); ctx.fill();
+    ctx.restore();
+    return;
+  }
   const tw = 0.5 + 0.5 * Math.sin(time * 2.4 + c.ph);
   ctx.save(); ctx.translate(c.x, c.y);
-  ctx.globalAlpha = lit ? 1 : 0.78;
   ctx.rotate(Math.sin(time * 1.2 + c.ph) * 0.35);
   ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(1.6, 2.4, 6, 6.6, 0, 0, TAU); ctx.fill();
   const gr = ctx.createLinearGradient(0, -7, 0, 7);
@@ -1687,13 +1759,12 @@ function drawCoin(c) {
   ctx.strokeStyle = 'rgba(120,70,10,0.8)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.ellipse(0, 0, 3.6, 4.4, 0, 0, TAU); ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + 0.5 * tw) + ')'; ctx.beginPath(); ctx.arc(-1.6, -2, 1.3, 0, TAU); ctx.fill();
-  if (lit) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(0, -9 - tw * 3); ctx.lineTo(0, 9 + tw * 3);
-    ctx.moveTo(-9 - tw * 3, 0); ctx.lineTo(9 + tw * 3, 0);
-    ctx.stroke();
-  }
+  /* the glint only happens because something is lighting it */
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(0, -9 - tw * 3); ctx.lineTo(0, 9 + tw * 3);
+  ctx.moveTo(-9 - tw * 3, 0); ctx.lineTo(9 + tw * 3, 0);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1781,6 +1852,20 @@ function drawVignette() {
     const vg2 = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.75);
     vg2.addColorStop(0, 'rgba(0,0,0,0)'); vg2.addColorStop(1, rr2);
     ctx.fillStyle = vg2; ctx.fillRect(0, 0, W, H);
+  }
+  /* past the point of no return the room turns into an alarm: bars top and bottom
+     sweeping faster the closer the meter gets to full */
+  if (m > T.ALARM_AT) {
+    const k = (m - T.ALARM_AT) / (1 - T.ALARM_AT);
+    const beat = 0.5 + 0.5 * Math.sin(time * lerp(9, 22, k));
+    const a = k * (0.10 + 0.30 * beat);
+    const bar = Math.max(46, H * 0.11);
+    const top = ctx.createLinearGradient(0, 0, 0, bar);
+    top.addColorStop(0, 'rgba(255,32,48,' + a + ')'); top.addColorStop(1, 'rgba(255,32,48,0)');
+    ctx.fillStyle = top; ctx.fillRect(0, 0, W, bar);
+    const bot = ctx.createLinearGradient(0, H, 0, H - bar);
+    bot.addColorStop(0, 'rgba(255,32,48,' + a + ')'); bot.addColorStop(1, 'rgba(255,32,48,0)');
+    ctx.fillStyle = bot; ctx.fillRect(0, H - bar, W, bar);
   }
 }
 
@@ -1916,7 +2001,7 @@ function startGame() {
   /* tutorial hint for first map */
   if (mapIdx === 0 && completedLevels.length === 0) {
     setTimeout(() => {
-      toast('MOVE with WASD · AIM with MOUSE · COLLECT coins · AVOID the red cones · When the meter fills you\'re CAUGHT', 8);
+      toast('SWEEP your beam to FIND the coins — unlit gold is invisible · WASD moves · AVOID the red cones · when the meter fills you\'re CAUGHT', 9);
     }, 500);
   }
 }
@@ -2123,7 +2208,47 @@ window.__fp = {
   forceSiren() { sirenT = 5; nextSiren = 1e9; },
   forceFog() { fogT = 6; nextFog = 1e9; },
   aimStick(dx, dy) { if (sticks.R) { sticks.R.dx = dx; sticks.R.dy = dy; } },
-  clearCoins() { for (const c of coinList) if (!c.got) { c.got = true; coins++; } if (coins >= coinsTotal) { exitOpen = true; } hud(); }
+  clearCoins() { for (const c of coinList) if (!c.got) { c.got = true; coins++; } if (coins >= coinsTotal) { exitOpen = true; } hud(); },
+  /* light-gated coins */
+  get coinsLit() { return coinList.filter(c => !c.got && coinLight(c) === 'lit').length; },
+  get coinsDark() { return coinList.filter(c => !c.got && coinLight(c) === 'dark').length; },
+  get coinsMarked() { return coinList.filter(c => !c.got && coinLight(c) === 'mark').length; },
+  forgetCoins() { for (const c of coinList) c.seen = false; },
+  /* chase tuning */
+  chaseSpeedNow(adrenT) {
+    if (!bots[0]) return 0;
+    const prev = bots[0].chaseT;
+    if (adrenT !== undefined) bots[0].chaseT = adrenT;
+    const v = chaseSpeed(bots[0], botSpd * (sirenT > 0 ? 1.28 : 1));
+    bots[0].chaseT = prev;
+    return v;
+  },
+  get walkSpeed() { return T.WALK; }, get sprintSpeed() { return T.SPRINT; },
+  get searchLit() { return searchLit; },
+  searchPoint() { const e = emitters.find(x => x.kind === 'search'); return e ? { x: e.x, y: e.y, ang: e.ang, r: e.r } : null; },
+  /* aim is driven by the mouse world point each frame, so set that, not player.aim */
+  aimAt(x, y) { mouseWX = x; mouseWY = y; aimMode = 'mouse'; player.aim = Math.atan2(y - player.y, x - player.x); },
+  /* park the player inside a searchlight beam with line of sight, spin frozen */
+  lightMeWithSearch() {
+    const e = emitters.find(x => x.kind === 'search');
+    if (!e) return false;
+    for (let i = 0; i < 48; i++) {
+      const a = i / 48 * TAU;
+      for (const frac of [0.45, 0.6, 0.3, 0.75]) {
+        const px = e.x + Math.cos(a) * e.r * frac, py = e.y + Math.sin(a) * e.r * frac;
+        if (isWall(px, py)) continue;
+        if (!losClear(e.x, e.y, px, py)) continue;
+        player.x = px; player.y = py;
+        e.spin = 0; e.ang = Math.atan2(py - e.y, px - e.x);
+        castCone(e.rays, e.x, e.y, e.ang, 0.13, 16, e.r);
+        for (const b of bots) b.face = Math.atan2(b.y - py, b.x - px);
+        invuln = 0;
+        return true;
+      }
+    }
+    return false;
+  },
+  coinPoints() { return coinList.filter(c => !c.got).map(c => ({ x: c.x, y: c.y })); }
 };
 </script>
 </body>
