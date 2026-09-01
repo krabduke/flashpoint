@@ -1817,19 +1817,24 @@ function startGame() {
 }
 
 function startFromFloor(floorIdx) {
+  setName($('nameInput').value || name);
   if (completedLevels.includes(floorIdx)) {
-    setName($('nameInput').value || name);
+    /* resume from a completed floor */
     mapIdx = completedLevels.length;
     loop = Math.floor(mapIdx / MAPS.length);
     mapIdx = mapIdx % MAPS.length;
-    endless = false; runT = 0; score = 0; totalRunCoins = 0;
-    mode = 'playing'; paused = false;
-    $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
-    loadMap(mapIdx);
-    parts = []; flHits = new Float32Array(T.FL_RAYS + 1);
-    mouseWX = player.x; mouseWY = player.y - 100; aimMode = 'mouse';
-    hud();
+  } else {
+    /* start new game from this floor - mark all previous floors as not completed */
+    completedLevels = [];
+    try { localStorage.removeItem('flashpoint.levels'); } catch (e) {}
   }
+  endless = false; runT = 0; score = 0; totalRunCoins = 0;
+  mode = 'playing'; paused = false;
+  $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
+  loadMap(floorIdx);
+  parts = []; flHits = new Float32Array(T.FL_RAYS + 1);
+  mouseWX = player.x; mouseWY = player.y - 100; aimMode = 'mouse';
+  hud();
 }
 function continueEndless() {
   sfx.ui();
