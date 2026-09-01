@@ -1969,8 +1969,7 @@ if (mapCheck !== 'ok') console.warn('FLASHPOINT map validation:', mapCheck);
 
 resize();
 loadMap(0);
-/* auto-start the game on load */
-setName(name || 'ANON');
+whoEl.textContent = name || 'ANON';
 hud();
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
