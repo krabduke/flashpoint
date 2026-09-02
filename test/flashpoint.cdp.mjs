@@ -327,6 +327,35 @@ let peak = -999;
 for (let i = 0; i < 14; i++) { const v = await evl(edgeRed); if (v > peak) peak = v; await sleep(60); }
 ok('a filling meter turns the screen edge red', peak > calm + 8, `calm=${calm} alarm=${peak} (threshold ${await evl('__fp.alarmAt')})`);
 
+/* ---- torch battery: light is a resource now ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('torch starts full', (await evl('__fp.batt')) > 95, `batt=${await evl('__fp.batt')}`);
+const rangeLit = await evl('__fp.flRangeNow');
+/* stand on a coin so the beam is definitely the thing lighting it - coins sitting
+   in a lamp pool stay visible without a torch, which is the design, not a bug */
+await evl(`(() => { const p = __fp.coinPoints()[0]; __fp.teleport(p.x - 60, p.y); __fp.aimAt(p.x, p.y); })()`);
+await sleep(300);
+const litBeamOn = await evl('__fp.coinsLit');
+await evl('__fp.toggleBeam()');
+await sleep(300);
+ok('beam off kills the cone', (await evl('__fp.flRangeNow')) === 0, `range=${await evl('__fp.flRangeNow')}`);
+ok('a dark torch hides the gold it was lighting', (await evl('__fp.coinsLit')) < litBeamOn, `on=${litBeamOn} off=${await evl('__fp.coinsLit')}`);
+const recovered = await evl(`(() => { const a = __fp.batt; for (let i = 0; i < 60; i++) update(0.05); return __fp.batt - a; })()`);
+ok('a rested torch recharges', recovered > 0, `+${recovered.toFixed(1)}`);
+await evl('__fp.toggleBeam()');
+await sleep(200);
+ok('beam back on restores the cone', (await evl('__fp.flRangeNow')) === rangeLit, `range=${await evl('__fp.flRangeNow')}`);
+const battFlat = await evl(`(() => { __fp.setBatt(3); let low = 1e9; for (let i = 0; i < 60; i++) { update(0.05); if (__fp.batt < low) low = __fp.batt; } return JSON.stringify({ low, on: __fp.beamOn, dead: __fp.battDead }); })()`);
+const bf = JSON.parse(battFlat);
+ok('an empty torch cuts out', bf.low === 0 && bf.on === false && bf.dead === true, battFlat);
+ok('a dead torch will not switch back on', (await evl('__fp.toggleBeam()')) === false);
+const woke = await evl(`(() => { for (let i = 0; i < 120; i++) update(0.05); return JSON.stringify({ batt: __fp.batt, dead: __fp.battDead }); })()`);
+ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
+await evl('mapIdx = 0; loadMap(0); hud();');
+await sleep(200);
+ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
+
 /* ---- power-ups ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

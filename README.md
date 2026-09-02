@@ -30,6 +30,10 @@ either. They see what their light sees, and nothing else.
 - **Sound is a currency** — sprinting and grabbing coins make noise. Bots hear
   noise, walk to it, and swing their cones while investigating. Walk (or tilt
   the stick a little) to go quiet.
+- **The torch runs out** — about 45 seconds of continuous light, recovering
+  slowly while it is off. Sweeping a room costs you something now, so the question
+  stops being "where is the gold" and becomes "where can I afford to look". Run it
+  flat and it cuts out until it has rested. `B` cells top it back up.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
@@ -73,6 +77,7 @@ add bots and speed, and your best depth per device is kept.
 | Sprint (loud) | `Shift` | stretch the stick **all the way** |
 | Aim beam | **mouse** | **right thumb** stick (aim holds when you let go) |
 | Ping of doubt | — | just stop moving |
+| Torch on/off | `F` | HUD buttons |
 | Mute / pause | `M` / `P` | HUD buttons |
 | Restart | `R`, or `Space` on the card | tap the button |
 

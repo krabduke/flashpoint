@@ -41,6 +41,17 @@
   }
   .ibtn:hover{border-color:rgba(160,150,220,.7);color:#fff}
   #hudBtns{display:flex;gap:8px}
+  #battWrap{
+    width:78px;height:4px;margin-top:7px;border-radius:2px;overflow:hidden;
+    background:rgba(120,110,170,.22);box-shadow:inset 0 0 0 1px rgba(120,110,170,.18);
+  }
+  #battFill{
+    display:block;height:100%;width:100%;border-radius:2px;background:#ffe9a8;
+    transition:width .18s linear,background .3s ease;
+  }
+  #battWrap.low #battFill{background:#ff9f43}
+  #battWrap.dead #battFill{background:#ff4646}
+  #battWrap.off{opacity:.55}
   #puRow{display:flex;gap:6px;margin-top:6px;pointer-events:none}
   .pu{
     display:flex;align-items:center;gap:5px;
@@ -212,6 +223,7 @@
       <div id="coins">0/5</div>
       <div id="score">0</div>
       <div id="who"></div>
+      <div id="battWrap"><i id="battFill"></i></div>
       <div id="puRow"></div>
     </div>
     <div class="hud-block mid">
@@ -320,6 +332,9 @@ const T = {
   PU_LENS_MULT: 1.6, PU_LENS_T: 14,
   PU_SHOE_MULT: 1.32, PU_SHOE_T: 11,
   PU_GHOST_T: 8, PU_R: 22,
+  /* the torch is a resource: ~45s of continuous light, and it comes back slowly.
+     Turns "sweep everything" into "choose where to look". */
+  BATT_MAX: 100, BATT_DRAIN: 2.2, BATT_RECOVER: 3.4, BATT_WAKE: 15, BATT_PICKUP: 40,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -541,6 +556,7 @@ let exitOpen = false, blackout = 0, nextBlackout = 999;
 let shake = 0, redPulse = 0, unlockFlash = 0;
 let searchLit = false;
 let powerups = [], puLens = 0, puShoe = 0, puGhost = 0;
+let batt = 100, beamOn = true, battDead = false;
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -567,6 +583,7 @@ function endRun(won, coinTotal) {
    the dark on purpose, so an empty room still offers you a reason to cross it. */
 const PU = {
   R: { label: 'LENS',  glow: null, col: '#b9d4ff', ring: 'rgba(185,212,255,.9)' },
+  B: { label: 'CELL',  glow: null, col: '#ffd166', ring: 'rgba(255,209,102,.9)' },
   Z: { label: 'SHOES', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
   I: { label: 'GHOST', glow: null, col: '#d8b6ff', ring: 'rgba(216,182,255,.9)' }
 };
@@ -702,6 +719,7 @@ function loadMap(idx) {
     if (ch === 'L') emitters.push({ x: cx, y: cy, r: rand(130, 175), col: TH.lamp, flick: rand(0, 9), kind: 'lamp', base: 1 });
     if (ch === 'N') emitters.push({ x: cx, y: cy, r: rand(95, 140), col: Math.random() < 0.5 ? TH.lamp : TH.accent, flick: rand(0, 9), kind: 'neon', base: 1 });
     if (ch === 'S') emitters.push({ x: cx, y: cy, r: 250, col: '#ffe9b0', flick: 0, kind: 'search', ang: rand(0, TAU), spin: rand(0.45, 0.8) * (Math.random() < 0.5 ? -1 : 1), rays: new Float32Array(17) });
+    if (ch === 'B') powerups.push({ x: cx, y: cy, kind: 'B', got: false, ph: rand(0, TAU) });
     if (ch === 'R' || ch === 'Z' || ch === 'I') powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
     if (ch === 'x') propsXY.push({ x: cx, y: cy, k: TH.props[irand(TH.props.length)], r: rand(0, TAU) });
   }
@@ -722,6 +740,7 @@ function loadMap(idx) {
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
   puLens = 0; puShoe = 0; puGhost = 0;
+  batt = T.BATT_MAX; beamOn = true; battDead = false;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -804,7 +823,7 @@ const cellOf = (x, y) => {
 };
 function isWallCell(gx, gy) { return gx < 0 || gy < 0 || gx >= T.COLS || gy >= T.ROWS || grid[gy * T.COLS + gx] === 1; }
 function isWall(wx, wy) { return isWallCell(wx / T.TILE | 0, wy / T.TILE | 0); }
-const flRange = () => T.FL_RANGE * flScale * (puLens > 0 ? T.PU_LENS_MULT : 1);
+const flRange = () => beamOn ? T.FL_RANGE * flScale * (puLens > 0 ? T.PU_LENS_MULT : 1) : 0;
 const botRange = b => b.range * (blackout > 0 ? 0.6 : 1) * (sirenT > 0 ? 1.3 : 1);
 function ptSeg(px, py, l) {
   const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len2 = dx * dx + dy * dy;
@@ -960,8 +979,20 @@ function update(dt) {
     if (u.kind === 'R') { puLens = T.PU_LENS_T; toast('WIDE LENS — THE BEAM REACHES', 2.2); }
     if (u.kind === 'Z') { puShoe = T.PU_SHOE_T; toast('SOFT SHOES — RUN QUIET', 2.2); }
     if (u.kind === 'I') { puGhost = T.PU_GHOST_T; invuln = Math.max(invuln, T.PU_GHOST_T); toast('GHOST — THEY CANNOT PIN YOU', 2.2); }
+    if (u.kind === 'B') { batt = Math.min(T.BATT_MAX, batt + T.BATT_PICKUP); battDead = false; toast('CELL — TORCH TOPPED UP', 2.2); }
     hud();
   }
+  /* torch battery */
+  const battWas = Math.ceil(batt / 5);
+  if (beamOn) {
+    batt = Math.max(0, batt - T.BATT_DRAIN * dt);
+    if (batt <= 0) { beamOn = false; battDead = true; sfx.blackout(); toast('TORCH DEAD — LET IT REST', 2.4); }
+  } else {
+    batt = Math.min(T.BATT_MAX, batt + T.BATT_RECOVER * dt);
+    if (battDead && batt >= T.BATT_WAKE) battDead = false;
+  }
+  if (Math.ceil(batt / 5) !== battWas) hud();
+
   /* redraw the chips only when the displayed second actually changes */
   const puWas = Math.ceil(puLens) + ',' + Math.ceil(puShoe) + ',' + Math.ceil(puGhost);
   if (puLens > 0) { puLens = Math.max(0, puLens - dt); }
@@ -1314,6 +1345,7 @@ const glowGreenS = makeGlow('70,255,160');
 const glowWhiteS = makeGlow('240,248,255');
 /* one glow per power-up, so the pickup burst is its own colour */
 PU.R.glow = makeGlow('185,212,255');
+PU.B.glow = makeGlow('255,209,102');
 PU.Z.glow = makeGlow('125,255,196');
 PU.I.glow = makeGlow('216,182,255');
 const grainS = (() => {
@@ -2244,6 +2276,15 @@ function hud() {
   $('score').textContent = score;
   mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name;
   whoEl.textContent = name || 'ANON';
+  /* torch charge */
+  const bw = $('battWrap'), bf = $('battFill');
+  if (bw && bf) {
+    bf.style.width = Math.max(0, Math.min(100, batt)) + '%';
+    bw.classList.toggle('low', batt < 35 && !battDead);
+    bw.classList.toggle('dead', battDead);
+    bw.classList.toggle('off', !beamOn);
+  }
+
   /* active power-ups */
   const row = $('puRow');
   if (row) {
@@ -2285,6 +2326,7 @@ window.addEventListener('keydown', e => {
     else if (mode === 'won') continueEndless();
   }
   if ((e.key === 'r' || e.key === 'R') && (mode === 'playing' || mode === 'caught')) startGame();
+  if ((e.key === 'f' || e.key === 'F') && mode === 'playing' && !battDead) { beamOn = !beamOn; sfx.ui(); hud(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if ((e.key === 'p' || e.key === 'P')) togglePause();
 });
@@ -2470,7 +2512,12 @@ window.__fp = {
   /* lifetime stats */
   get stats() { return JSON.parse(JSON.stringify(stats)); },
   resetStats() { stats = Object.assign({}, STAT0); saveStats(); renderStats(); },
-  get alarmAt() { return T.ALARM_AT; }
+  get alarmAt() { return T.ALARM_AT; },
+  get batt() { return +batt.toFixed(2); },
+  get beamOn() { return beamOn; },
+  get battDead() { return battDead; },
+  setBatt(v) { batt = v; },
+  toggleBeam() { if (!battDead) { beamOn = !beamOn; hud(); } return beamOn; }
 };
 </script>
 </body>
