@@ -358,6 +358,53 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- run alert level: a sloppy floor costs you later ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const alertRes = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  __fp.resetKit();
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const base = __fp.botSpeedMult;
+  const l0 = __fp.alertLvl;
+  __fp.bumpAlert();
+  const l1 = __fp.alertLvl, s1 = __fp.botSpeedMult;
+  /* the cooldown must stop one scare stacking */
+  const beforeSpam = __fp.alertLvl;
+  bumpAlert(); bumpAlert(); bumpAlert();
+  const afterSpam = __fp.alertLvl;
+  /* and it must not run away forever */
+  for (let i = 0; i < 20; i++) __fp.bumpAlert();
+  const capped = __fp.alertLvl;
+  return JSON.stringify({ base, l0, l1, s1, beforeSpam, afterSpam, capped, max: T.ALERT_MAX });
+})()`);
+const al = JSON.parse(alertRes);
+ok('a run starts unalerted', al.l0 === 0, alertRes);
+ok('an incident raises the alert', al.l1 === 1, alertRes);
+ok('and the drones get faster for it', al.s1 > al.base, alertRes);
+ok('one scare cannot stack the meter', al.afterSpam === al.beforeSpam, alertRes);
+ok('the alert level is capped', al.capped === al.max, alertRes);
+
+ok('the alert survives the stairs', await evl(`(() => {
+  const before = __fp.alertLvl;
+  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+  for (let i = 0; i < 5; i++) update(0.016);
+  return mapIdx > 0 && __fp.alertLvl === before;
+})()`));
+
+ok('a fresh run clears it', await evl(`(() => { __fp.resetKit(); return __fp.alertLvl === 0; })()`));
+
+ok('an alarm raises it', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  __fp.resetKit();
+  mapIdx = 6; loadMap(6); hud();
+  const before = __fp.alertLvl;
+  const q = __fp.platePoints()[0];
+  player.x = q.x; player.y = q.y;
+  update(0.016);
+  return __fp.alertLvl === before + 1;
+})()`));
+
 /* ---- heavy pockets: a full run home is a loud one ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

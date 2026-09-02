@@ -107,6 +107,10 @@ either. They see what their light sees, and nothing else.
   floor you are carrying, from 520 with empty pockets to 806 with the lot. The
   walk in is the quiet part; the run back to the door with everything on you is
   not.
+- **The building remembers** — every time they pin you down, step on a plate or
+  get lit by a spotlight, the alert level goes up a notch and every drone in the
+  run gets 8% faster. It never falls until you start again, so a scrappy second
+  floor is something you pay for in the CORE. Four notches is the ceiling.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

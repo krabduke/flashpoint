@@ -84,6 +84,10 @@
   #keyRow{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.2em;
     color:#ffd166;margin-top:5px}
   #keyRow:empty{display:none}
+  #alertRow{display:flex;gap:3px;margin-top:5px;align-items:center}
+  #alertRow:empty{display:none}
+  #alertRow i{width:12px;height:3px;border-radius:2px;background:rgba(255,90,90,.22)}
+  #alertRow i.on{background:#ff5a5a;box-shadow:0 0 7px rgba(255,90,90,.7)}
   #flareRow{display:flex;gap:4px;margin-top:6px;align-items:center}
   #flareRow:empty{display:none}
   #flareRow i{width:7px;height:11px;border-radius:2px;background:#ffb347;
@@ -276,6 +280,7 @@
       <div id="battWrap"><i id="battFill"></i></div>
       <div id="flareRow"></div>
       <div id="keyRow"></div>
+      <div id="alertRow"></div>
       <div id="puRow"></div>
     </div>
     <div class="hud-block mid">
@@ -392,6 +397,9 @@ const T = {
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
   HAUL_NOISE: 0.55,   /* full pockets carry this much further */
+  /* every time they pin you down, the whole building gets a little faster - and
+     it stays that way for the rest of the run */
+  ALERT_MAX: 4, ALERT_STEP: 0.08, ALERT_COOL: 6,
   ALARM_AT: 0.62, COIN_NEAR: 150,
   /* power-ups: each one buys time against a different pressure */
   PU_LENS_MULT: 1.6, PU_LENS_T: 14,
@@ -715,6 +723,7 @@ let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
 let waterAt = new Uint8Array(T.COLS * T.ROWS);
+let alertLvl = 0, alertCool = 0;
 let plates = [];
 let crates = [], crateT = 0, crateOn = null;
 let mirrors = [];
@@ -1448,6 +1457,7 @@ function update(dt) {
   updParticles(dt);
   for (const m of motes) { m.x += m.vx * dt; m.y += m.vy * dt; if (m.y < 0) { m.y = T.ROWS * T.TILE; m.x = rand(0, T.COLS * T.TILE); } if (m.x < 0) m.x = T.COLS * T.TILE; if (m.x > T.COLS * T.TILE) m.x = 0; }
   shake *= Math.exp(-4.5 * dt); if (shake < 0.2) shake = 0;
+  if (alertCool > 0) alertCool -= dt;
   redPulse = Math.max(0, redPulse - dt * 1.2);
   unlockFlash = Math.max(0, unlockFlash - dt);
 }
@@ -1495,7 +1505,7 @@ function drawCat(ct) {
 }
 
 function updateBots(dt) {
-  const sm = botSpd * (sirenT > 0 ? 1.28 : 1);
+  const sm = botSpd * (1 + alertLvl * T.ALERT_STEP) * (sirenT > 0 ? 1.28 : 1);
   const patches = beamPatches();
   for (const b of bots) {
     b.blink = Math.max(0, b.blink - dt);
@@ -1656,7 +1666,9 @@ function updateMeter(dt) {
     seenTimer = 0;
     let mult = searchOnly ? 0.7 : 1;
     if (!searchOnly) for (const e of emitters) { if (e.kind === 'exit' || e.kind === 'search' || e.dead) continue; if (blackout > 0) continue; if (Math.hypot(e.x - player.x, e.y - player.y) < e.r * 0.8) { mult = T.EXPOSE_MULT; break; } }
+    const wasBelow = meter < 0.55;
     meter = Math.min(1, meter + T.SEE_FILL * mult * dt);
+    if (wasBelow && meter >= 0.55 && !searchOnly) bumpAlert();
     redPulse = Math.max(redPulse, meter);
     if (meter >= 1) caught();
   } else {
@@ -2900,7 +2912,17 @@ let toastTimer = 0;
    unlike mains lamps it keeps burning through a blackout. */
 /* A run carries its kit from floor to floor, so a flare you skip on floor two is
    a flare you do not have in the CORE. */
+/* One notch per incident, with a cooldown so a single scare cannot stack, and
+   it never resets until the run does. */
+function bumpAlert() {
+  if (alertCool > 0 || alertLvl >= T.ALERT_MAX) return;
+  alertLvl++; alertCool = T.ALERT_COOL;
+  toast('ALERT LEVEL ' + alertLvl + ' — THEY ARE FASTER NOW', 2.2);
+  hud();
+}
+
 function resetKit() {
+  alertLvl = 0; alertCool = 0;
   flares = T.KIT.flare;
   smokePellets = T.KIT.smoke;
   empCharges = T.KIT.emp;
@@ -2943,6 +2965,7 @@ function openDoor(d) {
 /* Something has given your position away. Shout it, then send the nearest drone
    - hunting outright on the floors that run a radio net, looking otherwise. */
 function raiseAlarm(x, y, radius, msg) {
+  bumpAlert();
   makeNoise(x, y, radius);
   sfx.alert();
   if (msg) toast(msg, 2);
@@ -3234,6 +3257,11 @@ function hud() {
     set('itMag', magCharges > 0, magT > 0);
   }
 
+  const ar = $('alertRow');
+  if (ar) ar.innerHTML = (mode === 'playing' && alertLvl > 0)
+    ? Array.from({ length: T.ALERT_MAX }, (_, i) => '<i class="' + (i < alertLvl ? 'on' : '') + '"></i>').join('')
+    : '';
+
   const kr = $('keyRow');
   if (kr) kr.textContent = (mode === 'playing' && hasKey) ? '⬛ KEYCARD' : '';
 
@@ -3419,6 +3447,9 @@ window.__fp = {
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
   get haulNoise() { return +haulNoise().toFixed(3); },
+  get alertLvl() { return alertLvl; },
+  bumpAlert() { alertCool = 0; bumpAlert(); return alertLvl; },
+  get botSpeedMult() { return botSpd * (1 + alertLvl * T.ALERT_STEP) * (sirenT > 0 ? 1.28 : 1); },
   beamPatches() { return beamPatches(); },
   seesLight(i) { const q = seesYourLight(bots[i], beamPatches()); return q ? { x: Math.round(q.x), y: Math.round(q.y) } : null; },
   get mapCheck() { return mapCheck; }, get touch() { return TOUCH; },
