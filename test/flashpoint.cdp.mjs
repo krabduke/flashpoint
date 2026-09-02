@@ -310,6 +310,92 @@ await sleep(400);
 const markPx = JSON.parse(await evl(coinPixels));
 ok('a remembered coin is still findable', markPx.state === 'mark' && markPx.coin - markPx.floor > 60, `coin=${markPx.coin} floor=${markPx.floor}`);
 
+/* ---- the meter alarm: red actually reaches the screen edges near a full meter ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const edgeRed = `(() => {
+  const band = Math.max(46, H * 0.11);
+  const d = ctx.getImageData(0, (H - band * 0.4) * DPR, W * DPR, band * 0.3 * DPR).data;
+  let r = 0, g = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i+1]; n++; }
+  return Math.round((r - g) / n);
+})()`;
+await evl('__fp.setMeter(0.1)'); await sleep(200);
+const calm = await evl(edgeRed);
+await evl('__fp.setMeter(0.97)'); await sleep(200);
+let peak = -999;
+for (let i = 0; i < 14; i++) { const v = await evl(edgeRed); if (v > peak) peak = v; await sleep(60); }
+ok('a filling meter turns the screen edge red', peak > calm + 8, `calm=${calm} alarm=${peak} (threshold ${await evl('__fp.alarmAt')})`);
+
+/* ---- power-ups ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 1; loadMap(1); hud();');
+await sleep(300);
+ok('floors carry power-ups', (await evl('__fp.powerupsN')) > 0, `n=${await evl('__fp.powerupsN')} kinds=${JSON.stringify(await evl('__fp.powerupKinds()'))}`);
+
+/* lens: the beam actually reaches further */
+await evl('mapIdx = 2; loadMap(2); hud();');
+await sleep(300);
+const rangeBefore = await evl('__fp.flRangeNow');
+await evl("__fp.grab('R')");
+await sleep(500);
+const rangeAfter = await evl('__fp.flRangeNow');
+ok('lens extends the beam', rangeAfter > rangeBefore * 1.4, `${Math.round(rangeBefore)} -> ${Math.round(rangeAfter)}`);
+ok('lens shows a countdown', (await evl('__fp.puActive')).lens > 0, JSON.stringify(await evl('__fp.puActive')));
+ok('lens chip is on the HUD', (await evl("document.querySelectorAll('#puRow .pu').length")) === 1);
+
+/* soft shoes: faster, and sprinting stops making noise */
+await evl('mapIdx = 1; loadMap(1); hud();');
+await sleep(300);
+await evl("__fp.grab('Z')");
+await sleep(500);
+ok('soft shoes are active', (await evl('__fp.puActive')).shoe > 0, JSON.stringify(await evl('__fp.puActive')));
+const quiet = await evl(`(() => {
+  const run = () => { let peak = 0; noise.length = 0; stepT = 0;
+    for (let i = 0; i < 90; i++) { update(0.016); if (noise.length > peak) peak = noise.length; }
+    return peak; };
+  keys.right = true; keys.sprint = true;
+  const withShoes = run();
+  puShoe = 0;
+  const without = run();
+  keys.right = false; keys.sprint = false;
+  return JSON.stringify({ withShoes, without });
+})()`);
+const q = JSON.parse(quiet);
+ok('soft shoes silence the footsteps', q.withShoes === 0 && q.without > 0, quiet);
+
+/* ghost: the meter cannot be filled */
+await evl('mapIdx = 3; loadMap(3); hud();');
+await sleep(300);
+await evl("__fp.grab('I')");
+await sleep(500);
+ok('ghost is active', (await evl('__fp.puActive')).ghost > 0, JSON.stringify(await evl('__fp.puActive')));
+const ghosted = await evl(`(() => {
+  meter = 0;
+  for (const b of bots) { b.x = player.x + 40; b.y = player.y; b.face = Math.PI; }
+  for (let i = 0; i < 40; i++) updateMeter(0.016);
+  return meter;
+})()`);
+ok('ghost holds the meter at zero', ghosted === 0, `meter=${ghosted}`);
+
+/* ---- lifetime statistics ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('__fp.resetStats()');
+const s0 = await evl('__fp.stats');
+ok('stats start empty', s0.runs === 0 && s0.coins === 0 && s0.bestTime === 0, JSON.stringify(s0));
+await evl('__fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);');
+await sleep(600);
+ok('clearing a floor is counted', (await evl('__fp.stats')).floors > 0, `floors=${(await evl('__fp.stats')).floors}`);
+await evl('caught();');
+await sleep(500);
+const s1 = await evl('__fp.stats');
+ok('being caught closes the run', s1.runs === 1 && s1.caught === 1, JSON.stringify(s1));
+ok('gold is banked into the lifetime total', s1.coins > 0, `coins=${s1.coins}`);
+ok('stats show on the menu', (await evl(`(() => { toMenu(); return document.querySelectorAll('#statRow div').length; })()`)) === 4);
+// toMenu() above leaves mode 'menu' - every later block reloads, so none inherit it
+
 /* ---- chase speed closes the gap, and scales with depth ---- */
 const walk = await evl('__fp.walkSpeed'), sprint = await evl('__fp.sprintSpeed');
 await evl('mapIdx = 0; loadMap(0); hud();');
@@ -325,6 +411,8 @@ ok('a committed chase outruns a walk', f9 > walk, `chase=${f9?.toFixed(0)} walk=
 ok('sprinting still escapes', f9 < sprint, `chase=${f9?.toFixed(0)} sprint=${sprint}`);
 
 /* ---- a searchlight raises the alarm instead of silently filling the meter ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
 await evl('mapIdx = 4; loadMap(4); hud();');
 await sleep(400);
 ok('museum floor has searchlights', (await evl('__fp.searchN')) > 0, `n=${await evl('__fp.searchN')}`);

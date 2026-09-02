@@ -38,6 +38,11 @@ either. They see what their light sees, and nothing else.
   longer it holds you, floor by floor, until only a sprint escapes it. From the
   Museum down they run a radio net: one drone seeing you sends the rest.
   Searchlights are part of that net — stand in one and it screams your position.
+- **Three things worth crossing a dark room for** — power-ups carry their own
+  light, so you can see them from across a black floor. **Lens** stretches the
+  beam by 60% for 14s, which is how you clear a big room fast now that gold needs
+  lighting. **Soft shoes** make you 32% quicker *and* silence your sprint for 11s
+  — the only time running is free. **Ghost** freezes the detection meter for 8s.
 - **Caught = run over.** One meter-fill and it's done. Nine floors to clear,
   then endless loops. Your name rides on a device-local leaderboard (no login,
   no accounts, nothing leaves the browser).
@@ -115,6 +120,16 @@ detection filling → caught → card, LOS hiding draining, searchlight exposure
 laser-gate zap, siren sweep, fog beam-shrink, blackouts, full campaign → win →
 endless escalation, leaderboard persistence, twin thumbstick touch lifecycle,
 portrait viewport, and zero console errors.
+
+It also asserts pixels where a predicate is not enough: that a lit coin is
+actually brighter than the floor beside it, that a remembered one stays findable,
+and that a filling meter really does turn the screen edge red.
+
+## What it remembers
+
+A lifetime record sits under the floor picker: runs played, campaigns cleared,
+best clear time, and total gold lifted. It lives in `localStorage` beside the
+leaderboard — same promise, nothing leaves the device.
 
 ## Privacy
 

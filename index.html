@@ -41,6 +41,17 @@
   }
   .ibtn:hover{border-color:rgba(160,150,220,.7);color:#fff}
   #hudBtns{display:flex;gap:8px}
+  #puRow{display:flex;gap:6px;margin-top:6px;pointer-events:none}
+  .pu{
+    display:flex;align-items:center;gap:5px;
+    font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:.16em;
+    padding:3px 8px 3px 6px;border-radius:999px;
+    background:rgba(12,9,26,.72);border:1px solid currentColor;
+    font-variant-numeric:tabular-nums;
+  }
+  .pu i{width:5px;height:5px;border-radius:50%;background:currentColor;flex:none;
+    box-shadow:0 0 7px currentColor}
+  .pu s{text-decoration:none;opacity:.72}
 
   .overlay{
     position:absolute;inset:0;z-index:6;
@@ -150,6 +161,19 @@
     fill:none;stroke:#8d84b3;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;
     filter:drop-shadow(0 1px 2px rgba(0,0,0,.95));
   }
+  #statRow{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin:14px 0 0;
+    background:rgba(120,110,170,.18);border:1px solid rgba(120,110,170,.18);border-radius:9px;
+    overflow:hidden;
+  }
+  #statRow:empty{display:none}
+  #statRow div{display:flex;flex-direction:column;gap:3px;align-items:center;
+    padding:9px 4px;background:rgba(14,11,28,.72)}
+  #statRow dt{font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;color:#5e5679;order:2}
+  #statRow dd{font-family:'Orbitron',monospace;font-size:15px;font-weight:700;margin:0;
+    color:#cfc6ee;font-variant-numeric:tabular-nums;order:1}
+  #statRow div.hero dd{color:#ffe9a8}
+  @media (max-width:430px){#statRow dd{font-size:13px}}
   .floor-caption{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.26em;text-transform:uppercase;
     color:#8d84b3;text-align:center;margin-top:10px;min-height:12px}
   @media (max-width:430px){#floorGrid{gap:4px}.floor{font-size:11px;border-radius:6px}}
@@ -188,6 +212,7 @@
       <div id="coins">0/5</div>
       <div id="score">0</div>
       <div id="who"></div>
+      <div id="puRow"></div>
     </div>
     <div class="hud-block mid">
       <div class="hud-label" id="depthLabel">FLOOR</div>
@@ -216,6 +241,7 @@
       <p class="floor-eyebrow">Select floor</p>
       <div id="floorGrid" role="group" aria-label="Floor select"></div>
       <p id="floorCaption" class="floor-caption">&nbsp;</p>
+      <dl id="statRow"></dl>
     </div>
     <div class="namerow">
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
@@ -290,6 +316,10 @@ const T = {
   CHASE_FLOOR: 0.045, CHASE_LOOP: 0.10, CHASE_ADREN: 0.18, CHASE_ADREN_T: 4,
   CHASE_CAP: 0.94, RADIO_R: 400, RADIO_FLOOR: 4,
   ALARM_AT: 0.62, COIN_NEAR: 150,
+  /* power-ups: each one buys time against a different pressure */
+  PU_LENS_MULT: 1.6, PU_LENS_T: 14,
+  PU_SHOE_MULT: 1.32, PU_SHOE_T: 11,
+  PU_GHOST_T: 8, PU_R: 22,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -349,7 +379,7 @@ const MAPS = [
     '#.#.#.L..#....#..#.L..#.##.#',
     '#...#....#.....#.#....#....#',
     '#.###.####..x..#.#.####c##.#',
-    '#....c..............#..x.E.#',
+    '#....c..........Z...#..x.E.#',
     '#####.#####.####.###.#.....#',
     '############################'
   ], routes: [[[3,3],[24,3],[24,9],[3,9],[3,13],[24,13],[24,15],[3,15],[3,3]]] },
@@ -364,7 +394,7 @@ const MAPS = [
     '#...######..#####..#######.#',
     '#...######..#####..#######.#',
     '#...######..#####..#######.#',
-    '#c........N...x...........c#',
+    '#c........N...x...R.......c#',
     '#.....................x..L.#',
     '#...######..#####..#######.#',
     '#...######..#####..#######.#',
@@ -378,7 +408,7 @@ const MAPS = [
     '#.P...x..#.....N#...x...c..#',
     '#........#..x...#..........#',
     '#..####..#......#...####...#',
-    '#..#..c..#....x.#...#..L..x#',
+    '#..#..c..#....x.#.I.#..L..x#',
     '#..#.....#......#...#......#',
     '#..####..####.###...#..#####',
     '#..................x#c.....#',
@@ -399,11 +429,11 @@ const MAPS = [
     '#....####..####..####c.....#',
     '#....####..####..####......#',
     '#....####..####..####......#',
-    '#..........................#',
+    '#..............R...........#',
     '#....####..####..####......#',
     '#....####..####..####..S...#',
     '#.c..####c.####.c####....c.#',
-    '#..........................#',
+    '#..............Z...........#',
     '#..S.......................#',
     '#....####..####..####......#',
     '#....####..####..####......#',
@@ -417,7 +447,7 @@ const MAPS = [
     lasers: [[9,1,9,3],[14,5,14,7],[20,9,20,11],[10,13,10,15]], rows: [
     '############################',
     '#.P....#...c#....#..c.#...c#',
-    '#......#....#....#....#....#',
+    '#......#....#.I..#....#....#',
     '#......#....#....#....#....#',
     '#..........................#',
     '#......#....#....#....#....#',
@@ -439,10 +469,10 @@ const MAPS = [
     '#.P........................#',
     '#.#######..#######..######.#',
     '#.#....c#..#....c#..#...c#.#',
-    '#.#.....#..#.....#..#....#.#',
+    '#.#.....#..#..I..#..#....#.#',
     '#.#.....#..#.....#..#....#.#',
     '#.###.###..###.###..##.###.#',
-    '#..........................#',
+    '#.............R............#',
     '#..........................#',
     '#...........c.......c.....c#',
     '#.###.###..###.###..##.###.#',
@@ -461,11 +491,11 @@ const MAPS = [
     '#..####..####..####..####..#',
     '#..####........####........#',
     '#..............####........#',
-    '#.......####........#####..#',
+    '#.......####.Z......#####..#',
     '#.####..####..####..#####..#',
     '#.####.c####..####.c#####.c#',
     '#.####........####.........#',
-    '#............c.............#',
+    '#........I...c.............#',
     '#.........####........####.#',
     '#...####..####..####..####.#',
     '#...####..####..####..####.#',
@@ -480,13 +510,13 @@ const MAPS = [
     '#...####............####...#',
     '#...####............####...#',
     '#...####.....S......####...#',
-    '#..........................#',
+    '#................Z.........#',
     '#..........######..........#',
     '#.#####...c######....#####c#',
     '#.#........######.c......#.#',
-    '#.#c..#....######....#...#.#',
+    '#.#c..#.R..######....#...#.#',
     '#.#####....######....#####.#',
-    '#..........######......c...#',
+    '#..........######..I...c...#',
     '#.............c............#',
     '#...####............####...#',
     '#...####............####...#',
@@ -510,6 +540,36 @@ let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
 let exitOpen = false, blackout = 0, nextBlackout = 999;
 let shake = 0, redPulse = 0, unlockFlash = 0;
 let searchLit = false;
+let powerups = [], puLens = 0, puShoe = 0, puGhost = 0;
+
+/* Lifetime record, this device only - same promise as the leaderboard. */
+const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
+let stats = (() => {
+  try { return Object.assign({}, STAT0, JSON.parse(localStorage.getItem('flashpoint.stats') || '{}')); }
+  catch (e) { return Object.assign({}, STAT0); }
+})();
+function saveStats() {
+  try { localStorage.setItem('flashpoint.stats', JSON.stringify(stats)); } catch (e) {}
+}
+function endRun(won, coinTotal) {
+  stats.runs++;
+  stats.coins += coinTotal;
+  if (won) {
+    stats.wins++;
+    const t = Math.floor(runT);
+    if (!stats.bestTime || t < stats.bestTime) stats.bestTime = t;
+  } else stats.caught++;
+  if (score > stats.bestScore) stats.bestScore = score;
+  saveStats();
+  renderStats();
+}
+/* Power-ups carry their own light, like the exit beacon - they stay readable in
+   the dark on purpose, so an empty room still offers you a reason to cross it. */
+const PU = {
+  R: { label: 'LENS',  glow: null, col: '#b9d4ff', ring: 'rgba(185,212,255,.9)' },
+  Z: { label: 'SHOES', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
+  I: { label: 'GHOST', glow: null, col: '#d8b6ff', ring: 'rgba(216,182,255,.9)' }
+};
 let name = '';
 try { name = (localStorage.getItem('flashpoint.name') || '').slice(0, 12); } catch (e) {}
 try {
@@ -631,7 +691,7 @@ function loadMap(idx) {
   TH = THEMES[M.theme];
   const rows = M.rows;
   grid = new Uint8Array(T.COLS * T.ROWS);
-  coinList = []; emitters = []; propsXY = [];
+  coinList = []; emitters = []; propsXY = []; powerups = [];
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
     const ch = rows[y][x] || '#';
     const cx = (x + 0.5) * T.TILE, cy = (y + 0.5) * T.TILE;
@@ -642,6 +702,7 @@ function loadMap(idx) {
     if (ch === 'L') emitters.push({ x: cx, y: cy, r: rand(130, 175), col: TH.lamp, flick: rand(0, 9), kind: 'lamp', base: 1 });
     if (ch === 'N') emitters.push({ x: cx, y: cy, r: rand(95, 140), col: Math.random() < 0.5 ? TH.lamp : TH.accent, flick: rand(0, 9), kind: 'neon', base: 1 });
     if (ch === 'S') emitters.push({ x: cx, y: cy, r: 250, col: '#ffe9b0', flick: 0, kind: 'search', ang: rand(0, TAU), spin: rand(0.45, 0.8) * (Math.random() < 0.5 ? -1 : 1), rays: new Float32Array(17) });
+    if (ch === 'R' || ch === 'Z' || ch === 'I') powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
     if (ch === 'x') propsXY.push({ x: cx, y: cy, k: TH.props[irand(TH.props.length)], r: rand(0, TAU) });
   }
   emitters.push({ x: exitPt.x, y: exitPt.y, r: 95, col: '#4dffb8', flick: rand(0, 9), kind: 'exit', base: .7 });
@@ -660,6 +721,7 @@ function loadMap(idx) {
   coinsTotal = coinList.length; coins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
+  puLens = 0; puShoe = 0; puGhost = 0;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -742,7 +804,7 @@ const cellOf = (x, y) => {
 };
 function isWallCell(gx, gy) { return gx < 0 || gy < 0 || gx >= T.COLS || gy >= T.ROWS || grid[gy * T.COLS + gx] === 1; }
 function isWall(wx, wy) { return isWallCell(wx / T.TILE | 0, wy / T.TILE | 0); }
-const flRange = () => T.FL_RANGE * flScale;
+const flRange = () => T.FL_RANGE * flScale * (puLens > 0 ? T.PU_LENS_MULT : 1);
 const botRange = b => b.range * (blackout > 0 ? 0.6 : 1) * (sirenT > 0 ? 1.3 : 1);
 function ptSeg(px, py, l) {
   const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len2 = dx * dx + dy * dy;
@@ -843,7 +905,8 @@ function update(dt) {
   } else if (mvx || mvy) { const l = Math.hypot(mvx, mvy); mag = sprinting ? 1 : 0.62; mvx /= l; mvy /= l; }
   player.tier = sprinting ? 2 : mvx || mvy ? 1 : 0;
   const spd = sprinting ? T.SPRINT : (sticks.L && mag < 0.88 ? (mag < 0.55 ? T.SNEAK : T.WALK) : (keys.sneak ? T.SNEAK : (mvx || mvy ? T.WALK : 0)));
-  player.vx = mvx * spd; player.vy = mvy * spd;
+  const spdOut = spd * (puShoe > 0 ? T.PU_SHOE_MULT : 1);
+  player.vx = mvx * spdOut; player.vy = mvy * spdOut;
   /* conveyor currents shove you sideways */
   for (const b of belts) {
     if (player.x > b.x0 && player.x < b.x1 && player.y > b.y0 && player.y < b.y1) {
@@ -868,7 +931,7 @@ function update(dt) {
   /* sprint noise + footsteps */
   if (sprinting && spd > 0) {
     stepT -= dt;
-    if (stepT <= 0) { stepT = T.NOISE_SPRINT; makeNoise(player.x, player.y, T.STEP_R); sfx.step(); }
+    if (stepT <= 0) { stepT = T.NOISE_SPRINT; if (puShoe <= 0) makeNoise(player.x, player.y, T.STEP_R); sfx.step(); }
   } else stepT = 0;
 
   /* flashlight hits + memory */
@@ -887,6 +950,24 @@ function update(dt) {
       hud();
     }
   }
+
+  /* power-ups */
+  for (const u of powerups) {
+    if (u.got) continue;
+    if (Math.hypot(u.x - player.x, u.y - player.y) > T.PU_R) continue;
+    u.got = true;
+    sfx.unlock(); burst(u.x, u.y, PU[u.kind].glow, 16, 190);
+    if (u.kind === 'R') { puLens = T.PU_LENS_T; toast('WIDE LENS — THE BEAM REACHES', 2.2); }
+    if (u.kind === 'Z') { puShoe = T.PU_SHOE_T; toast('SOFT SHOES — RUN QUIET', 2.2); }
+    if (u.kind === 'I') { puGhost = T.PU_GHOST_T; invuln = Math.max(invuln, T.PU_GHOST_T); toast('GHOST — THEY CANNOT PIN YOU', 2.2); }
+    hud();
+  }
+  /* redraw the chips only when the displayed second actually changes */
+  const puWas = Math.ceil(puLens) + ',' + Math.ceil(puShoe) + ',' + Math.ceil(puGhost);
+  if (puLens > 0) { puLens = Math.max(0, puLens - dt); }
+  if (puShoe > 0) { puShoe = Math.max(0, puShoe - dt); }
+  if (puGhost > 0) { puGhost = Math.max(0, puGhost - dt); }
+  if (puWas !== Math.ceil(puLens) + ',' + Math.ceil(puShoe) + ',' + Math.ceil(puGhost)) hud();
 
   /* exit */
   if (exitOpen && Math.hypot(exitPt.x - player.x, exitPt.y - player.y) < 26) { nextMap(); return; }
@@ -1154,12 +1235,14 @@ function caught() {
   $('cFloor').textContent = 'LOOP ' + (loop + 1) + ' · ' + (mapIdx + 1) + '/' + MAPS.length;
   renderRecords($('recCaught'));
   $('caught').classList.remove('hidden');
+  endRun(false, totalRunCoins + coins);
 }
 
 function nextMap() {
   const last = mapIdx >= MAPS.length - 1;
   score += T.CLEAR_BONUS;
   sfx.door();
+  stats.floors++; saveStats();
   if (!endless && !completedLevels.includes(mapIdx)) {
     completedLevels.push(mapIdx);
     try { localStorage.setItem('flashpoint.levels', JSON.stringify(completedLevels)); } catch (e) {}
@@ -1187,6 +1270,7 @@ function win() {
   renderRecords($('recEsc'));
   $('escaped').classList.remove('hidden');
   setRain(false);
+  endRun(true, totalRunCoins);
   /* mark all levels completed on full win */
   completedLevels = MAPS.map((_, i) => i);
   try { localStorage.setItem('flashpoint.levels', JSON.stringify(completedLevels)); } catch (e) {}
@@ -1228,6 +1312,10 @@ const glowGoldS = makeGlow('255,205,100');
 const glowRedS = makeGlow('255,70,60');
 const glowGreenS = makeGlow('70,255,160');
 const glowWhiteS = makeGlow('240,248,255');
+/* one glow per power-up, so the pickup burst is its own colour */
+PU.R.glow = makeGlow('185,212,255');
+PU.Z.glow = makeGlow('125,255,196');
+PU.I.glow = makeGlow('216,182,255');
 const grainS = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 140;
   const g = c.getContext('2d');
@@ -1522,6 +1610,7 @@ function render() {
   if (blackout > 0 && Math.sin(time * 30) > 0.4) { ctx.fillStyle = 'rgba(255,40,40,0.05)'; ctx.fillRect(cx, cy, vw, vh); }
   /* coins: always readable; in the beam they light up fully */
   for (const c of coinList) if (!c.got) drawCoin(c);
+  for (const u of powerups) if (!u.got) drawPowerup(u);
   /* the bots: the darkness hides them — your beam is the only truth */
   if (mode !== 'menu') { for (const b of bots) drawBotBody(b); }
   ctx.globalCompositeOperation = 'lighter';
@@ -1740,6 +1829,31 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawPowerup(u) {
+  const P = PU[u.kind];
+  const pulse = 0.5 + 0.5 * Math.sin(time * 2.6 + u.ph);
+  ctx.save(); ctx.translate(u.x, u.y);
+  /* its own lamp on the floor */
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.16 + 0.12 * pulse;
+  const gr = ctx.createRadialGradient(0, 0, 2, 0, 0, 34);
+  gr.addColorStop(0, P.col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  /* canister */
+  ctx.fillStyle = 'rgba(0,0,0,.55)';
+  ctx.beginPath(); ctx.ellipse(1.4, 3.4, 6, 3, 0, 0, TAU); ctx.fill();
+  ctx.rotate(Math.sin(time * 1.1 + u.ph) * 0.22);
+  ctx.fillStyle = '#141320';
+  rr(ctx, -4.6, -6.2, 9.2, 12.4, 3); ctx.fill();
+  ctx.strokeStyle = P.ring; ctx.lineWidth = 1.3;
+  rr(ctx, -4.6, -6.2, 9.2, 12.4, 3); ctx.stroke();
+  ctx.fillStyle = P.col; ctx.globalAlpha = 0.55 + 0.45 * pulse;
+  ctx.beginPath(); ctx.arc(0, 0, 2.4, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 function drawCoin(c) {
@@ -2020,6 +2134,20 @@ function nextFloorIdx() {
   return MAPS.length - 1;
 }
 
+function renderStats() {
+  const el = $('statRow');
+  if (!el) return;
+  if (!stats.runs) { el.innerHTML = ''; return; }
+  const cells = [
+    ['Runs', stats.runs, false],
+    ['Cleared', stats.wins, stats.wins > 0],
+    ['Best time', stats.bestTime ? fmtTime(stats.bestTime) : '—', !!stats.bestTime],
+    ['Gold', stats.coins, false]
+  ];
+  el.innerHTML = cells.map(([k, v, hero]) =>
+    '<div' + (hero ? ' class="hero"' : '') + '><dd>' + v + '</dd><dt>' + k + '</dt></div>').join('');
+}
+
 function renderFloors() {
   const grid = $('floorGrid');
   if (!grid) return;
@@ -2104,6 +2232,7 @@ function toMenu() {
   setRain(false);
   clearToast();
   renderFloors();
+  renderStats();
 }
 function togglePause() {
   if (mode !== 'playing') return;
@@ -2115,6 +2244,18 @@ function hud() {
   $('score').textContent = score;
   mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name;
   whoEl.textContent = name || 'ANON';
+  /* active power-ups */
+  const row = $('puRow');
+  if (row) {
+    const on = [];
+    if (puLens > 0) on.push(['R', puLens]);
+    if (puShoe > 0) on.push(['Z', puShoe]);
+    if (puGhost > 0) on.push(['I', puGhost]);
+    row.innerHTML = on.map(([k, t]) =>
+      '<span class="pu" style="color:' + PU[k].col + '"><i></i>' + PU[k].label +
+      ' <s>' + Math.ceil(t) + 's</s></span>').join('');
+  }
+
   /* searchlight indicator */
   const searchlightEl = $('searchlightIndicator');
   const searchlightPulse = $('searchlightPulse');
@@ -2232,6 +2373,7 @@ loadMap(0);
 whoEl.textContent = name || 'ANON';
 hud();
 renderFloors();
+renderStats();
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
 let last = performance.now();
@@ -2313,7 +2455,22 @@ window.__fp = {
     }
     return false;
   },
-  coinPoints() { return coinList.filter(c => !c.got).map(c => ({ x: c.x, y: c.y })); }
+  coinPoints() { return coinList.filter(c => !c.got).map(c => ({ x: c.x, y: c.y })); },
+  /* power-ups */
+  get powerupsN() { return powerups.filter(u => !u.got).length; },
+  powerupKinds() { return powerups.filter(u => !u.got).map(u => u.kind); },
+  get puActive() { return { lens: +puLens.toFixed(2), shoe: +puShoe.toFixed(2), ghost: +puGhost.toFixed(2) }; },
+  get flRangeNow() { return flRange(); },
+  grab(kind) {
+    const u = powerups.find(z => !z.got && z.kind === kind);
+    if (!u) return false;
+    player.x = u.x; player.y = u.y;
+    return true;
+  },
+  /* lifetime stats */
+  get stats() { return JSON.parse(JSON.stringify(stats)); },
+  resetStats() { stats = Object.assign({}, STAT0); saveStats(); renderStats(); },
+  get alarmAt() { return T.ALARM_AT; }
 };
 </script>
 </body>
