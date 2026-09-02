@@ -67,6 +67,9 @@
   #flareRow i.dec{background:#7dffc4;box-shadow:0 0 8px rgba(125,255,196,.5);margin-left:3px}
   #flareRow i.dec.spent{background:transparent;box-shadow:none;
     border:1px solid rgba(125,255,196,.35)}
+  #flareRow i.mag{background:#ff9ad5;box-shadow:0 0 8px rgba(255,154,213,.5);margin-left:3px}
+  #flareRow i.mag.spent{background:transparent;box-shadow:none;
+    border:1px solid rgba(255,154,213,.35)}
   #puRow{display:flex;gap:6px;margin-top:6px;pointer-events:none}
   .pu{
     display:flex;align-items:center;gap:5px;
@@ -361,6 +364,9 @@ const T = {
   EMP_N: 1, EMP_T: 5.5, EMP_R: 230,
   /* decoy: not a ping but a nuisance - it keeps chirping, so they keep coming */
   DECOY_N: 1, DECOY_T: 12, DECOY_PULSE: 1.15, DECOY_NOISE: 560,
+  /* magnet: harvest a dark room without spending torch on it. Every coin it
+     lands still fires the pickup noise, so a big haul is a loud one. */
+  MAG_N: 1, MAG_T: 8, MAG_R: 96, MAG_PULL: 132,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -587,6 +593,7 @@ let flares = 2;
 let smokes = [], smokePellets = 1;
 let emps = [], empCharges = 1;
 let decoys = [], decoyCharges = 1;
+let magT = 0, magCharges = 1;
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -614,6 +621,7 @@ function endRun(won, coinTotal) {
 const PU = {
   R: { label: 'LENS',  glow: null, col: '#b9d4ff', ring: 'rgba(185,212,255,.9)' },
   B: { label: 'CELL',  glow: null, col: '#ffd166', ring: 'rgba(255,209,102,.9)' },
+  G: { label: 'MAGNET', glow: null, col: '#ff9ad5', ring: 'rgba(255,154,213,.9)' },
   Z: { label: 'SHOES', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
   I: { label: 'GHOST', glow: null, col: '#d8b6ff', ring: 'rgba(216,182,255,.9)' }
 };
@@ -779,6 +787,7 @@ function loadMap(idx) {
   smokes = []; smokePellets = T.SMOKE_N;
   emps = []; empCharges = T.EMP_N;
   decoys = []; decoyCharges = T.DECOY_N;
+  magT = 0; magCharges = T.MAG_N;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -1020,6 +1029,20 @@ function update(dt) {
     if (u.kind === 'B') { batt = Math.min(T.BATT_MAX, batt + T.BATT_PICKUP); battDead = false; toast('CELL — TORCH TOPPED UP', 2.2); }
     hud();
   }
+  /* magnet drags loose gold in */
+  if (magT > 0) {
+    magT = Math.max(0, magT - dt);
+    for (const c of coinList) {
+      if (c.got) continue;
+      const dx = player.x - c.x, dy = player.y - c.y, d = Math.hypot(dx, dy);
+      if (d > T.MAG_R || d < 1) continue;
+      c.seen = true;
+      const step = Math.min(d, T.MAG_PULL * dt);
+      c.x += dx / d * step; c.y += dy / d * step;
+    }
+    if (magT === 0) hud();
+  }
+
   /* decoys chirp on a timer until they run down */
   for (let i = decoys.length - 1; i >= 0; i--) {
     const d = decoys[i];
@@ -1416,6 +1439,7 @@ const glowWhiteS = makeGlow('240,248,255');
 /* one glow per power-up, so the pickup burst is its own colour */
 PU.R.glow = makeGlow('185,212,255');
 PU.B.glow = makeGlow('255,209,102');
+PU.G.glow = makeGlow('255,154,213');
 PU.Z.glow = makeGlow('125,255,196');
 PU.I.glow = makeGlow('216,182,255');
 const grainS = (() => {
@@ -2191,6 +2215,17 @@ function drawPlayer() {
   ctx.drawImage(glowWhiteS, 11.6, -4.2, 8.6, 8.6);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 
+  /* magnet reach */
+  if (magT > 0) {
+    ctx.save(); ctx.rotate(-a);
+    ctx.globalAlpha = 0.16 + 0.12 * Math.sin(time * 5);
+    ctx.strokeStyle = '#ff9ad5'; ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 7]); ctx.lineDashOffset = time * 26;
+    ctx.beginPath(); ctx.arc(0, 0, T.MAG_R, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   /* floor-start grace ring */
   if (invuln > 0) {
     ctx.globalAlpha = 0.3 + 0.26 * Math.sin(time * 12);
@@ -2316,6 +2351,19 @@ const empSuppressed = (x, y) => emps.some(m => Math.hypot(m.x - x, m.y - y) < m.
    cameras, laser gates. So does the light you were reading the room by. */
 /* A coin is one clatter and they drift back. A decoy keeps making noise for
    twelve seconds, which is long enough to walk a route they were standing on. */
+/* Gold does not need to be visible to be pulled. Eight seconds of dragging any
+   loose coin within reach toward you - which is how you strip a black room
+   without lighting it, at the price of every pickup being heard. */
+function runMagnet() {
+  if (mode !== 'playing' || magCharges <= 0) { sfx.ui(); return false; }
+  magCharges--;
+  magT = T.MAG_T;
+  sfx.unlock();
+  toast('MAGNET — GOLD COMES TO YOU', 2.2);
+  hud();
+  return true;
+}
+
 function dropDecoy() {
   if (mode !== 'playing' || decoyCharges <= 0) { sfx.ui(); return false; }
   decoyCharges--;
@@ -2532,6 +2580,7 @@ function hud() {
       + Array.from({ length: T.SMOKE_N }, (_, i) => '<i class="smk' + (i < smokePellets ? '' : ' spent') + '"></i>').join('')
       + Array.from({ length: T.EMP_N }, (_, i) => '<i class="emp' + (i < empCharges ? '' : ' spent') + '"></i>').join('')
       + Array.from({ length: T.DECOY_N }, (_, i) => '<i class="dec' + (i < decoyCharges ? '' : ' spent') + '"></i>').join('')
+      + Array.from({ length: T.MAG_N }, (_, i) => '<i class="mag' + (i < magCharges ? '' : ' spent') + '"></i>').join('')
     : '';
 
   /* active power-ups */
@@ -2541,6 +2590,7 @@ function hud() {
     if (puLens > 0) on.push(['R', puLens]);
     if (puShoe > 0) on.push(['Z', puShoe]);
     if (puGhost > 0) on.push(['I', puGhost]);
+    if (magT > 0) on.push(['G', magT]);
     row.innerHTML = on.map(([k, t]) =>
       '<span class="pu" style="color:' + PU[k].col + '"><i></i>' + PU[k].label +
       ' <s>' + Math.ceil(t) + 's</s></span>').join('');
@@ -2581,6 +2631,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'x' || e.key === 'X') && mode === 'playing') { dropSmoke(); }
   if ((e.key === 'c' || e.key === 'C') && mode === 'playing') { fireEmp(); }
   if ((e.key === 'v' || e.key === 'V') && mode === 'playing') { dropDecoy(); }
+  if ((e.key === 'g' || e.key === 'G') && mode === 'playing') { runMagnet(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if ((e.key === 'p' || e.key === 'P')) togglePause();
 });
@@ -2795,7 +2846,11 @@ window.__fp = {
   get decoyCharges() { return decoyCharges; },
   get decoysLive() { return decoys.length; },
   setDecoy(n) { decoyCharges = n; hud(); },
-  decoyPoints() { return decoys.map(d => ({ x: d.x, y: d.y, life: +d.life.toFixed(2) })); }
+  decoyPoints() { return decoys.map(d => ({ x: d.x, y: d.y, life: +d.life.toFixed(2) })); },
+  runMagnet() { return runMagnet(); },
+  get magCharges() { return magCharges; },
+  get magT() { return +magT.toFixed(2); },
+  setMag(n) { magCharges = n; hud(); }
 };
 </script>
 </body>

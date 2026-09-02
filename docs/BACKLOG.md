@@ -20,7 +20,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] A4 Smoke pellet — a cloud that blocks drone line of sight
 - [x] A5 EMP charge — kills lamps, lasers and cameras in radius for 5s
 - [x] A6 Decoy — a dummy that drones investigate
-- [ ] A7 Magnet — pulls loose coins within 90px for 8s
+- [x] A7 Magnet — pulls loose coins within 90px for 8s
 - [ ] A8 Lockpick — opens `D` doors, takes 1.5s standing still
 - [ ] A9 Inventory + item switching on `1`/`2`/`3`
 - [ ] A10 Item pickups placed across all floors
@@ -113,3 +113,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · A4 · smoke on X, blocks drones and searchlights, chokes your own beam, 8 assertions
 - 2026-09-02 · A5 · EMP on C, local bubble kills lamps/lasers/cameras, 8 assertions
 - 2026-09-02 · A6 · decoy on V, chirps every 1.15s for 12s, pulls drones off patrol, 8 assertions
+- 2026-09-02 · A7 · magnet on G, 8s pull within 96px, works on unlit gold, 9 assertions

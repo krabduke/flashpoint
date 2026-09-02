@@ -356,6 +356,67 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- magnet: strip a dark room without lighting it ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('you carry one magnet', (await evl('__fp.magCharges')) === 1, `n=${await evl('__fp.magCharges')}`);
+
+const pulledIn = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999;
+  mapIdx = 0; loadMap(0); hud(); invuln = 999;
+  __fp.forgetCoins();
+  const c = coinList.find(z => !z.got);
+  /* park a coin just inside reach, beam pointed the other way so it is unlit */
+  player.x = c.x - 70; player.y = c.y;
+  mouseWX = player.x - 300; mouseWY = player.y;
+  update(0.016);
+  const litBefore = coinLight(c);
+  const dBefore = Math.hypot(c.x - player.x, c.y - player.y);
+  __fp.setMag(1); __fp.runMagnet();
+  for (let i = 0; i < 20; i++) update(0.016);
+  const dAfter = Math.hypot(c.x - player.x, c.y - player.y);
+  return JSON.stringify({ litBefore, dBefore: Math.round(dBefore), dAfter: Math.round(dAfter), seen: c.seen });
+})()`);
+const pi = JSON.parse(pulledIn);
+ok('the magnet drags gold toward you', pi.dAfter < pi.dBefore - 10, pulledIn);
+ok('it works on gold you cannot see', pi.litBefore !== 'lit', `state=${pi.litBefore}`);
+ok('a pulled coin becomes known to you', pi.seen === true);
+ok('running it spends the charge', (await evl('__fp.magCharges')) === 0);
+ok('it shows a countdown chip', (await evl("document.querySelectorAll('#puRow .pu').length")) >= 1);
+
+/* out of reach stays put */
+const outOfReach = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  mapIdx = 0; loadMap(0); hud();
+  const c = coinList.find(z => !z.got);
+  player.x = c.x - (T.MAG_R + 120); player.y = c.y;
+  const before = Math.hypot(c.x - player.x, c.y - player.y);
+  magT = T.MAG_T;
+  for (let i = 0; i < 20; i++) update(0.016);
+  return JSON.stringify({ before: Math.round(before), after: Math.round(Math.hypot(c.x - player.x, c.y - player.y)) });
+})()`);
+const oor = JSON.parse(outOfReach);
+ok('gold beyond its reach is untouched', oor.after === oor.before, outOfReach);
+
+/* and the haul is loud, because every pickup already is */
+const loudHaul = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  mapIdx = 0; loadMap(0); hud(); noise.length = 0;
+  const c = coinList.find(z => !z.got);
+  player.x = c.x - 40; player.y = c.y;
+  magT = T.MAG_T;
+  let heard = 0;
+  for (let i = 0; i < 60; i++) { update(0.016); if (noise.length) heard++; }
+  return JSON.stringify({ heard, coins: __fp.coins });
+})()`);
+const lh = JSON.parse(loudHaul);
+ok('a magnet haul is heard', lh.coins > 0 && lh.heard > 0, loudHaul);
+
+const magDone = await evl(`(() => { magT = 0.2; for (let i = 0; i < 20; i++) update(0.05); return __fp.magT; })()`);
+ok('the magnet runs out', magDone === 0, `magT=${magDone}`);
+await evl('__fp.setMag(0)');
+ok('you cannot run one you do not have', (await evl('__fp.runMagnet()')) === false);
+
 /* ---- decoy: a nuisance that keeps talking ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

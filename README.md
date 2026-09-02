@@ -54,6 +54,10 @@ either. They see what their light sees, and nothing else.
 - **A decoy keeps talking** — one a floor on `V`. A thrown coin is a single
   clatter and they drift back; a decoy chirps every second or so for twelve, which
   is long enough to walk a corridor they were standing in.
+- **The magnet does not need to see** — eight seconds of dragging any loose coin
+  within reach toward you, lit or not, which is how you strip a black room
+  without spending torch on it. Every coin it lands still fires the pickup noise,
+  so a big haul is a loud one.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
@@ -103,6 +107,7 @@ add bots and speed, and your best depth per device is kept.
 | Drop smoke | `X` | HUD buttons |
 | Fire an EMP | `C` | HUD buttons |
 | Set a decoy | `V` | HUD buttons |
+| Run the magnet | `G` | HUD buttons |
 | Mute / pause | `M` / `P` | HUD buttons |
 | Restart | `R`, or `Space` on the card | tap the button |
 
