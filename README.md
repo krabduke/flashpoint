@@ -85,6 +85,11 @@ either. They see what their light sees, and nothing else.
   dry floor is silent; walking through a puddle is not, and it carries further
   than a sprint does. Soft shoes will not save you either, which is the point:
   the best movement tool in the game has one place it does not work.
+- **Pressure plates are laid where you have to walk** — ten of them across the
+  secured floors, in corridors with walls on both sides. Step on one and it
+  screams your position to everything nearby. You can make out the outline in the
+  dark, but only your beam tells you exactly where its edges are, which is one
+  more thing the torch is for.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

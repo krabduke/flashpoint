@@ -358,6 +358,50 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- pressure plates: step on one and everyone knows ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 6; loadMap(6); hud();');
+await sleep(300);
+ok('secured floors are trapped', (await evl('__fp.platesN')) > 0, `n=${await evl('__fp.platesN')}`);
+ok('plates start unfired', (await evl('__fp.platesFired')) === 0);
+
+const stepped = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  noise.length = 0;
+  for (const b of bots) { b.state = 'patrol'; b.alerted = false; b.path = []; b.face = Math.atan2(b.y - player.y, b.x - player.x); }
+  const q = __fp.platePoints()[0];
+  player.x = q.x; player.y = q.y;
+  update(0.016);
+  return JSON.stringify({ fired: __fp.platesFired, noise: noise.length, states: __fp.botState });
+})()`);
+const sp2 = JSON.parse(stepped);
+ok('standing on a plate fires it', sp2.fired === 1, stepped);
+ok('it screams your position', sp2.noise > 0, stepped);
+ok('and the drones react', !/^\["patrol"(,"patrol")*\]$/.test(JSON.stringify(sp2.states)), stepped);
+
+ok('a fired plate does not fire twice', await evl(`(() => {
+  const before = __fp.platesFired;
+  for (let i = 0; i < 20; i++) update(0.016);
+  return __fp.platesFired === before;
+})()`));
+
+ok('plates sit in corridors, on walkable floor', await evl(`(() => {
+  return __fp.platePoints().every(q => !isWall(q.x, q.y));
+})()`));
+
+ok('plates never strand a coin', await evl("validateMaps() === 'ok'"));
+
+/* the searchlight still works after sharing its alarm with the plates */
+ok('the shared alarm still serves the searchlight', await evl(`(() => {
+  mapIdx = 4; loadMap(4); hud();
+  for (const b of bots) { b.state = 'patrol'; b.alerted = false; b.path = []; }
+  searchLit = false; smokes.length = 0; emps.length = 0;
+  __fp.lightMeWithSearch();
+  updateMeter(0.016);
+  return searchLit === true;
+})()`));
+
 /* ---- water: you cannot cross a puddle quietly ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
