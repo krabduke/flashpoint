@@ -115,6 +115,10 @@ either. They see what their light sees, and nothing else.
   not send the others to the same cell any more. Each one gets its own bearing on
   you and claims it, so they arrive spread around you rather than nose to tail
   down one corridor. Backing into a room is a worse idea than it used to be.
+- **Breaking line of sight is not the end of it** — a drone that loses you walks
+  to where you were and then searches outward from it, four or five spots in a
+  widening spiral, before it gives up and goes back on patrol. Ducking round a
+  corner buys you seconds, not safety.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

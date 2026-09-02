@@ -181,6 +181,8 @@ const lz = await evl(`(() => {
     if (meter > peak) peak = meter;
     if (mode !== 'playing') break;
   }
+  mode = 'playing'; paused = false; meter = 0; invuln = 2.5;
+  document.getElementById('caught').classList.add('hidden');
   return peak;
 })()`);
 ok('laser zap spikes meter', lz > 0.3, 'peak=' + lz?.toFixed?.(2));
@@ -371,6 +373,69 @@ ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
+
+/* ---- spiral search: losing them means outrunning a search ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const spiral = await evl(`(() => {
+  mode = 'playing'; invuln = 999; endless = false;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  let open = { x: player.x, y: player.y }, best = -1;
+  for (let y = 2; y < 16; y++) for (let x = 2; x < 26; x++) {
+    const wx = (x + .5) * T.TILE, wy = (y + .5) * T.TILE;
+    if (isWall(wx, wy)) continue;
+    let room = 0;
+    for (let a = 0; a < 8; a++) if (!isWall(wx + Math.cos(a) * 90, wy + Math.sin(a) * 90)) room++;
+    if (room > best) { best = room; open = { x: wx, y: wy }; }
+  }
+  const pts = __fp.searchSpiralAt(open.x, open.y);
+  const dists = pts.map(p => Math.round(Math.hypot(p.x - open.x, p.y - open.y)));
+  const uniq = new Set(pts.map(p => p.x + ',' + p.y)).size;
+  const allOpen = pts.every(p => !isWall(p.x, p.y));
+  return JSON.stringify({ n: pts.length, uniq, allOpen, dists });
+})()`);
+const sp3 = JSON.parse(spiral);
+ok('a search has several places to look', sp3.n >= 3, spiral);
+ok('none of them repeat', sp3.uniq === sp3.n, spiral);
+ok('all of them are walkable', sp3.allOpen === true, spiral);
+ok('and they spread outward', Math.max(...sp3.dists) > Math.min(...sp3.dists) + 30, spiral);
+
+/* losing a drone should start a search, not a countdown */
+const lost = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const b = bots[0];
+  b.x = player.x + 60; b.y = player.y;
+  b.face = Math.atan2(player.y - b.y, player.x - b.x);
+  b.state = 'chase'; b.stateT = 0; b.lastX = player.x; b.lastY = player.y;
+  b.searchPts = [];
+  /* teleport the player far away so the drone loses sight */
+  player.x = spawnPt.x; player.y = spawnPt.y;
+  if (Math.hypot(player.x - b.x, player.y - b.y) < 400) { player.x = b.x + 600; player.y = b.y + 400; }
+  let sawSearch = 0, states = new Set();
+  for (let i = 0; i < 800; i++) {
+    update(0.016);
+    states.add(bots[0].state);
+    const left = __fp.botSearchLeft()[0];
+    if (left > 0) sawSearch = Math.max(sawSearch, left);
+  }
+  return JSON.stringify({ sawSearch, states: [...states], ended: bots[0].state });
+})()`);
+const ls = JSON.parse(lost);
+ok('losing you starts a search', ls.sawSearch > 0, lost);
+ok('the drone works through it', ls.states.includes('invest'), lost);
+ok('and eventually goes back on patrol', ls.ended === 'patrol', lost);
+
+ok('a noise also starts a search rather than one visit', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const b = bots[0];
+  b.state = 'patrol'; b.path = []; b.searchPts = [];
+  b.face = Math.atan2(b.y - player.y, b.x - player.x);
+  makeNoise(b.x + 80, b.y, 600);
+  update(0.016);
+  return (__fp.botSearchLeft()[0] > 0) && bots[0].state === 'invest';
+})()`));
 
 /* ---- flanking: a radioed net closes from several sides ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

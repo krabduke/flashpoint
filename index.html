@@ -458,6 +458,7 @@ const T = {
   /* doors: a keycard is the fast way through, picking is the exposed way */
   PICK_T: 1.5, DOOR_R: 40, KEY_R: 22, DOOR_NOISE: 250,
   FLANK_R: 2.6,   /* tiles out from you that a radioed drone aims for */
+  SEARCH_PTS: 5, SEARCH_R0: 1.6, SEARCH_RSTEP: 1.3, SEARCH_T: 9,
   PLATE_R: 17, PLATE_NOISE: 660,
   CRATE_R: 36, CRATE_T: 0.9, CRATE_NOISE: 540,
   MIRROR_LOSS: 0.82,
@@ -1685,16 +1686,26 @@ function updateBots(dt) {
       } else b.glow = Math.max(0, b.glow - dt * T.BEAM_FADE);
       if (b.state === 'chase') {
         b.stateT += dt;
-        if (b.stateT > 2.2) { b.state = 'invest'; b.alerted = false; retarget(b, b.lastX, b.lastY); }
+        if (b.stateT > 2.2) {
+          b.state = 'invest'; b.alerted = false; b.stateT = 0;
+          b.searchPts = searchSpiral(b.lastX, b.lastY, Math.atan2(b.lastY - b.y, b.lastX - b.x));
+          retarget(b, b.lastX, b.lastY);
+        }
         else speed = T.BOT_INVEST * sm;
       } else if (b.state === 'invest') {
         b.stateT += dt;
-        if (b.stateT > 4) { b.state = 'patrol'; b.path = []; b.stateT = 0; }
+        /* worked through the last spot, so try the next ring before giving up */
+        if (!b.path.length && b.searchPts && b.searchPts.length) {
+          const q = b.searchPts.shift();
+          retarget(b, q.x, q.y);
+        }
+        const done = (!b.searchPts || !b.searchPts.length) && !b.path.length;
+        if (done || b.stateT > T.SEARCH_T) { b.state = 'patrol'; b.path = []; b.stateT = 0; b.searchPts = []; }
         speed = T.BOT_INVEST * sm * 0.9;
       } else if (b.state === 'patrol') { speed = T.BOT_PATROL * sm; }
 
       const n = nearestNoise(b);
-      if (n && b.state === 'patrol') { b.state = 'invest'; b.stateT = 0; retarget(b, n.x, n.y); }
+      if (n && b.state === 'patrol') { b.state = 'invest'; b.stateT = 0; b.searchPts = searchSpiral(n.x, n.y, rand(0, TAU)); retarget(b, n.x, n.y); }
       else if (n && Math.hypot(b.x - n.x, b.y - n.y) > 260) { b.state = 'invest'; b.stateT = 0; retarget(b, n.x, n.y); }
     }
 
@@ -1731,6 +1742,24 @@ function chaseSpeed(b, sm) {
 /* Radio net: the drone that saw you tells everyone in earshot where you were. */
 /* A walkable spot roughly FLANK_R tiles from the target on the given bearing,
    falling back to the target itself if that side is solid. */
+/* Points spiralling out from where you were last seen, so losing a drone means
+   outrunning a search rather than waiting out a timer. */
+function searchSpiral(cx, cy, fromAng) {
+  const out = [];
+  for (let i = 0; i < T.SEARCH_PTS; i++) {
+    const a = fromAng + i * 2.399;                       /* golden angle, so the sweep does not repeat a line */
+    const d = (T.SEARCH_R0 + i * T.SEARCH_RSTEP) * T.TILE;
+    for (const scale of [1, 0.75, 1.25]) {
+      const x = cx + Math.cos(a) * d * scale, y = cy + Math.sin(a) * d * scale;
+      if (isWall(x, y)) continue;
+      if (out.some(q => Math.hypot(q.x - x, q.y - y) < T.TILE)) continue;
+      out.push({ x, y });
+      break;
+    }
+  }
+  return out;
+}
+
 function flankPoint(tx, ty, ang, claimed) {
   const d = T.FLANK_R * T.TILE;
   const free = (x, y) => !claimed.some(c => Math.hypot(c.x - x, c.y - y) < T.TILE);
@@ -3700,6 +3729,8 @@ window.__fp = {
   get aim() { return player.aim; }, get pos() { return { x: player.x, y: player.y }; },
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
+  botSearchLeft() { return bots.map(b => (b.searchPts || []).length); },
+  searchSpiralAt(x, y) { return searchSpiral(x, y, 0).map(q => ({ x: Math.round(q.x), y: Math.round(q.y) })); },
   botFlanks() { return bots.map(b => b.flankX === undefined ? null : { x: Math.round(b.flankX), y: Math.round(b.flankY) }); },
   radioFrom(i) { return radio(bots[i]); },
   botPathEnds() { return bots.map(b => b.path && b.path.length ? { x: Math.round(b.path[b.path.length - 1].x), y: Math.round(b.path[b.path.length - 1].y) } : null); },
