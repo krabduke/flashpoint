@@ -412,6 +412,7 @@ const T = {
   /* doors: a keycard is the fast way through, picking is the exposed way */
   PICK_T: 1.5, DOOR_R: 40, KEY_R: 22, DOOR_NOISE: 250,
   PLATE_R: 17, PLATE_NOISE: 660,
+  CRATE_R: 36, CRATE_T: 0.9, CRATE_NOISE: 540,
   MIRROR_LOSS: 0.82,
   /* the kit you start a run with, and the most you can carry of each */
   /* water: you cannot cross a puddle quietly, not even in soft shoes */
@@ -475,8 +476,8 @@ const MAPS = [
     '#.#c.....#.s...#.....#.....#',
     '#.#.#######.####.#######.#.#',
     '#.#.#....#..x#...#c...#..#.#',
-    '#.#.V.L..#....#..#.L..#.##.#',
-    '#...#....#.....#.#....#....#',
+    '#.#.V.LO.#....#..#.LO.#.##.#',
+    '#...#....#..O..#.#....#....#',
     '#.###.####..x..#.#.####c##.#',
     '#....c..........Z...#..x.E.#',
     '#####.#####.####.###.#.....#',
@@ -549,14 +550,14 @@ const MAPS = [
     '#......#....#.IK.#....#....#',
     '#......#..e.#....#....#....#',
     '#...........D..............#',
-    '#......V....#.f..#....#....#',
+    '#......V....#.f..#..O.#....#',
     '#......#....#....#...C#....#',
     '#......#....#....#....#...c#',
     '#......c....!...c..........#',
     '#......#....#....V....#....#',
     '#......#....#....#....#....#',
     '#......#....#....#....#....#',
-    '#..........................#',
+    '#........................O.#',
     '#......#....#....#....#....#',
     '#......#....#....#....#....#',
     '#......#....#....#....#...c#',
@@ -589,7 +590,7 @@ const MAPS = [
     '#..####..####..####..####..#',
     '#..####..####..####..####..#',
     '#..####........####.e......#',
-    '#..............####........#',
+    '#............O.####........#',
     '#.......####.Z......#####..#',
     '#.####..####..####..#####..#',
     '#.####.c####..####.c#####.c#',
@@ -598,7 +599,7 @@ const MAPS = [
     '#..f...~..####.....~~.####.#',
     '#.~~####..####..####..####.#',
     '#...####..####..####..####.#',
-    '#...####..####..####..####.#',
+    '#.O.####..####..####..####.#',
     '#.............m...........c#',
     '#.c.......c.......c.......E#',
     '############################'
@@ -608,7 +609,7 @@ const MAPS = [
     '#.P....!......c.......c....#',
     '#.K.####..f.......d.####...#',
     '#...####............####.s.#',
-    '#...####.....S......###M...#',
+    '#...####....OS......###M...#',
     '#..e.............Z.........#',
     '#..........######....C.....#',
     '#.###G#...c######....#V###c#',
@@ -618,7 +619,7 @@ const MAPS = [
     '#..........######..I...c...#',
     '#....C........c............#',
     '#...####............###M...#',
-    '#...####............####...#',
+    '#...####....O.......####...#',
     '#...####............####..c#',
     '#c........c..S....c..!....E#',
     '############################'
@@ -651,6 +652,7 @@ let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
 let waterAt = new Uint8Array(T.COLS * T.ROWS);
 let plates = [];
+let crates = [], crateT = 0, crateOn = null;
 let mirrors = [];
 /* A mirror is a second light source, not a change to the raycast. castCone never
    assumed the player was the origin, so the reflected fan just calls it again. */
@@ -770,6 +772,7 @@ const sfx = {
   flare() { noiseBurst(0.22, 0.22, 900); tone(420, 900, 0.3, 0.14); },
   smoke() { noiseBurst(0.5, 0.12, 260); },
   splash() { noiseBurst(0.12, 0.09, 1400); tone(300, 180, 0.1, 0.05); },
+  crate() { noiseBurst(0.3, 0.3, 320); tone(180, 90, 0.24, 0.16, 'square'); },
   emp() { tone(900, 60, 0.45, 0.22, 'square'); noiseBurst(0.3, 0.16, 140); },
   decoy() { tone(1180, 1180, 0.05, 0.07, 'square'); },
   ui() { tone(700, 900, 0.06, 0.08); }
@@ -822,6 +825,7 @@ function loadMap(idx) {
   doors = []; keycards = [];
   plates = [];
   mirrors = []; mirrorBeam = null;
+  crates = []; crateT = 0; crateOn = null;
   ventAt = new Uint8Array(T.COLS * T.ROWS);
   glassAt = new Uint8Array(T.COLS * T.ROWS);
   waterAt = new Uint8Array(T.COLS * T.ROWS);
@@ -844,6 +848,7 @@ function loadMap(idx) {
        through it for free - losClear and both cones read the grid, so they need
        no changes at all. Only bodies are stopped, and only where bodies move. */
     if (ch === 'G') glassAt[y * T.COLS + x] = 1;
+    if (ch === 'O') { grid[y * T.COLS + x] = 1; crates.push({ gx: x, gy: y, x: cx, y: cy, broken: false }); }
     if (ch === 'M') { grid[y * T.COLS + x] = 1; mirrors.push({ gx: x, gy: y, x: cx, y: cy, slash: true }); }
     if (ch === '!') plates.push({ gx: x, gy: y, x: cx, y: cy, fired: false, flash: 0 });
     if (ch === '~') waterAt[y * T.COLS + x] = 1;
@@ -1200,6 +1205,18 @@ function update(dt) {
     if (u.kind === 'm') { magCharges = Math.min(T.CAP.mag, magCharges + 1); toast('MAGNET STOWED', 1.8); }
     hud();
   }
+  /* crates - only when there is no door demanding your hands */
+  const crate = nearestShutDoor() ? null : nearestCrate();
+  if (!crate) { if (crateT !== 0) { crateT = 0; crateOn = null; } }
+  else {
+    if (crateOn !== crate) { crateOn = crate; crateT = 0; }
+    if (Math.hypot(player.vx, player.vy) > 6) crateT = 0;
+    else {
+      crateT += dt;
+      if (crateT >= T.CRATE_T) { breakCrate(crate); crateT = 0; crateOn = null; }
+    }
+  }
+
   /* pressure plates */
   for (const pl of plates) {
     if (pl.flash > 0) pl.flash -= dt;
@@ -1946,6 +1963,7 @@ function render() {
   for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) drawVent(i);
   for (let i = 0; i < waterAt.length; i++) if (waterAt[i]) drawWater(i);
   for (const pl of plates) drawPlate(pl);
+  for (const cr of crates) if (!cr.broken) drawCrate(cr);
   for (const m of mirrors) drawMirror(m);
   for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
   for (const d of doors) drawDoor(d);
@@ -2187,6 +2205,23 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawCrate(cr) {
+  const S = T.TILE, px = cr.gx * S, py = cr.gy * S;
+  ctx.save();
+  const g = ctx.createLinearGradient(px, py, px, py + S);
+  g.addColorStop(0, '#4a3826'); g.addColorStop(1, '#2c2016');
+  ctx.fillStyle = g;
+  ctx.fillRect(px + 3, py + 3, S - 6, S - 6);
+  ctx.strokeStyle = 'rgba(20,14,8,.9)'; ctx.lineWidth = 1.4;
+  ctx.strokeRect(px + 3, py + 3, S - 6, S - 6);
+  ctx.strokeStyle = 'rgba(150,112,66,.75)'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px + 4, py + 4); ctx.lineTo(px + S - 4, py + S - 4);
+  ctx.moveTo(px + S - 4, py + 4); ctx.lineTo(px + 4, py + S - 4);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawMirror(m) {
@@ -2607,13 +2642,14 @@ function drawPlayer() {
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 
   /* picking a lock: a ring that fills while you stand still */
-  if (pickT > 0) {
+  const workT = pickT > 0 ? pickT / T.PICK_T : (crateT > 0 ? crateT / T.CRATE_T : 0);
+  if (workT > 0) {
     ctx.save(); ctx.rotate(-a);
     ctx.globalAlpha = 0.9;
     ctx.strokeStyle = 'rgba(255,209,102,.28)'; ctx.lineWidth = 2.6;
     ctx.beginPath(); ctx.arc(0, 0, 17, 0, TAU); ctx.stroke();
     ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2.6;
-    ctx.beginPath(); ctx.arc(0, 0, 17, -Math.PI / 2, -Math.PI / 2 + TAU * (pickT / T.PICK_T)); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 17, -Math.PI / 2, -Math.PI / 2 + TAU * workT); ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.restore();
   }
@@ -2794,6 +2830,32 @@ function raiseAlarm(x, y, radius, msg) {
   near.lastX = x; near.lastY = y;
   retarget(near, x, y);
   if (hunt) radio(near);
+}
+
+/* A crate is worth breaking or worth leaving. The coin inside is a bonus, not
+   part of the floor's count, so nothing forces you to make the noise. */
+function breakCrate(cr) {
+  if (cr.broken) return;
+  cr.broken = true;
+  grid[cr.gy * T.COLS + cr.gx] = 0;
+  renderMapCanvas();
+  coinList.push({ x: cr.x, y: cr.y, ph: rand(0, TAU), got: false, seen: true, bonus: true });
+  makeNoise(cr.x, cr.y, T.CRATE_NOISE);
+  sfx.crate();
+  burst(cr.x, cr.y, glowGoldS, 16, 190);
+  shake = Math.max(shake, 5);
+  toast('CRATE OPEN — THAT WAS LOUD', 1.8);
+  hud();
+}
+
+function nearestCrate() {
+  let best = null, bd = T.CRATE_R;
+  for (const cr of crates) {
+    if (cr.broken) continue;
+    const d = Math.hypot(cr.x - player.x, cr.y - player.y);
+    if (d < bd) { bd = d; best = cr; }
+  }
+  return best;
 }
 
 function nearestShutDoor() {
@@ -3249,6 +3311,11 @@ window.__fp = {
   get ventsN() { return ventAt.reduce((a, v) => a + v, 0); },
   get glassN() { return glassAt.reduce((a, v) => a + v, 0); },
   get waterN() { return waterAt.reduce((a, v) => a + v, 0); },
+  get cratesN() { return crates.length; },
+  get cratesBroken() { return crates.filter(c => c.broken).length; },
+  cratePoints() { return crates.map(c => ({ x: c.x, y: c.y, gx: c.gx, gy: c.gy, broken: c.broken })); },
+  get crateT() { return +crateT.toFixed(2); },
+  get bonusCoins() { return coinList.filter(c => c.bonus).length; },
   get mirrorsN() { return mirrors.length; },
   mirrorPoints() { return mirrors.map(m => ({ x: m.x, y: m.y, gx: m.gx, gy: m.gy, slash: m.slash })); },
   get mirrorBeam() { return mirrorBeam ? { x: mirrorBeam.x, y: mirrorBeam.y, ang: +mirrorBeam.ang.toFixed(3), range: Math.round(mirrorBeam.range) } : null; },

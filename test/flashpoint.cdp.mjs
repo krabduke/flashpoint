@@ -358,6 +358,53 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- crates: bonus gold for a lot of noise ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 1; loadMap(1); hud();');
+await sleep(300);
+ok('storage floors carry crates', (await evl('__fp.cratesN')) > 0, `n=${await evl('__fp.cratesN')}`);
+ok('a crate is solid', await evl(`(() => { const c = __fp.cratePoints()[0]; return isWall(c.x, c.y); })()`));
+ok('crates stand clear of walls', await evl(`(() => {
+  return __fp.cratePoints().every(c => {
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) if (isWallCell(c.gx + dx, c.gy + dy)) return false;
+    return true;
+  });
+})()`));
+
+const crateRes = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999;
+  const c = crates.find(z => !z.broken);
+  player.x = c.x - 30; player.y = c.y;
+  player.vx = 0; player.vy = 0;
+  keys.left = keys.right = keys.up = keys.down = false;
+  noise.length = 0;
+  const coinsBefore = coinList.filter(z => !z.got).length;
+  const totalBefore = coinsTotal;
+  let sawProgress = false, heardPeak = 0;
+  for (let i = 0; i < 90; i++) {
+    update(0.016);
+    if (__fp.crateT > 0.2) sawProgress = true;
+    if (noise.length > heardPeak) heardPeak = noise.length;
+  }
+  return JSON.stringify({
+    broken: __fp.cratesBroken, sawProgress,
+    solid: isWall(c.x, c.y),
+    loose: coinList.filter(z => !z.got).length - coinsBefore,
+    bonus: __fp.bonusCoins, totalSame: coinsTotal === totalBefore,
+    heard: heardPeak > 0
+  });
+})()`);
+const crateOut = JSON.parse(crateRes);
+ok('standing by a crate breaks it', crateOut.broken === 1, crateRes);
+ok('breaking shows progress', crateOut.sawProgress === true, crateRes);
+ok('a broken crate stops being solid', crateOut.solid === false, crateRes);
+ok('it drops a coin', crateOut.loose === 1 && crateOut.bonus === 1, crateRes);
+ok('the dropped coin is a bonus, not an obligation', crateOut.totalSame === true, crateRes);
+ok('breaking one is heard', crateOut.heard === true, crateRes);
+
+ok('crates never strand a coin', await evl("validateMaps() === 'ok'"));
+
 /* ---- mirrors: see round a corner without walking into it ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

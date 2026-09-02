@@ -94,6 +94,10 @@ either. They see what their light sees, and nothing else.
   floors. Put your beam on one and it turns ninety degrees and lights the
   corridor round the corner, a little dimmer for the trip. You get to see what is
   waiting without walking into its line of sight.
+- **Crates are a choice, not a chore** — nine of them standing in open floor.
+  Lean on one for a second and it splits, dropping a coin and making a lot of
+  noise. That coin is a bonus and never part of the floor's count, so nothing
+  makes you take it: you are trading quiet for score.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

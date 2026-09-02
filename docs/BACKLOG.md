@@ -34,7 +34,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] B5 `~` water — footsteps carry further, and soft shoes cannot silence a splash
 - [x] B6 pressure plate — tile is `!` not `p`, since `P` is the spawn marker and the two are a trap to read
 - [x] B7 `M` mirror — reflects your beam around a corner; done as a second light source, castCone untouched
-- [ ] B8 Destructible crates — break for a coin, loudly
+- [x] B8 Destructible crates — break for a **bonus** coin, loudly; tile is `O`
 
 ## C · New floors
 
@@ -123,3 +123,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · B5 · 16 water tiles on the Ward and Docks; walking wet is heard, soft shoes do not help, 6 assertions
 - 2026-09-02 · B6 · 10 plates on 4 secured floors; raiseAlarm() extracted and now shared with the searchlight, 9 assertions
 - 2026-09-02 · B7 · 8 mirrors in corners; found and fixed a map-writer bug that had been placing features on the wrong rows, 9 assertions
+- 2026-09-02 · B8 · 9 crates on 4 floors, bonus coin outside coinsTotal, 10 assertions — **section B complete**
