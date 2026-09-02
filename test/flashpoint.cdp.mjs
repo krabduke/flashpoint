@@ -356,6 +356,79 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- EMP: kills the grid, and the light you were reading by ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('you carry one charge', (await evl('__fp.empCharges')) === 1, `n=${await evl('__fp.empCharges')}`);
+
+/* laser gates on the server floor go quiet */
+const lasersKilled = await evl(`(() => {
+  mapIdx = 5; loadMap(5); hud(); emps.length = 0;
+  const mid = __fp.laserMid;   // getter, not a function
+  player.x = mid.x; player.y = mid.y;
+  for (const l of lasers) l.ph = 0;
+  update(0.016);
+  const before = __fp.liveLasers;
+  __fp.fireEmp();
+  update(0.016);
+  /* an EMP is local - gates outside the bubble keep running, which is the point */
+  const inBubble = lasers.filter(l => Math.hypot((l.x1 + l.x2) / 2 - player.x, (l.y1 + l.y2) / 2 - player.y) < T.EMP_R);
+  return JSON.stringify({
+    before, after: __fp.liveLasers,
+    inBubble: inBubble.length,
+    inBubbleLive: inBubble.filter(l => l.on).length
+  });
+})()`);
+const lk = JSON.parse(lasersKilled);
+ok('an EMP kills the gates inside its bubble', lk.inBubble > 0 && lk.inBubbleLive === 0, lasersKilled);
+ok('and leaves the ones outside it running', lk.after === lk.before - lk.inBubble, lasersKilled);
+ok('firing spends the charge', (await evl('__fp.empCharges')) === 0);
+
+/* searchlights inside the bubble stop seeing */
+const searchKilled = await evl(`(() => {
+  mapIdx = 4; loadMap(4); hud(); emps.length = 0;
+  __fp.lightMeWithSearch();
+  updateMeter(0.016);
+  const seenLive = searchLit;
+  searchLit = false;
+  __fp.setEmp(1); __fp.fireEmp();
+  update(0.016);
+  updateMeter(0.016);
+  return JSON.stringify({ seenLive, seenEmped: searchLit, dead: __fp.deadEmitters });
+})()`);
+const sk = JSON.parse(searchKilled);
+ok('an EMP blinds a searchlight', sk.seenLive === true && sk.seenEmped === false, searchKilled);
+ok('it marks the emitters it killed', sk.dead > 0, `dead=${sk.dead}`);
+
+/* the cost: the lamps it killed were showing you gold */
+const goldLost = await evl(`(() => {
+  mapIdx = 0; loadMap(0); hud(); emps.length = 0; __fp.forgetCoins();
+  const lamp = emitters.find(e => e.kind === 'lamp');
+  const c = coinList.find(z => !z.got);
+  c.x = lamp.x + 10; c.y = lamp.y;
+  player.x = lamp.x + 900; player.y = lamp.y;
+  mouseWX = player.x + 100; mouseWY = player.y;
+  update(0.016);
+  const before = coinLight(c);
+  player.x = lamp.x; player.y = lamp.y;
+  __fp.setEmp(1); __fp.fireEmp();
+  update(0.016);
+  player.x = lamp.x + 900; player.y = lamp.y;
+  const after = coinLight(c);
+  return JSON.stringify({ before, after });
+})()`);
+const gl = JSON.parse(goldLost);
+ok('an EMP takes the lamp-lit gold with it', gl.before === 'lit' && gl.after !== 'lit', goldLost);
+
+const empGone = await evl(`(() => { emps.length = 0;
+  emps.push({ x: player.x, y: player.y, r: T.EMP_R, life: 0.3 });
+  for (let i = 0; i < 30; i++) update(0.05);
+  return JSON.stringify({ live: __fp.empsLive, dead: __fp.deadEmitters }); })()`);
+const eg = JSON.parse(empGone);
+ok('the grid comes back up', eg.live === 0 && eg.dead === 0, empGone);
+await evl('__fp.setEmp(0)');
+ok('you cannot fire a charge you do not have', (await evl('__fp.fireEmp()')) === false);
+
 /* ---- smoke: hidden and blind at the same time ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

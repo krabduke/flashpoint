@@ -61,6 +61,9 @@
   #flareRow i.smk{background:#b0b0c4;box-shadow:0 0 8px rgba(176,176,196,.5);margin-left:3px}
   #flareRow i.smk.spent{background:transparent;box-shadow:none;
     border:1px solid rgba(176,176,196,.35)}
+  #flareRow i.emp{background:#9fd8ff;box-shadow:0 0 8px rgba(159,216,255,.55);margin-left:3px}
+  #flareRow i.emp.spent{background:transparent;box-shadow:none;
+    border:1px solid rgba(159,216,255,.35)}
   #puRow{display:flex;gap:6px;margin-top:6px;pointer-events:none}
   .pu{
     display:flex;align-items:center;gap:5px;
@@ -350,6 +353,9 @@ const T = {
   TOSS_THROW: 300, TOSS_NOISE: 520,
   /* smoke: you are hidden and blind at the same time. That is the whole trade. */
   SMOKE_N: 1, SMOKE_T: 9, SMOKE_FADE: 2, SMOKE_R: 96, SMOKE_BEAM: 0.42,
+  /* EMP: kills everything electric in reach - including the lamps that were
+     showing you where the gold was */
+  EMP_N: 1, EMP_T: 5.5, EMP_R: 230,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -574,6 +580,7 @@ let powerups = [], puLens = 0, puShoe = 0, puGhost = 0;
 let batt = 100, beamOn = true, battDead = false;
 let flares = 2;
 let smokes = [], smokePellets = 1;
+let emps = [], empCharges = 1;
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -681,6 +688,7 @@ const sfx = {
   beat() { tone(58, 42, 0.1, 0.25); },
   flare() { noiseBurst(0.22, 0.22, 900); tone(420, 900, 0.3, 0.14); },
   smoke() { noiseBurst(0.5, 0.12, 260); },
+  emp() { tone(900, 60, 0.45, 0.22, 'square'); noiseBurst(0.3, 0.16, 140); },
   ui() { tone(700, 900, 0.06, 0.08); }
 };
 function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
@@ -762,6 +770,7 @@ function loadMap(idx) {
   batt = T.BATT_MAX; beamOn = true; battDead = false;
   flares = T.FLARE_N;
   smokes = []; smokePellets = T.SMOKE_N;
+  emps = []; empCharges = T.EMP_N;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -1003,6 +1012,14 @@ function update(dt) {
     if (u.kind === 'B') { batt = Math.min(T.BATT_MAX, batt + T.BATT_PICKUP); battDead = false; toast('CELL — TORCH TOPPED UP', 2.2); }
     hud();
   }
+  /* EMP bubbles decay, then one pass marks what they have killed */
+  for (let i = emps.length - 1; i >= 0; i--) {
+    emps[i].life -= dt;
+    if (emps[i].life <= 0) emps.splice(i, 1);
+  }
+  for (const e of emitters) e.dead = e.kind !== 'exit' && empSuppressed(e.x, e.y);
+  for (const l of lasers) l.dead = empSuppressed((l.x1 + l.x2) / 2, (l.y1 + l.y2) / 2);
+
   /* smoke thins out */
   for (let i = smokes.length - 1; i >= 0; i--) {
     smokes[i].life -= dt;
@@ -1049,7 +1066,7 @@ function update(dt) {
 
   /* laser grids pulse; touching one hurts and screams */
   for (const l of lasers) {
-    l.on = Math.sin(time * 1.15 + l.ph) > -0.18;
+    l.on = !l.dead && Math.sin(time * 1.15 + l.ph) > -0.18;
     if (l.on && !l.zapped && ptSeg(player.x, player.y, l) < player.r + 4) {
       l.zapped = true;
       meter = Math.min(1, meter + 0.45);
@@ -1249,7 +1266,7 @@ function updateMeter(dt) {
   if (invuln <= 0) {
     for (const b of bots) if (botSees(b)) anySees = true;
     if (!anySees) for (const e of emitters) {
-      if (e.kind === 'search' && inFan(player.x, player.y, e.x, e.y, e.ang, 0.13, e.r, e.rays, 16) && !smokeAcross(e.x, e.y, player.x, player.y)) { anySees = true; searchOnly = true; break; }
+      if (e.kind === 'search' && !e.dead && inFan(player.x, player.y, e.x, e.y, e.ang, 0.13, e.r, e.rays, 16) && !smokeAcross(e.x, e.y, player.x, player.y)) { anySees = true; searchOnly = true; break; }
     }
   }
   /* A searchlight used to fill the meter and nothing else - the drones never knew.
@@ -1275,7 +1292,7 @@ function updateMeter(dt) {
   if (anySees) {
     seenTimer = 0;
     let mult = searchOnly ? 0.7 : 1;
-    if (!searchOnly) for (const e of emitters) { if (e.kind === 'exit' || e.kind === 'search') continue; if (blackout > 0) continue; if (Math.hypot(e.x - player.x, e.y - player.y) < e.r * 0.8) { mult = T.EXPOSE_MULT; break; } }
+    if (!searchOnly) for (const e of emitters) { if (e.kind === 'exit' || e.kind === 'search' || e.dead) continue; if (blackout > 0) continue; if (Math.hypot(e.x - player.x, e.y - player.y) < e.r * 0.8) { mult = T.EXPOSE_MULT; break; } }
     meter = Math.min(1, meter + T.SEE_FILL * mult * dt);
     redPulse = Math.max(redPulse, meter);
     if (meter >= 1) caught();
@@ -1630,6 +1647,7 @@ function render() {
   }
   /* lamp holes */
   for (const e of emitters) {
+    if (e.dead) continue;
     if (blackout > 0 && e.kind !== 'exit' && e.kind !== 'flare') continue;
     const a = flick(e);
     if (e.kind === 'search') {
@@ -1682,6 +1700,7 @@ function render() {
   for (const u of powerups) if (!u.got) drawPowerup(u);
   for (const e of emitters) if (e.kind === 'flare') drawFlare(e);
   for (const k of smokes) drawSmoke(k);
+  for (const m of emps) drawEmp(m);
   /* the bots: the darkness hides them — your beam is the only truth */
   if (mode !== 'menu') { for (const b of bots) drawBotBody(b); }
   ctx.globalCompositeOperation = 'lighter';
@@ -1709,7 +1728,7 @@ function render() {
   /* the exit: a green promise you can always see */
   drawExit();
   /* searchlights sweep the floors */
-  for (const e of emitters) if (e.kind === 'search') drawSearch(e);
+  for (const e of emitters) if (e.kind === 'search' && !e.dead) drawSearch(e);
   /* laser grids */
   drawLasers();
   ctx.globalAlpha = 1;
@@ -1890,7 +1909,7 @@ function coinLight(c) {
   if (mode === 'menu') return 'lit';
   if (inFan(c.x, c.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS)) { c.seen = true; return 'lit'; }
   for (const e of emitters) {
-    if (e.kind === 'search' || e.kind === 'exit') continue;
+    if (e.kind === 'search' || e.kind === 'exit' || e.dead) continue;
     if (blackout > 0 && e.kind !== 'flare') continue;
     if (Math.hypot(e.x - c.x, e.y - c.y) < e.r * 0.72) { c.seen = true; return 'lit'; }
   }
@@ -1899,6 +1918,25 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawEmp(m) {
+  const t = 1 - m.life / T.EMP_T;
+  const fade = Math.min(1, m.life / 1.2);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  /* the pulse that went out */
+  const edge = m.r * Math.min(1, t * 4);
+  ctx.globalAlpha = fade * 0.5 * (1 - Math.min(1, t * 4));
+  ctx.strokeStyle = '#9fd8ff'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(m.x, m.y, edge, 0, TAU); ctx.stroke();
+  /* the dead zone it left behind */
+  ctx.globalAlpha = fade * (0.10 + 0.05 * Math.sin(time * 9));
+  ctx.strokeStyle = '#7fb2e8'; ctx.lineWidth = 1;
+  ctx.setLineDash([5, 9]); ctx.lineDashOffset = -time * 22;
+  ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
 }
 
 function drawSmoke(k) {
@@ -2228,6 +2266,21 @@ const inSmoke = (x, y) => smokes.some(k => Math.hypot(k.x - x, k.y - y) < k.r);
 
 /* Drop a screening cloud at your feet. It breaks their sightline through it -
    and yours, because you are standing in the same cloud. */
+const empSuppressed = (x, y) => emps.some(m => Math.hypot(m.x - x, m.y - y) < m.r);
+
+/* One charge a floor. Everything electric inside the bubble stops: lamps, neon,
+   cameras, laser gates. So does the light you were reading the room by. */
+function fireEmp() {
+  if (mode !== 'playing' || empCharges <= 0) { sfx.ui(); return false; }
+  empCharges--;
+  emps.push({ x: player.x, y: player.y, r: T.EMP_R, life: T.EMP_T });
+  makeNoise(player.x, player.y, 300);
+  sfx.emp();
+  toast('EMP — THE GRID IS DOWN AROUND YOU', 2.4);
+  hud();
+  return true;
+}
+
 function dropSmoke() {
   if (mode !== 'playing' || smokePellets <= 0) { sfx.ui(); return false; }
   smokePellets--;
@@ -2421,6 +2474,7 @@ function hud() {
   if (fr) fr.innerHTML = mode === 'playing'
     ? Array.from({ length: T.FLARE_N }, (_, i) => '<i class="' + (i < flares ? '' : 'spent') + '"></i>').join('')
       + Array.from({ length: T.SMOKE_N }, (_, i) => '<i class="smk' + (i < smokePellets ? '' : ' spent') + '"></i>').join('')
+      + Array.from({ length: T.EMP_N }, (_, i) => '<i class="emp' + (i < empCharges ? '' : ' spent') + '"></i>').join('')
     : '';
 
   /* active power-ups */
@@ -2468,6 +2522,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'q' || e.key === 'Q') && mode === 'playing') { throwFlare(); }
   if ((e.key === 'e' || e.key === 'E') && mode === 'playing') { tossCoin(); }
   if ((e.key === 'x' || e.key === 'X') && mode === 'playing') { dropSmoke(); }
+  if ((e.key === 'c' || e.key === 'C') && mode === 'playing') { fireEmp(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if ((e.key === 'p' || e.key === 'P')) togglePause();
 });
@@ -2671,7 +2726,13 @@ window.__fp = {
   get smokePellets() { return smokePellets; },
   get smokesLive() { return smokes.length; },
   setSmoke(n) { smokePellets = n; hud(); },
-  inSmokeNow() { return inSmoke(player.x, player.y); }
+  inSmokeNow() { return inSmoke(player.x, player.y); },
+  fireEmp() { return fireEmp(); },
+  get empCharges() { return empCharges; },
+  get empsLive() { return emps.length; },
+  setEmp(n) { empCharges = n; hud(); },
+  get deadEmitters() { return emitters.filter(e => e.dead).length; },
+  get liveLasers() { return lasers.filter(l => l.on).length; }
 };
 </script>
 </body>
