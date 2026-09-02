@@ -98,6 +98,11 @@ either. They see what their light sees, and nothing else.
   Lean on one for a second and it splits, dropping a coin and making a lot of
   noise. That coin is a bonus and never part of the floor's count, so nothing
   makes you take it: you are trading quiet for score.
+- **They can see your beam** — a drone does not need to see *you*. Give it a clear
+  view of the floor your torch is lighting for about a second and it comes to
+  look, at the patch rather than at you. Sweeping a room stays safe; holding the
+  light on one spot does not. It is also baitable, since they walk to the light
+  and not to its owner.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

@@ -358,6 +358,65 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- drones notice your beam ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+
+const beamNotice = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud(); invuln = 999;
+  beamOn = true; smokes.length = 0;
+  const b = bots[0];
+  /* put the drone well off to the side, facing away, with a clear view of the
+     floor the beam is lighting - it must not be able to see the player */
+  player.x = spawnPt.x; player.y = spawnPt.y;
+  mouseWX = player.x + 300; mouseWY = player.y;
+  update(0.016);
+  const patches = __fp.beamPatches();
+  if (!patches.length) return JSON.stringify({ err: 'no beam patches' });
+  const q = patches[0];
+  b.x = q.x; b.y = q.y - 120;
+  if (isWall(b.x, b.y)) { b.x = q.x + 120; b.y = q.y; }
+  b.face = Math.atan2(b.y - player.y, b.x - player.x);
+  b.state = 'patrol'; b.path = []; b.glow = 0;
+  const canSeePlayer = botSees(b);
+  const seesLight = !!__fp.seesLight(0);
+  /* a quick sweep should not be enough */
+  let glowAfterFlick = 0;
+  for (let i = 0; i < 12; i++) update(0.016);
+  glowAfterFlick = bots[0].glow;
+  const stateAfterFlick = bots[0].state;
+  /* holding it should be */
+  for (let i = 0; i < 110; i++) update(0.016);
+  return JSON.stringify({
+    canSeePlayer, seesLight,
+    glowAfterFlick: +glowAfterFlick.toFixed(2), stateAfterFlick,
+    stateAfterStare: bots[0].state, threshold: T.BEAM_SEEN_T
+  });
+})()`);
+const bn = JSON.parse(beamNotice);
+ok('the drone cannot see the player itself', bn.canSeePlayer === false, beamNotice);
+ok('but it can see the floor your beam is lighting', bn.seesLight === true, beamNotice);
+ok('a quick sweep does not give you away', bn.stateAfterFlick === 'patrol' && bn.glowAfterFlick < bn.threshold, beamNotice);
+ok('holding the beam does', bn.stateAfterStare !== 'patrol', beamNotice);
+
+ok('the torch off makes you invisible again', await evl(`(() => {
+  beamOn = false;
+  update(0.016);
+  return __fp.beamPatches().length === 0 && __fp.seesLight(0) === null;
+})()`));
+
+ok('smoke hides your light as well as you', await evl(`(() => {
+  beamOn = true; update(0.016);
+  const q = __fp.beamPatches()[0];
+  const b = bots[0];
+  const before = !!__fp.seesLight(0);
+  smokes.push({ x: (b.x + q.x) / 2, y: (b.y + q.y) / 2, r: T.SMOKE_R, life: T.SMOKE_T, ph: 0 });
+  const after = !!__fp.seesLight(0);
+  smokes.length = 0;
+  return before === true && after === false;
+})()`));
+
 /* ---- the three new floors ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

@@ -388,6 +388,9 @@ const T = {
      Capped just under SPRINT so sprinting is always an escape - a loud one. */
   CHASE_FLOOR: 0.045, CHASE_LOOP: 0.10, CHASE_ADREN: 0.18, CHASE_ADREN_T: 4,
   CHASE_CAP: 0.94, RADIO_R: 400, RADIO_FLOOR: 4,
+  /* a torch in a blacked-out building is the most conspicuous thing in it.
+     Time-based, so sweeping stays safe and staring does not. */
+  BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
   ALARM_AT: 0.62, COIN_NEAR: 150,
   /* power-ups: each one buys time against a different pressure */
   PU_LENS_MULT: 1.6, PU_LENS_T: 14,
@@ -822,6 +825,7 @@ const sfx = {
   pickup() { tone(980, 1400, 0.16, 0.2); tone(1400, 2100, 0.22, 0.08); },
   unlock() { tone(500, 500, 0.2, 0.18); tone(750, 750, 0.3, 0.16); tone(1000, 1000, 0.5, 0.14); },
   alert() { tone(320, 620, 0.16, 0.3, 'square'); tone(320, 620, 0.16, 0.22, 'square', AC ? AC.currentTime + 0.18 : 0); },
+  notice() { tone(520, 640, 0.1, 0.1, 'triangle'); },
   siren() { tone(480, 760, 0.4, 0.14, 'sawtooth'); tone(760, 480, 0.4, 0.12, 'sawtooth', AC ? AC.currentTime + 0.42 : 0); },
   laser() { tone(1500, 220, 0.2, 0.2, 'square'); },
   step() { noiseBurst(0.05, 0.05, 420); },
@@ -991,7 +995,7 @@ function spawnBots() {
       face: rand(0, TAU), route: rotatedRoute, wp: 1 % route.length, path: [], pathT: 0,
       state: 'patrol', tgt: null, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
-      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0
+      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0
     });
   }
 }
@@ -1487,6 +1491,7 @@ function drawCat(ct) {
 
 function updateBots(dt) {
   const sm = botSpd * (sirenT > 0 ? 1.28 : 1);
+  const patches = beamPatches();
   for (const b of bots) {
     b.blink = Math.max(0, b.blink - dt);
     let speed = T.BOT_PATROL * sm;
@@ -1504,6 +1509,17 @@ function updateBots(dt) {
       if (fresh && (mapIdx >= T.RADIO_FLOOR || loop > 0)) radio(b);
     } else {
       b.chaseT = Math.max(0, b.chaseT - dt * 1.5);
+      /* your own light gives you away, given long enough */
+      const lit = b.state === 'patrol' ? seesYourLight(b, patches) : null;
+      if (lit) {
+        b.glow += dt;
+        if (b.glow >= T.BEAM_SEEN_T) {
+          b.glow = 0;
+          b.state = 'invest'; b.stateT = 0;
+          retarget(b, lit.x, lit.y);
+          if (b.eyeGlint <= 0) { b.eyeGlint = 1; sfx.notice(); }
+        }
+      } else b.glow = Math.max(0, b.glow - dt * T.BEAM_FADE);
       if (b.state === 'chase') {
         b.stateT += dt;
         if (b.stateT > 2.2) { b.state = 'invest'; b.alerted = false; retarget(b, b.lastX, b.lastY); }
@@ -1572,6 +1588,38 @@ function nearestNoise(b) {
   for (const n of noise) { const d = Math.hypot(n.x - b.x, n.y - b.y); if (d < n.r + T.HEAR_R * 0.35 && d < bd) { bd = d; best = n; } }
   return best;
 }
+/* Two points along the beam, pulled back to whatever the rays actually hit, so a
+   beam stopped by a wall is noticed at the wall and not through it. */
+function beamPatches() {
+  const out = [];
+  if (!beamOn) return out;
+  const r = flRange();
+  if (r <= 0) return out;
+  const mid = flHits[Math.floor(T.FL_RAYS / 2)] || r;
+  for (const frac of [0.55, 0.92]) {
+    const d = Math.min(r, mid) * frac;
+    if (d < 24) continue;
+    out.push({ x: player.x + Math.cos(player.aim) * d, y: player.y + Math.sin(player.aim) * d });
+  }
+  if (mirrorBeam) {
+    const md = Math.min(mirrorBeam.range, mirrorBeam.hits[Math.floor(T.FL_RAYS / 2)] || mirrorBeam.range) * 0.7;
+    if (md > 24) out.push({ x: mirrorBeam.x + Math.cos(mirrorBeam.ang) * md, y: mirrorBeam.y + Math.sin(mirrorBeam.ang) * md });
+  }
+  return out;
+}
+
+/* Does this drone have a clear view of light you are casting? It does not need
+   to be looking at you - a lit patch across a dark room is enough. */
+function seesYourLight(b, patches) {
+  for (const q of patches) {
+    if (Math.hypot(q.x - b.x, q.y - b.y) > T.BEAM_SEEN_R) continue;
+    if (!losClear(b.x, b.y, q.x, q.y)) continue;
+    if (smokeAcross(b.x, b.y, q.x, q.y)) continue;
+    return q;
+  }
+  return null;
+}
+
 function botSees(b) {
   if (blackout > 0 && b.state !== 'chase') return false;
   const dx = player.x - b.x, dy = player.y - b.y, d = Math.hypot(dx, dy);
@@ -2043,6 +2091,18 @@ function render() {
     if (d < 270 && !revealed(b)) {
       ctx.globalAlpha = 0.16 + 0.1 * Math.sin(time * 5 + b.sweepP);
       ctx.drawImage(glowRedS, b.x - 12, b.y - 12, 24, 24);
+    }
+    /* a drone building up on your light shows it, so being noticed is readable
+       rather than mysterious - and it is your cue to look somewhere else */
+    if (b.glow > 0.15 && b.state === 'patrol') {
+      const k = Math.min(1, b.glow / T.BEAM_SEEN_T);
+      ctx.globalAlpha = 0.25 + 0.45 * k;
+      ctx.drawImage(glowRedS, b.x - 14 - k * 6, b.y - 14 - k * 6, 28 + k * 12, 28 + k * 12);
+      ctx.globalAlpha = 0.5 + 0.5 * k;
+      ctx.strokeStyle = '#ff8a5c'; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 13, -Math.PI / 2, -Math.PI / 2 + TAU * k);
+      ctx.stroke();
     }
     if (b.state === 'chase') {
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(time * 16);
@@ -3352,6 +3412,9 @@ window.__fp = {
   get exitOpen() { return exitOpen; }, get blackout() { return blackout; }, get score() { return score; },
   get aim() { return player.aim; }, get pos() { return { x: player.x, y: player.y }; },
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
+  get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
+  beamPatches() { return beamPatches(); },
+  seesLight(i) { const q = seesYourLight(bots[i], beamPatches()); return q ? { x: Math.round(q.x), y: Math.round(q.y) } : null; },
   get mapCheck() { return mapCheck; }, get touch() { return TOUCH; },
   get stickL() { return !!sticks.L; }, get stickR() { return !!sticks.R; },
   teleport(x, y) { 
