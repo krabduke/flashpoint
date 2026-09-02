@@ -63,6 +63,11 @@ either. They see what their light sees, and nothing else.
   you pick it, which takes a second and a half of standing perfectly still in a
   doorway, and moving cancels it. There is always a way through, so no floor can
   strand you.
+- **The kit is yours for the whole run** — you start with one flare and one smoke
+  pellet, and everything else is found. Twenty gadgets lie scattered across the
+  nine floors, one on the House and four in the CORE, and what you carry goes
+  down the stairs with you. A flare you skipped on floor two is a flare you do
+  not have when the lights go out.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

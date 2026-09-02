@@ -358,6 +358,44 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- the kit is a run-long resource, found not granted ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('__fp.resetKit()');
+const kit0 = await evl('__fp.kit');
+ok('a run starts with a thin kit', kit0.flare === 1 && kit0.smoke === 1 && kit0.emp === 0, JSON.stringify(kit0));
+
+ok('every floor has gadgets lying around', await evl(`(() => {
+  let none = [];
+  for (let i = 0; i < MAPS.length; i++) { mapIdx = i; loadMap(i); if (!__fp.itemPickups().length) none.push(i + 1); }
+  return none.length === 0;
+})()`), 'floors with none: see above');
+
+/* what you skip on floor two you do not have in the CORE */
+const carried = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  __fp.resetKit();
+  mapIdx = 0; loadMap(0); hud();
+  const before = __fp.flares;
+  const p = __fp.itemPickups().find(z => z.kind === 'f');
+  if (p) { player.x = p.x; player.y = p.y; update(0.016); }
+  const picked = __fp.flares;
+  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+  for (let i = 0; i < 5; i++) update(0.016);
+  return JSON.stringify({ before, picked, afterFloor: __fp.flares, floor: mapIdx });
+})()`);
+await sleep(400);
+const cr = JSON.parse(carried);
+ok('picking a gadget up stows it', cr.picked === cr.before + 1, carried);
+ok('the kit survives the stairs', cr.afterFloor === cr.picked && cr.floor > 0, carried);
+
+const capped = await evl(`(() => {
+  __fp.resetKit();
+  for (let i = 0; i < 9; i++) { flares = Math.min(T.CAP.flare, flares + 1); }
+  return JSON.stringify({ flares, cap: T.CAP.flare });
+})()`);
+ok('you cannot carry more than the cap', JSON.parse(capped).flares === JSON.parse(capped).cap, capped);
+
 /* ---- item bar: every gadget reachable without a keyboard ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
@@ -468,7 +506,8 @@ ok('and is spent doing it', cd.keyLeft === false, carded);
 /* ---- magnet: strip a dark room without lighting it ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('you carry one magnet', (await evl('__fp.magCharges')) === 1, `n=${await evl('__fp.magCharges')}`);
+await evl('__fp.setMag(1)');
+ok('a magnet can be carried', (await evl('__fp.magCharges')) === 1, `n=${await evl('__fp.magCharges')}`);
 
 const pulledIn = await evl(`(() => {
   mode = 'playing'; paused = false; invuln = 999;
@@ -529,7 +568,8 @@ ok('you cannot run one you do not have', (await evl('__fp.runMagnet()')) === fal
 /* ---- decoy: a nuisance that keeps talking ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('you carry one decoy', (await evl('__fp.decoyCharges')) === 1, `n=${await evl('__fp.decoyCharges')}`);
+await evl('__fp.setDecoy(1)');
+ok('a decoy can be carried', (await evl('__fp.decoyCharges')) === 1, `n=${await evl('__fp.decoyCharges')}`);
 ok('a decoy drops', (await evl('__fp.dropDecoy()')) === true);
 ok('dropping spends the charge', (await evl('__fp.decoyCharges')) === 0);
 ok('it is sitting on the floor', (await evl('__fp.decoysLive')) === 1);
@@ -574,7 +614,8 @@ ok('you cannot drop one you do not have', (await evl('__fp.dropDecoy()')) === fa
 /* ---- EMP: kills the grid, and the light you were reading by ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('you carry one charge', (await evl('__fp.empCharges')) === 1, `n=${await evl('__fp.empCharges')}`);
+await evl('__fp.setEmp(1)');
+ok('an EMP charge can be carried', (await evl('__fp.empCharges')) === 1, `n=${await evl('__fp.empCharges')}`);
 
 /* laser gates on the server floor go quiet */
 const lasersKilled = await evl(`(() => {
@@ -647,7 +688,8 @@ ok('you cannot fire a charge you do not have', (await evl('__fp.fireEmp()')) ===
 /* ---- smoke: hidden and blind at the same time ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('you carry one pellet', (await evl('__fp.smokePellets')) === 1, `n=${await evl('__fp.smokePellets')}`);
+await evl('__fp.resetKit()');
+ok('a run starts with a smoke pellet', (await evl('__fp.smokePellets')) === 1, `n=${await evl('__fp.smokePellets')}`);
 
 /* a drone staring straight at you loses you when the cloud goes up */
 const screened = await evl(`(() => {
@@ -735,12 +777,13 @@ ok('the floor still wants every coin', await evl(`(() => {
 /* ---- flares: buy light at a distance, pay in attention ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('you start a floor with flares', (await evl('__fp.flares')) === 2, `n=${await evl('__fp.flares')}`);
+await evl('__fp.resetKit()');
+ok('a run starts with a flare', (await evl('__fp.flares')) === 1, `n=${await evl('__fp.flares')}`);
 await evl('noise.length = 0');
 ok('a flare throws', (await evl('__fp.throwFlare()')) === true);
 await sleep(250);
 ok('it burns on the floor', (await evl('__fp.flaresLit')) === 1, `lit=${await evl('__fp.flaresLit')}`);
-ok('throwing spends one', (await evl('__fp.flares')) === 1);
+ok('throwing spends one', (await evl('__fp.flares')) === 0, `left=${await evl('__fp.flares')}`);
 ok('it lands away from you, not on you', await evl(`(() => {
   const f = __fp.flarePoints()[0];
   return Math.hypot(f.x - __fp.pos.x, f.y - __fp.pos.y) > 40;
@@ -785,7 +828,7 @@ await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
 await evl('mapIdx = 1; loadMap(1); hud();');
 await sleep(300);
-ok('floors carry power-ups', (await evl('__fp.powerupsN')) > 0, `n=${await evl('__fp.powerupsN')} kinds=${JSON.stringify(await evl('__fp.powerupKinds()'))}`);
+ok('floors carry pickups', (await evl('__fp.powerupsN')) > 0, `n=${await evl('__fp.powerupsN')} kinds=${JSON.stringify(await evl('__fp.powerupKinds()'))}`);
 
 /* lens: the beam actually reaches further */
 await evl('mapIdx = 2; loadMap(2); hud();');

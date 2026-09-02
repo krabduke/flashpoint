@@ -411,6 +411,10 @@ const T = {
   MAG_N: 1, MAG_T: 8, MAG_R: 96, MAG_PULL: 132,
   /* doors: a keycard is the fast way through, picking is the exposed way */
   PICK_T: 1.5, DOOR_R: 40, KEY_R: 22, DOOR_NOISE: 250,
+  /* the kit you start a run with, and the most you can carry of each */
+  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0 },
+  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2 },
+  ITEM_R: 22,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -449,7 +453,7 @@ const MAPS = [
     '#....#......#..#.....#..c..#',
     '#....#....L....#..x..#.....#',
     '#....########..#.....#..####',
-    '#..L...........#.....#.....#',
+    '#..L.........f.#.....#.....#',
     '#..............#.....#....E#',
     '############################',
     '############################'
@@ -464,7 +468,7 @@ const MAPS = [
     '###.#.###..####.###.####.#.#',
     '#...#...#....#..#....#...#.#',
     '#.####.####.##.#..x..#.###.#',
-    '#.#c.....#.....#.....#.....#',
+    '#.#c.....#.s...#.....#.....#',
     '#.#.#######.####.#######.#.#',
     '#.#.#....#..x#...#c...#..#.#',
     '#.#.#.L..#....#..#.L..#.##.#',
@@ -477,11 +481,11 @@ const MAPS = [
   { name: 'NEON HEIGHTS', depth: 'CITY', theme: 'city', coins: 7, bots: 2, rows: [
     '############################',
     '#.Pc..............L.......c#',
-    '#...######..#####..#######.#',
+    '#.d.######..#####..#######.#',
     '#...######..#####..#######.#',
     '#...######..#####..#######.#',
     '#...N......c.........x....N#',
-    '#L....x....................#',
+    '#L....x..........f.........#',
     '#...######..#####..#######.#',
     '#...######..#####..#######.#',
     '#...######..#####..#######.#',
@@ -499,7 +503,7 @@ const MAPS = [
     '#.P...x..#.....N#...x...c..#',
     '#.K......#..x...#..........#',
     '#..####..#......#...####...#',
-    '#..#..c..#....x.#.I.#..L..x#',
+    '#..#..c..#.e..x.#.I.#..L..x#',
     '#..#.....#......#...#......#',
     '#..####..####D###...#..#####',
     '#..................x#c.....#',
@@ -508,7 +512,7 @@ const MAPS = [
     '#..#####..#......#...x.....#',
     '#.......#.#.######..######.#',
     '#.c...#...#.#...x.#......x.#',
-    '#.....#...#.#...#.#####.####',
+    '#...f.#...#.#...#.#####.####',
     '#.....#####.#.Ec#....c.....#',
     '#..x........#...#.###..x...#',
     '#....L...c..#...#..........#',
@@ -520,12 +524,12 @@ const MAPS = [
     '#....####..####..####c.....#',
     '#....####..####..####......#',
     '#....####..####..####......#',
-    '#..............R...........#',
+    '#...m..........R...........#',
     '#....####..####..####......#',
     '#....####..####..####..S...#',
     '#.c..####c.####.c####....c.#',
     '#..............Z...........#',
-    '#..S.......................#',
+    '#..S.................s.....#',
     '#....####..####..####......#',
     '#....####..####..####......#',
     '#....####..####..####......#',
@@ -539,9 +543,9 @@ const MAPS = [
     '############################',
     '#.P....#...c#....#..c.#...c#',
     '#......#....#.IK.#....#....#',
-    '#......#....#....#....#....#',
+    '#......#..e.#....#....#....#',
     '#......D...................#',
-    '#......#....#....#....#....#',
+    '#......#....#.f..#....#....#',
     '#......#....#....#....#....#',
     '#......#....#....#....#...c#',
     '#......c........c..........#',
@@ -563,12 +567,12 @@ const MAPS = [
     '#.#.....#..#.KI..#..#....#.#',
     '#.#.....#..#.....#..#....#.#',
     '#.###D###..###.###..##.###.#',
-    '#.............R............#',
+    '#........s....R............#',
     '#..........................#',
     '#...........c.......c.....c#',
     '#.###.###..###.###..##.###.#',
     '#.#.....#..#.....#..#....#.#',
-    '#.#c....#..#.....#..#....#.#',
+    '#.#c....#..#..d..#..#.f..#.#',
     '#.#.....#..#.....#..#....#.#',
     '#.#.....#..#.....#..#....#.#',
     '#.#######..#######..######c#',
@@ -580,28 +584,28 @@ const MAPS = [
     '#P......c####..c.....####.c#',
     '#..####..####..####..####..#',
     '#..####..####..####..####..#',
-    '#..####........####........#',
+    '#..####........####.e......#',
     '#..............####........#',
     '#.......####.Z......#####..#',
     '#.####..####..####..#####..#',
     '#.####.c####..####.c#####.c#',
     '#.####........####.........#',
     '#........I...c.............#',
-    '#.........####........####.#',
+    '#..f......####........####.#',
     '#...####..####..####..####.#',
     '#...####..####..####..####.#',
     '#...####..####..####..####.#',
-    '#.........................c#',
+    '#.............m...........c#',
     '#.c.......c.......c.......E#',
     '############################'
   ], routes: [[[1,1],[26,1],[26,5],[1,5],[1,1]],[[1,10],[26,10],[26,16],[1,16],[1,10]],[[7,5],[19,5],[19,10],[7,10],[7,5]]] },
   { name: 'THE CORE', depth: 'CORE', theme: 'core', coins: 12, bots: 3, spd: 1.25, siren: true, blackout: true, rows: [
     '############################',
     '#.P...........c.......c....#',
-    '#.K.####............####...#',
-    '#...####............####...#',
+    '#.K.####..f.......d.####...#',
+    '#...####............####.s.#',
     '#...####.....S......####...#',
-    '#................Z.........#',
+    '#..e.............Z.........#',
     '#..........######..........#',
     '#.#####...c######....#####c#',
     '#.#...D....######.c......#.#',
@@ -667,6 +671,11 @@ const PU = {
   R: { label: 'LENS',  glow: null, col: '#b9d4ff', ring: 'rgba(185,212,255,.9)' },
   B: { label: 'CELL',  glow: null, col: '#ffd166', ring: 'rgba(255,209,102,.9)' },
   G: { label: 'MAGNET', glow: null, col: '#ff9ad5', ring: 'rgba(255,154,213,.9)' },
+  m: { label: 'MAGNET', glow: null, col: '#ff9ad5', ring: 'rgba(255,154,213,.9)' },
+  d: { label: 'DECOY', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
+  e: { label: 'EMP', glow: null, col: '#9fd8ff', ring: 'rgba(159,216,255,.9)' },
+  s: { label: 'SMOKE', glow: null, col: '#b0b0c4', ring: 'rgba(176,176,196,.9)' },
+  f: { label: 'FLARE', glow: null, col: '#ffb347', ring: 'rgba(255,179,71,.9)' },
   Z: { label: 'SHOES', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
   I: { label: 'GHOST', glow: null, col: '#d8b6ff', ring: 'rgba(216,182,255,.9)' }
 };
@@ -807,6 +816,7 @@ function loadMap(idx) {
     if (ch === 'L') emitters.push({ x: cx, y: cy, r: rand(130, 175), col: TH.lamp, flick: rand(0, 9), kind: 'lamp', base: 1 });
     if (ch === 'N') emitters.push({ x: cx, y: cy, r: rand(95, 140), col: Math.random() < 0.5 ? TH.lamp : TH.accent, flick: rand(0, 9), kind: 'neon', base: 1 });
     if (ch === 'S') emitters.push({ x: cx, y: cy, r: 250, col: '#ffe9b0', flick: 0, kind: 'search', ang: rand(0, TAU), spin: rand(0.45, 0.8) * (Math.random() < 0.5 ? -1 : 1), rays: new Float32Array(17) });
+    if ('fsedm'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
     if (ch === 'D') { grid[y * T.COLS + x] = 1; doors.push({ gx: x, gy: y, x: cx, y: cy, open: false }); }
     if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
     if (ch === 'B') powerups.push({ x: cx, y: cy, kind: 'B', got: false, ph: rand(0, TAU) });
@@ -831,11 +841,8 @@ function loadMap(idx) {
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
   puLens = 0; puShoe = 0; puGhost = 0;
   batt = T.BATT_MAX; beamOn = true; battDead = false;
-  flares = T.FLARE_N;
-  smokes = []; smokePellets = T.SMOKE_N;
-  emps = []; empCharges = T.EMP_N;
-  decoys = []; decoyCharges = T.DECOY_N;
-  magT = 0; magCharges = T.MAG_N;
+  /* live objects clear with the floor; what you are carrying does not */
+  smokes = []; emps = []; decoys = []; magT = 0;
   hasKey = false; pickT = 0; pickOn = null;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
@@ -1076,6 +1083,11 @@ function update(dt) {
     if (u.kind === 'Z') { puShoe = T.PU_SHOE_T; toast('SOFT SHOES — RUN QUIET', 2.2); }
     if (u.kind === 'I') { puGhost = T.PU_GHOST_T; invuln = Math.max(invuln, T.PU_GHOST_T); toast('GHOST — THEY CANNOT PIN YOU', 2.2); }
     if (u.kind === 'B') { batt = Math.min(T.BATT_MAX, batt + T.BATT_PICKUP); battDead = false; toast('CELL — TORCH TOPPED UP', 2.2); }
+    if (u.kind === 'f') { flares = Math.min(T.CAP.flare, flares + 1); toast('FLARE STOWED', 1.8); }
+    if (u.kind === 's') { smokePellets = Math.min(T.CAP.smoke, smokePellets + 1); toast('SMOKE PELLET STOWED', 1.8); }
+    if (u.kind === 'e') { empCharges = Math.min(T.CAP.emp, empCharges + 1); toast('EMP CHARGE STOWED', 1.8); }
+    if (u.kind === 'd') { decoyCharges = Math.min(T.CAP.decoy, decoyCharges + 1); toast('DECOY STOWED', 1.8); }
+    if (u.kind === 'm') { magCharges = Math.min(T.CAP.mag, magCharges + 1); toast('MAGNET STOWED', 1.8); }
     hud();
   }
   /* keycards */
@@ -1512,6 +1524,11 @@ const glowWhiteS = makeGlow('240,248,255');
 PU.R.glow = makeGlow('185,212,255');
 PU.B.glow = makeGlow('255,209,102');
 PU.G.glow = makeGlow('255,154,213');
+PU.m.glow = makeGlow('255,154,213');
+PU.d.glow = makeGlow('125,255,196');
+PU.e.glow = makeGlow('159,216,255');
+PU.s.glow = makeGlow('176,176,196');
+PU.f.glow = makeGlow('255,179,71');
 PU.Z.glow = makeGlow('125,255,196');
 PU.I.glow = makeGlow('216,182,255');
 const grainS = (() => {
@@ -2470,6 +2487,16 @@ let toastTimer = 0;
 /* A flare lands where it can: along the aim until a wall stops it. Because it is
    an emitter, coins inside it light up through code that already exists - and
    unlike mains lamps it keeps burning through a blackout. */
+/* A run carries its kit from floor to floor, so a flare you skip on floor two is
+   a flare you do not have in the CORE. */
+function resetKit() {
+  flares = T.KIT.flare;
+  smokePellets = T.KIT.smoke;
+  empCharges = T.KIT.emp;
+  decoyCharges = T.KIT.decoy;
+  magCharges = T.KIT.mag;
+}
+
 const coinValue = () => Math.round(T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
 
 /* Throw a coin you are carrying. It clatters where it lands and drones walk to
@@ -2656,6 +2683,7 @@ function renderFloors() {
 
 function startGame() {
   initAudio(); sfx.ui(); clearToast();
+  resetKit();
   setName($('nameInput').value || name);
   mapIdx = completedLevels.length > 0 ? completedLevels.length : 0;
   loop = Math.floor(mapIdx / MAPS.length);
@@ -2684,6 +2712,7 @@ function floorUnlocked(i) {
 function startFromFloor(floorIdx) {
   if (!floorUnlocked(floorIdx)) return;
   initAudio(); sfx.ui(); clearToast();
+  resetKit();
   setName($('nameInput').value || name);
   /* picking a floor never wipes progress - what you cleared stays cleared */
   mapIdx = floorIdx % MAPS.length;
@@ -2756,13 +2785,15 @@ function hud() {
 
   /* flares in hand */
   const fr = $('flareRow');
-  if (fr) fr.innerHTML = mode === 'playing'
-    ? Array.from({ length: T.FLARE_N }, (_, i) => '<i class="' + (i < flares ? '' : 'spent') + '"></i>').join('')
-      + Array.from({ length: T.SMOKE_N }, (_, i) => '<i class="smk' + (i < smokePellets ? '' : ' spent') + '"></i>').join('')
-      + Array.from({ length: T.EMP_N }, (_, i) => '<i class="emp' + (i < empCharges ? '' : ' spent') + '"></i>').join('')
-      + Array.from({ length: T.DECOY_N }, (_, i) => '<i class="dec' + (i < decoyCharges ? '' : ' spent') + '"></i>').join('')
-      + Array.from({ length: T.MAG_N }, (_, i) => '<i class="mag' + (i < magCharges ? '' : ' spent') + '"></i>').join('')
-    : '';
+  if (fr) {
+    const pips = (n, cap, cls) =>
+      Array.from({ length: cap }, (_, i) => '<i class="' + cls + (i < n ? '' : ' spent') + '"></i>').join('');
+    fr.innerHTML = mode === 'playing'
+      ? pips(flares, T.CAP.flare, '') + pips(smokePellets, T.CAP.smoke, 'smk')
+        + pips(empCharges, T.CAP.emp, 'emp') + pips(decoyCharges, T.CAP.decoy, 'dec')
+        + pips(magCharges, T.CAP.mag, 'mag')
+      : '';
+  }
 
   /* active power-ups */
   const row = $('puRow');
@@ -3045,7 +3076,10 @@ window.__fp = {
   get hasKey() { return hasKey; },
   get pickT() { return +pickT.toFixed(2); },
   doorPoints() { return doors.map(d => ({ x: d.x, y: d.y, open: d.open })); },
-  keyPoints() { return keycards.filter(k => !k.got).map(k => ({ x: k.x, y: k.y })); }
+  keyPoints() { return keycards.filter(k => !k.got).map(k => ({ x: k.x, y: k.y })); },
+  resetKit() { resetKit(); hud(); },
+  get kit() { return { flare: flares, smoke: smokePellets, emp: empCharges, decoy: decoyCharges, mag: magCharges }; },
+  itemPickups() { return powerups.filter(u => !u.got && 'fsedm'.includes(u.kind)).map(u => ({ x: u.x, y: u.y, kind: u.kind })); }
 };
 </script>
 </body>

@@ -23,7 +23,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] A7 Magnet — pulls loose coins within 90px for 8s
 - [x] A8 Lockpick — opens `D` doors, takes 1.5s standing still
 - [x] A9 ~~Inventory + item switching~~ → **tappable item bar**. Rejected as specified: every gadget already has one key, so select-then-use would make each action slower. The real gap was touch, which has no keyboard and could not reach any gadget at all.
-- [ ] A10 Item pickups placed across all floors
+- [x] A10 Item pickups placed across all floors — and the kit made run-long, since a found flare is worthless if the next floor hands you two anyway
 
 ## B · Map elements
 
@@ -116,3 +116,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · A7 · magnet on G, 8s pull within 96px, works on unlit gold, 9 assertions
 - 2026-09-02 · A8+B4 · doors, keycards, lock picking on 4 floors, 10 assertions; de-flaked the patrol test
 - 2026-09-02 · A9 · item bar (7 gadgets, tappable, clear of thumbsticks), 7 assertions; toMenu now refreshes the HUD
+- 2026-09-02 · A10 · 20 pickups across 9 floors, kit carries between floors with caps, 6 assertions
