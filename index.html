@@ -565,7 +565,7 @@ const MAPS = [
     '#.#######..#######..######.#',
     '#.#....c#..#....c#..#...c#.#',
     '#.#.....#..#.KI..#..#....#.#',
-    '#.#.....#..#.....#.C#....#.#',
+    '#.G.....#..#.....#.C#....#.#',
     '#.###D###..###.###..##.###.#',
     '#........s....R............#',
     '#..........................#',
@@ -573,7 +573,7 @@ const MAPS = [
     '#.###.###..###.###..##.###.#',
     '#.#....C#..#.....#..#....#.#',
     '#.#c....#..#..d..#..#.f..#.#',
-    '#.#.....#..#.....#..#....#.#',
+    '#.#.....G..#.....#..#....#.#',
     '#.#.....#..#.....#..#....#.#',
     '#.#######..#######..######c#',
     '#.........c.......c.......E#',
@@ -607,10 +607,10 @@ const MAPS = [
     '#...####.....S......####...#',
     '#..e.............Z.........#',
     '#..........######....C.....#',
-    '#.#####...c######....#V###c#',
+    '#.###G#...c######....#V###c#',
     '#.#...D....######.c......#.#',
-    '#.#c..#.R..######....#...#.#',
-    '#.##V##....######....#####.#',
+    '#.#c..#.R..######....G...#.#',
+    '#.##V##....######....###G#.#',
     '#..........######..I...c...#',
     '#....C........c............#',
     '#...####............####...#',
@@ -644,6 +644,7 @@ let decoys = [], decoyCharges = 1;
 let magT = 0, magCharges = 1;
 let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 let ventAt = new Uint8Array(T.COLS * T.ROWS);
+let glassAt = new Uint8Array(T.COLS * T.ROWS);
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -808,6 +809,7 @@ function loadMap(idx) {
   coinList = []; emitters = []; propsXY = []; powerups = [];
   doors = []; keycards = [];
   ventAt = new Uint8Array(T.COLS * T.ROWS);
+  glassAt = new Uint8Array(T.COLS * T.ROWS);
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
     const ch = rows[y][x] || '#';
     const cx = (x + 0.5) * T.TILE, cy = (y + 0.5) * T.TILE;
@@ -823,6 +825,10 @@ function loadMap(idx) {
        applies here for free. It only needs pointing somewhere useful. */
     if (ch === 'C') emitters.push({ x: cx, y: cy, r: 205, col: '#ffe0c0', flick: 0, kind: 'search', cam: true, ang: 0, spin: 0, rays: new Float32Array(17) });
     if ('fsedm'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
+    /* Glass is deliberately NOT a wall in the grid. That is what lets sight
+       through it for free - losClear and both cones read the grid, so they need
+       no changes at all. Only bodies are stopped, and only where bodies move. */
+    if (ch === 'G') glassAt[y * T.COLS + x] = 1;
     if (ch === 'V') ventAt[y * T.COLS + x] = 1;
     if (ch === 'D') { grid[y * T.COLS + x] = 1; doors.push({ gx: x, gy: y, x: cx, y: cy, open: false }); }
     if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
@@ -913,7 +919,7 @@ function validateMaps() {
       if (M.rows[y].length !== T.COLS) return 'map ' + m + ' row ' + y + ' width ' + M.rows[y].length;
       for (let x = 0; x < T.COLS; x++) {
         const ch = M.rows[y][x];
-        if (ch === '#') g[y * T.COLS + x] = 1;
+        if (ch === '#' || ch === 'G') g[y * T.COLS + x] = 1;   /* glass stops bodies */
         if (ch === 'P') P = y * T.COLS + x;
         if (ch === 'E') E = y * T.COLS + x;
         if (ch === 'c') cs.push(y * T.COLS + x);
@@ -955,15 +961,22 @@ function ptSeg(px, py, l) {
   t = clamp(t, 0, 1);
   return Math.hypot(px - (l.x1 + dx * t), py - (l.y1 + dy * t));
 }
+const bodyBlocked = (wx, wy) => {
+  if (isWall(wx, wy)) return true;
+  const gx = wx / T.TILE | 0, gy = wy / T.TILE | 0;
+  if (gx < 0 || gy < 0 || gx >= T.COLS || gy >= T.ROWS) return true;
+  return !!glassAt[gy * T.COLS + gx];
+};
+
 function moveCircle(o, dt) {
   const r = o.r, c = 0.72;
   let nx = o.x + o.vx * dt;
-  if (isWall(nx - r, o.y) || isWall(nx + r, o.y) || isWall(nx, o.y - r) || isWall(nx, o.y + r) ||
-    isWall(nx + r * c, o.y + r * c) || isWall(nx + r * c, o.y - r * c) || isWall(nx - r * c, o.y + r * c) || isWall(nx - r * c, o.y - r * c)) o.vx = 0;
+  if (bodyBlocked(nx - r, o.y) || bodyBlocked(nx + r, o.y) || bodyBlocked(nx, o.y - r) || bodyBlocked(nx, o.y + r) ||
+    bodyBlocked(nx + r * c, o.y + r * c) || bodyBlocked(nx + r * c, o.y - r * c) || bodyBlocked(nx - r * c, o.y + r * c) || bodyBlocked(nx - r * c, o.y - r * c)) o.vx = 0;
   else o.x = nx;
   let ny = o.y + o.vy * dt;
-  if (isWall(o.x - r, ny) || isWall(o.x + r, ny) || isWall(o.x, ny - r) || isWall(o.x, ny + r) ||
-    isWall(o.x + r * c, ny + r * c) || isWall(o.x + r * c, ny - r * c) || isWall(o.x - r * c, ny + r * c) || isWall(o.x - r * c, ny - r * c)) o.vy = 0;
+  if (bodyBlocked(o.x - r, ny) || bodyBlocked(o.x + r, ny) || bodyBlocked(o.x, ny - r) || bodyBlocked(o.x, ny + r) ||
+    bodyBlocked(o.x + r * c, ny + r * c) || bodyBlocked(o.x + r * c, ny - r * c) || bodyBlocked(o.x - r * c, ny + r * c) || bodyBlocked(o.x - r * c, ny - r * c)) o.vy = 0;
   else o.y = ny;
 }
 function losClear(x0, y0, x1, y1) {
@@ -1011,6 +1024,7 @@ function pathFind(sx, sy, tx, ty) {
       const nx = x + dx, ny = y + dy;
       if (isWallCell(nx, ny)) continue;
       if (ventAt[ny * T.COLS + nx]) continue;   /* a drone does not fit */
+      if (glassAt[ny * T.COLS + nx]) continue;  /* nor through a pane */
       const j = ny * T.COLS + nx, ng = gCost[cur] + 1;
       if (ng < gCost[j]) {
         gCost[j] = ng; from[j] = cur;
@@ -1356,7 +1370,7 @@ function updateBots(dt) {
       else { b.x += dx / d * speed * dt; b.y += dy / d * speed * dt; faceToward(b, np.x, np.y, dt); }
     } else if (b.state === 'patrol') {
       b.x += Math.cos(b.face) * speed * 0.4 * dt; b.y += Math.sin(b.face) * speed * 0.4 * dt;
-      if (isWall(b.x, b.y) || ventAt[cellOf(b.x, b.y).i]) { b.x -= Math.cos(b.face) * speed * dt; b.y -= Math.sin(b.face) * speed * dt; advanceWp(b); }
+      if (isWall(b.x, b.y) || ventAt[cellOf(b.x, b.y).i] || glassAt[cellOf(b.x, b.y).i]) { b.x -= Math.cos(b.face) * speed * dt; b.y -= Math.sin(b.face) * speed * dt; advanceWp(b); }
     }
 
     /* idle sweep while stationary or searching */
@@ -1855,6 +1869,7 @@ function render() {
   for (const m of emps) drawEmp(m);
   for (const d of decoys) drawDecoy(d);
   for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) drawVent(i);
+  for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
   for (const d of doors) drawDoor(d);
   for (const k of keycards) if (!k.got) drawKeycard(k);
   /* the bots: the darkness hides them — your beam is the only truth */
@@ -2093,6 +2108,27 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawGlass(i) {
+  const gx = i % T.COLS, gy = (i - gx) / T.COLS, S = T.TILE;
+  const px = gx * S, py = gy * S;
+  ctx.save();
+  const g = ctx.createLinearGradient(px, py, px + S, py + S);
+  g.addColorStop(0, 'rgba(150,200,225,.11)');
+  g.addColorStop(0.5, 'rgba(190,225,245,.05)');
+  g.addColorStop(1, 'rgba(150,200,225,.11)');
+  ctx.fillStyle = g;
+  ctx.fillRect(px + 1, py + 1, S - 2, S - 2);
+  ctx.strokeStyle = 'rgba(178,216,240,.4)'; ctx.lineWidth = 1.2;
+  ctx.strokeRect(px + 1.5, py + 1.5, S - 3, S - 3);
+  /* a highlight raking across the pane */
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.16;
+  ctx.strokeStyle = '#dff1ff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(px + 6, py + S - 6); ctx.lineTo(px + S - 10, py + 6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px + 14, py + S - 6); ctx.lineTo(px + S - 4, py + 10); ctx.stroke();
+  ctx.restore();
 }
 
 function drawVent(i) {
@@ -2647,7 +2683,7 @@ function tossCoin() {
   const cx = Math.cos(player.aim), cy = Math.sin(player.aim);
   for (let d = 8; d <= T.TOSS_THROW; d += 8) {
     const nx = player.x + cx * d, ny = player.y + cy * d;
-    if (isWall(nx, ny)) break;
+    if (bodyBlocked(nx, ny)) break;
     tx = nx; ty = ny;
   }
   coins--;
@@ -2667,7 +2703,7 @@ function throwFlare() {
   const cx = Math.cos(player.aim), cy = Math.sin(player.aim);
   for (let d = 8; d <= T.FLARE_THROW; d += 8) {
     const nx = player.x + cx * d, ny = player.y + cy * d;
-    if (isWall(nx, ny)) break;
+    if (bodyBlocked(nx, ny)) break;
     fx = nx; fy = ny;
   }
   emitters.push({ x: fx, y: fy, r: T.FLARE_R, col: '#ffb347', flick: rand(0, 9),
@@ -3040,6 +3076,8 @@ window.__fp = {
   get camN() { return emitters.filter(e => e.cam).length; },
   camPoints() { return emitters.filter(e => e.cam).map(e => ({ x: e.x, y: e.y, ang: +e.ang.toFixed(3), spin: e.spin, r: e.r })); },
   get ventsN() { return ventAt.reduce((a, v) => a + v, 0); },
+  get glassN() { return glassAt.reduce((a, v) => a + v, 0); },
+  glassPoints() { const out = []; for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) { const gx = i % T.COLS; out.push({ gx, gy: (i - gx) / T.COLS, x: (gx + .5) * T.TILE, y: ((i - gx) / T.COLS + .5) * T.TILE }); } return out; },
   ventPoints() { const out = []; for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) { const gx = i % T.COLS; out.push({ gx, gy: (i - gx) / T.COLS, x: (gx + .5) * T.TILE, y: ((i - gx) / T.COLS + .5) * T.TILE }); } return out; },
   botPathHits(x1, y1, x2, y2) { return pathFind(x1, y1, x2, y2).map(p => cellOf(p.x, p.y).i); },
   get laserMid() { const l = lasers.find(x => x.on) || lasers[0]; return l ? { x: (l.x1 + l.x2) / 2, y: (l.y1 + l.y2) / 2 } : null; },

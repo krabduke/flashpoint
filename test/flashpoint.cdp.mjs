@@ -358,6 +358,74 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- glass: stops bodies, not sight ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 6; loadMap(6); hud();');
+await sleep(300);
+ok('floors carry glass', (await evl('__fp.glassN')) > 0, `n=${await evl('__fp.glassN')}`);
+
+/* the whole design rests on this pair disagreeing */
+const pane = await evl(`(() => {
+  const p = __fp.glassPoints()[0];
+  const S = T.TILE;
+  const lr = !isWall(p.x - S, p.y) && !isWall(p.x + S, p.y);
+  const a = lr ? { x: p.x - S, y: p.y } : { x: p.x, y: p.y - S };
+  const b = lr ? { x: p.x + S, y: p.y } : { x: p.x, y: p.y + S };
+  return JSON.stringify({
+    seeThrough: losClear(a.x, a.y, b.x, b.y),
+    bodyStopped: bodyBlocked(p.x, p.y),
+    notAWall: !isWall(p.x, p.y),
+    aX: a.x, aY: a.y, bX: b.x, bY: b.y, gx: p.gx, gy: p.gy
+  });
+})()`);
+const pn = JSON.parse(pane);
+ok('you can see through glass', pn.seeThrough === true, pane);
+ok('you cannot walk through it', pn.bodyStopped === true, pane);
+ok('it is not a wall to the raycast', pn.notAWall === true, pane);
+
+/* a drone on the far side of a pane can still see you - that is the point */
+ok('a drone sees you through glass', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const p = __fp.glassPoints()[0];
+  const S = T.TILE;
+  const lr = !isWall(p.x - S, p.y) && !isWall(p.x + S, p.y);
+  const a = lr ? { x: p.x - S, y: p.y } : { x: p.x, y: p.y - S };
+  const b = lr ? { x: p.x + S, y: p.y } : { x: p.x, y: p.y + S };
+  player.x = a.x; player.y = a.y;
+  const d = bots[0];
+  d.x = b.x; d.y = b.y;
+  d.face = Math.atan2(player.y - d.y, player.x - d.x);
+  castCone(d.rays, d.x, d.y, d.face, d.half, T.BOT_RAYS, botRange(d));
+  return botSees(d);
+})()`));
+
+/* but it cannot walk to you */
+ok('a drone will not path through glass', await evl(`(() => {
+  const p = __fp.glassPoints()[0];
+  const cells = __fp.botPathHits(player.x, player.y, bots[0].x, bots[0].y);
+  return !cells.includes(p.gy * T.COLS + p.gx);
+})()`));
+
+/* the player really is stopped by it, walked not teleported */
+const walked = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const p = __fp.glassPoints()[0];
+  const S = T.TILE;
+  const lr = !isWall(p.x - S, p.y) && !isWall(p.x + S, p.y);
+  player.x = lr ? p.x - S : p.x; player.y = lr ? p.y : p.y - S;
+  const startX = player.x, startY = player.y;
+  keys.left = keys.right = keys.up = keys.down = false;
+  keys[lr ? 'right' : 'down'] = true;
+  for (let i = 0; i < 60; i++) update(0.016);
+  keys.right = keys.down = false;
+  const crossed = lr ? player.x > p.x + 4 : player.y > p.y + 4;
+  return JSON.stringify({ crossed, moved: Math.round(Math.hypot(player.x - startX, player.y - startY)) });
+})()`);
+ok('walking into glass does not get you through it', JSON.parse(walked).crossed === false, walked);
+
+ok('glass never strands a coin', await evl("validateMaps() === 'ok'"));
+
 /* ---- vents: you fit, they do not ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
