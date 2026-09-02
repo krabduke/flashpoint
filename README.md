@@ -103,6 +103,10 @@ either. They see what their light sees, and nothing else.
   look, at the patch rather than at you. Sweeping a room stays safe; holding the
   light on one spot does not. It is also baitable, since they walk to the light
   and not to its owner.
+- **Gold is heavy and it jingles** — your footsteps carry further the more of the
+  floor you are carrying, from 520 with empty pockets to 806 with the lot. The
+  walk in is the quiet part; the run back to the door with everything on you is
+  not.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

@@ -391,6 +391,7 @@ const T = {
   /* a torch in a blacked-out building is the most conspicuous thing in it.
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
+  HAUL_NOISE: 0.55,   /* full pockets carry this much further */
   ALARM_AT: 0.62, COIN_NEAR: 150,
   /* power-ups: each one buys time against a different pressure */
   PU_LENS_MULT: 1.6, PU_LENS_T: 14,
@@ -1143,6 +1144,10 @@ function pathFind(sx, sy, tx, ty) {
 /* ================= update ================= */
 let beatT = 0;
 
+/* Gold is heavy and it jingles. A full run home is louder than an empty walk in,
+   which is what makes the last stretch of a floor the frightening one. */
+const haulNoise = () => 1 + T.HAUL_NOISE * (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
+
 function makeNoise(x, y, r) { noise.push({ x, y, r, t: 0.3 }); }
 
 function update(dt) {
@@ -1194,14 +1199,14 @@ function update(dt) {
     stepT -= dt;
     if (stepT <= 0) {
       stepT = T.WATER_STEP;
-      makeNoise(player.x, player.y, T.STEP_R * T.WATER_MULT * (sprinting ? 1.25 : 1));
+      makeNoise(player.x, player.y, T.STEP_R * T.WATER_MULT * haulNoise() * (sprinting ? 1.25 : 1));
       sfx.splash();
       for (let i = 0; i < 3; i++) parts.push({ x: player.x + rand(-6, 6), y: player.y + rand(-4, 4),
         vx: rand(-30, 30), vy: rand(-46, -14), life: rand(0.2, 0.4), max: 0.4, col: glowWhiteS, size: rand(1, 2) });
     }
   } else if (sprinting && spd > 0) {
     stepT -= dt;
-    if (stepT <= 0) { stepT = T.NOISE_SPRINT; if (puShoe <= 0) makeNoise(player.x, player.y, T.STEP_R); sfx.step(); }
+    if (stepT <= 0) { stepT = T.NOISE_SPRINT; if (puShoe <= 0) makeNoise(player.x, player.y, T.STEP_R * haulNoise()); sfx.step(); }
   } else stepT = 0;
 
   /* flashlight hits + memory */
@@ -3413,6 +3418,7 @@ window.__fp = {
   get aim() { return player.aim; }, get pos() { return { x: player.x, y: player.y }; },
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
+  get haulNoise() { return +haulNoise().toFixed(3); },
   beamPatches() { return beamPatches(); },
   seesLight(i) { const q = seesYourLight(bots[i], beamPatches()); return q ? { x: Math.round(q.x), y: Math.round(q.y) } : null; },
   get mapCheck() { return mapCheck; }, get touch() { return TOUCH; },

@@ -46,7 +46,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 ## D · Systems
 
 - [x] D1 Drones notice your beam — time-based, so sweeping is safe and staring is not
-- [ ] D2 Heavy pockets — footstep radius scales with carried gold
+- [x] D2 Heavy pockets — footstep radius scales with carried gold; 520 empty to 806 full
 - [ ] D3 Run alert level — repeated detections permanently speed the floor's drones
 - [ ] D4 Daily seed — same layout for everyone, per calendar day
 - [ ] D5 Achievements — 12 of them, shown on the menu
@@ -126,3 +126,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · B8 · 9 crates on 4 floors, bonus coin outside coinsTotal, 10 assertions — **section B complete**
 - 2026-09-02 · C1-C4 · three generated floors via tools/genmap.py, campaign now 12 floors, 9 assertions — **section C complete**
 - 2026-09-02 · D1 · drones investigate lit floor after 1.15s of clear view; smoke and a dark torch both hide it, 6 assertions
+- 2026-09-02 · D2 · haulNoise() scales step and splash radius up to 1.55x, 5 assertions

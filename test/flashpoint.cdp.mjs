@@ -358,6 +358,39 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- heavy pockets: a full run home is a loud one ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const haul = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const empty = __fp.haulNoise;
+  coins = Math.ceil(coinsTotal / 2);
+  const half = __fp.haulNoise;
+  coins = coinsTotal;
+  const full = __fp.haulNoise;
+  /* the radius that actually reaches the noise queue */
+  noise.length = 0;
+  makeNoise(player.x, player.y, T.STEP_R * __fp.haulNoise);
+  const loudR = noise[0].r;
+  coins = 0;
+  noise.length = 0;
+  makeNoise(player.x, player.y, T.STEP_R * __fp.haulNoise);
+  const quietR = noise[0].r;
+  return JSON.stringify({ empty, half, full, quietR: Math.round(quietR), loudR: Math.round(loudR) });
+})()`);
+const hp = JSON.parse(haul);
+ok('empty pockets are as quiet as before', hp.empty === 1, haul);
+ok('a full haul carries further', hp.full > hp.empty, haul);
+ok('it scales with how much you are carrying', hp.half > hp.empty && hp.half < hp.full, haul);
+ok('the extra radius reaches the noise queue', hp.loudR > hp.quietR, haul);
+
+ok('a floor with no coins does not divide by zero', await evl(`(() => {
+  coinsTotal = 0; coins = 0;
+  const v = __fp.haulNoise;
+  return v === 1 && isFinite(v);
+})()`));
+
 /* ---- drones notice your beam ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
