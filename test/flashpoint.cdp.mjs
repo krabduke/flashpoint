@@ -358,6 +358,44 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- item bar: every gadget reachable without a keyboard ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('the item bar has every gadget', (await evl("document.querySelectorAll('#itemBar .item').length")) === 7,
+  `n=${await evl("document.querySelectorAll('#itemBar .item').length")}`);
+ok('it is reachable by a finger', await evl(`(() => {
+  const b = document.getElementById('itFlare');
+  return getComputedStyle(b).pointerEvents === 'auto';
+})()`));
+ok('it keeps clear of the thumbsticks', await evl(`(() => {
+  const r = document.getElementById('itemBar').getBoundingClientRect();
+  return r.bottom < window.innerHeight * 0.5;
+})()`));
+
+/* tapping actually uses the item, not just lights up */
+const tapped = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const before = __fp.flares;
+  document.getElementById('itFlare').click();
+  return JSON.stringify({ before, after: __fp.flares, lit: __fp.flaresLit });
+})()`);
+const tp = JSON.parse(tapped);
+ok('tapping an item uses it', tp.after === tp.before - 1 && tp.lit > 0, tapped);
+
+ok('a spent item disables itself', await evl(`(() => {
+  __fp.setSmoke(0); hud();
+  const b = document.getElementById('itSmoke');
+  return b.disabled === true && b.classList.contains('out');
+})()`));
+ok('an active item reads as on', await evl(`(() => {
+  __fp.setMag(1); __fp.runMagnet();
+  return document.getElementById('itMag').classList.contains('on');
+})()`));
+ok('the bar hides outside a run', await evl(`(() => {
+  toMenu();
+  return document.getElementById('itemBar').classList.contains('hidden');
+})()`));
+
 /* ---- doors: a keycard is fast, a lockpick is exposed ---- */
 const standAtDoor = `(() => {
   const d = doors.find(z => !z.open);

@@ -41,6 +41,35 @@
   }
   .ibtn:hover{border-color:rgba(160,150,220,.7);color:#fff}
   #hudBtns{display:flex;gap:8px}
+  /* Every gadget has a key, but touch has no keyboard - without this the whole
+     toolkit is unreachable on a phone. Kept clear of the thumbstick zones. */
+  #itemBar{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px;
+    justify-items:stretch;width:min(232px,44vw);
+  }
+  #itemBar:empty,#itemBar.hidden{display:none}
+  .item{
+    pointer-events:auto;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    padding:6px 3px 5px;border-radius:9px;
+    background:rgba(20,16,40,.66);border:1px solid rgba(120,110,170,.3);
+    font-family:'Orbitron',monospace;color:#b9b3dd;
+    transition:border-color .16s,color .16s,opacity .16s,transform .12s;
+  }
+  .item b{font-size:8px;font-weight:700;letter-spacing:.1em}
+  .item s{text-decoration:none;font-size:7.5px;letter-spacing:.14em;color:#5e5679}
+  .item:hover:not(.out){border-color:rgba(255,209,102,.7);color:#ffe9a8}
+  .item:active:not(.out){transform:scale(.94)}
+  .item:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
+  .item.on{border-color:rgba(255,209,102,.85);color:#ffe9a8;
+    box-shadow:0 0 14px rgba(255,190,80,.22)}
+  .item.out{opacity:.32;cursor:not-allowed}
+  @media (max-width:520px){
+    #itemBar{width:min(196px,52vw);gap:4px}
+    .item{padding:5px 2px 4px;border-radius:7px}
+    .item b{font-size:7px}
+    .item s{display:none}
+  }
   #battWrap{
     width:78px;height:4px;margin-top:7px;border-radius:2px;overflow:hidden;
     background:rgba(120,110,170,.22);box-shadow:inset 0 0 0 1px rgba(120,110,170,.18);
@@ -260,6 +289,15 @@
         <div id="searchlightIndicator" style="width:24px;height:24px;background:rgba(255,70,60,.3);border:1px solid rgba(255,70,60,.6);border-radius:50;position:relative;transition:background .2s">
           <div id="searchlightPulse" style="position:absolute;width:8px;height:8px;background:#ff4646;border-radius:50;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);animation:searchPulse 2s ease infinite"></div>
         </div>
+      </div>
+      <div id="itemBar">
+        <button class="item" id="itTorch" type="button"><b>TORCH</b><s>F</s></button>
+        <button class="item" id="itFlare" type="button"><b>FLARE</b><s>Q</s></button>
+        <button class="item" id="itCoin"  type="button"><b>COIN</b><s>E</s></button>
+        <button class="item" id="itSmoke" type="button"><b>SMOKE</b><s>X</s></button>
+        <button class="item" id="itEmp"   type="button"><b>EMP</b><s>C</s></button>
+        <button class="item" id="itDecoy" type="button"><b>DECOY</b><s>V</s></button>
+        <button class="item" id="itMag"   type="button"><b>MAGNET</b><s>G</s></button>
       </div>
     </div>
   </div>
@@ -2671,6 +2709,7 @@ function toMenu() {
   $('start').classList.remove('hidden');
   setRain(false);
   clearToast();
+  hud();
   renderFloors();
   renderStats();
 }
@@ -2691,6 +2730,25 @@ function hud() {
     bw.classList.toggle('low', batt < 35 && !battDead);
     bw.classList.toggle('dead', battDead);
     bw.classList.toggle('off', !beamOn);
+  }
+
+  /* item bar state */
+  const bar = $('itemBar');
+  if (bar) {
+    bar.classList.toggle('hidden', mode !== 'playing');
+    const set = (id, avail, active) => {
+      const el = $(id); if (!el) return;
+      el.classList.toggle('out', !avail);
+      el.classList.toggle('on', !!active);
+      el.disabled = !avail;
+    };
+    set('itTorch', !battDead, beamOn);
+    set('itFlare', flares > 0);
+    set('itCoin', coins > 0);
+    set('itSmoke', smokePellets > 0);
+    set('itEmp', empCharges > 0);
+    set('itDecoy', decoyCharges > 0);
+    set('itMag', magCharges > 0, magT > 0);
   }
 
   const kr = $('keyRow');
@@ -2813,6 +2871,14 @@ bindBtn('resumeBtn', togglePause);
 bindBtn('quitBtn', toMenu);
 bindBtn('pauseBtn', togglePause);
 bindBtn('muteBtn', toggleMute);
+/* the same actions the keys fire, so touch reaches every gadget */
+bindBtn('itTorch', () => { if (!battDead) { beamOn = !beamOn; sfx.ui(); hud(); } });
+bindBtn('itFlare', throwFlare);
+bindBtn('itCoin', tossCoin);
+bindBtn('itSmoke', dropSmoke);
+bindBtn('itEmp', fireEmp);
+bindBtn('itDecoy', dropDecoy);
+bindBtn('itMag', runMagnet);
 ['nameInput', 'nameInput2', 'nameInput3'].forEach((id, i) => {
   const el = $(id);
   el.value = name;

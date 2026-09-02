@@ -113,6 +113,7 @@ add bots and speed, and your best depth per device is kept.
 | Fire an EMP | `C` | HUD buttons |
 | Set a decoy | `V` | HUD buttons |
 | Run the magnet | `G` | HUD buttons |
+| Any gadget | the key shown on it | **tap it in the item bar** |
 | Mute / pause | `M` / `P` | HUD buttons |
 | Restart | `R`, or `Space` on the card | tap the button |
 
