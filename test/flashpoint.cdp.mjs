@@ -201,7 +201,7 @@ await eq('core blackouts', '__fp.blackout > 0', true);
 await evl('mapIdx = 1; loadMap(1);');
 
 /* full campaign -> win -> endless */
-await eq('campaign has 9 floors', 'MAPS.length', 9);
+await eq('campaign has 12 floors', 'MAPS.length', 12);
 const nMaps = await evl('MAPS.length');
 for (let i = 0; i < nMaps; i++) {
   await evl('__fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);');
@@ -357,6 +357,52 @@ ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
+
+/* ---- the three new floors ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const newFloors = await evl(`(() => {
+  const want = [
+    { i: 9,  name: 'THE GALLERY',    theme: 'museum', coins: 12, bots: 3 },
+    { i: 10, name: 'THE COLD STORE', theme: 'docks',  coins: 13, bots: 3 },
+    { i: 11, name: 'THE PENTHOUSE',  theme: 'city',   coins: 14, bots: 4 }
+  ];
+  return JSON.stringify(want.map(w => {
+    const M = MAPS[w.i];
+    loop = 0; mapIdx = w.i; loadMap(w.i);
+    return {
+      name: M.name, ok: M.name === w.name && M.theme === w.theme && M.coins === w.coins && M.bots === w.bots,
+      coinsOnFloor: __fp.coinsTotal, botsSpawned: __fp.botsN,
+      routes: (M.routes || []).length, declaredBots: M.bots, features: __fp.powerupsN + __fp.platesN + __fp.cratesN + __fp.mirrorsN
+    };
+  }));
+})()`);
+const nf = JSON.parse(newFloors);
+ok('floor 10 is the Gallery', nf[0].ok, JSON.stringify(nf[0]));
+ok('floor 11 is the Cold Store', nf[1].ok, JSON.stringify(nf[1]));
+ok('floor 12 is the Penthouse', nf[2].ok, JSON.stringify(nf[2]));
+ok('each new floor lays out the coins it declares', nf.every(f => f.coinsOnFloor === (f.name === 'THE GALLERY' ? 12 : f.name === 'THE COLD STORE' ? 13 : 14)), newFloors);
+ok('each new floor has a route per declared drone', nf.every(f => f.routes === f.declaredBots), newFloors);
+ok('the new floors carry the new tiles', nf.every(f => f.features > 0), newFloors);
+
+/* twelve boxes is the case that can overflow a phone */
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 780, deviceScaleFactor: 2, mobile: true });
+await sleep(600);
+await evl('toMenu(); completedLevels = [0,1,2,3,4]; renderFloors();');
+await sleep(400);
+const grid12 = await evl(`(() => {
+  const b = [...document.querySelectorAll('#floorGrid .floor')];
+  return JSON.stringify({
+    n: b.length,
+    minW: Math.round(Math.min(...b.map(x => x.getBoundingClientRect().width))),
+    overflow: document.documentElement.scrollWidth > window.innerWidth + 1
+  });
+})()`);
+const g12 = JSON.parse(grid12);
+ok('the picker shows all twelve floors', g12.n === 12, grid12);
+ok('twelve boxes still fit a phone', g12.overflow === false, grid12);
+ok('and stay tappable', g12.minW >= 28, grid12);
+await send('Emulation.clearDeviceMetricsOverride');
 
 /* ---- crates: bonus gold for a lot of noise ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

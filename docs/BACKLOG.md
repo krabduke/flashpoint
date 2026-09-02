@@ -38,10 +38,10 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 
 ## C · New floors
 
-- [ ] C1 Floor 10 · THE GALLERY — museum theme, 12 coins, 3 bots, siren
-- [ ] C2 Floor 11 · THE COLD STORE — docks theme, 13 coins, 3 bots, fog
-- [ ] C3 Floor 12 · THE PENTHOUSE — city theme, 14 coins, 4 bots, siren + blackout
-- [ ] C4 Un-hardcode "nine" — harness assertion, floor-grid CSS, README
+- [x] C1 Floor 10 · THE GALLERY — museum theme, 12 coins, 3 bots, siren
+- [x] C2 Floor 11 · THE COLD STORE — docks theme, 13 coins, 3 bots, fog
+- [x] C3 Floor 12 · THE PENTHOUSE — city theme, 14 coins, 4 bots, siren + blackout
+- [x] C4 Un-hardcode "nine" — harness assertion, floor-grid CSS (now auto-fit), README in 5 places
 
 ## D · Systems
 
@@ -124,3 +124,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · B6 · 10 plates on 4 secured floors; raiseAlarm() extracted and now shared with the searchlight, 9 assertions
 - 2026-09-02 · B7 · 8 mirrors in corners; found and fixed a map-writer bug that had been placing features on the wrong rows, 9 assertions
 - 2026-09-02 · B8 · 9 crates on 4 floors, bonus coin outside coinsTotal, 10 assertions — **section B complete**
+- 2026-09-02 · C1-C4 · three generated floors via tools/genmap.py, campaign now 12 floors, 9 assertions — **section C complete**

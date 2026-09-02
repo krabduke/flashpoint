@@ -65,7 +65,7 @@ either. They see what their light sees, and nothing else.
   strand you.
 - **The kit is yours for the whole run** — you start with one flare and one smoke
   pellet, and everything else is found. Twenty gadgets lie scattered across the
-  nine floors, one on the House and four in the CORE, and what you carry goes
+  twelve floors, one on the House and four in the CORE, and what you carry goes
   down the stairs with you. A flare you skipped on floor two is a flare you do
   not have when the lights go out.
 - **Cameras never move, so they have a safe side** — the secured floors mount
@@ -111,11 +111,11 @@ either. They see what their light sees, and nothing else.
   beam by 60% for 14s, which is how you clear a big room fast now that gold needs
   lighting. **Soft shoes** make you 32% quicker *and* silence your sprint for 11s
   — the only time running is free. **Ghost** freezes the detection meter for 8s.
-- **Caught = run over.** One meter-fill and it's done. Nine floors to clear,
+- **Caught = run over.** One meter-fill and it's done. Twelve floors to clear,
   then endless loops. Your name rides on a device-local leaderboard (no login,
   no accounts, nothing leaves the browser).
 
-## The nine floors
+## The twelve floors
 
 | # | Floor | Light | Threat |
 |---|-------|-------|--------|
@@ -128,8 +128,11 @@ either. They see what their light sees, and nothing else.
 | 7 | The Bank Vault | brass-lit vault rooms | 3 bots + **siren sweeps** — periodically every drone wakes and its cone grows |
 | 8 | The Fog Docks | rain, amber dock lamps | 3 bots + **fog banks** — your beam strangles to a candle for six seconds |
 | 9 | The CORE | red emergency gloom | 3 fast bots + blackouts + sirens + searchlights. Everything listens. |
+| 10 | The Gallery | museum marble, long halls | 3 bots + sirens + cameras + plates |
+| 11 | The Cold Store | dock amber, standing water | 3 bots + fog + flooded aisles + crates |
+| 12 | The Penthouse | city neon, open plan | 4 bots + sirens + blackouts + glass + cameras |
 
-Clear all nine → **YOU ESCAPED** → endless mode: the rotation repeats, loops
+Clear all twelve → **YOU ESCAPED** → endless mode: the rotation repeats, loops
 add bots and speed, and your best depth per device is kept.
 
 ## Controls
@@ -191,7 +194,7 @@ node test/flashpoint.cdp.mjs
 
 A dependency-free CDP harness (Node ≥ 22, native WebSocket) drives real
 headless Chrome through the real game loop and asserts actual state:
-map connectivity (all nine floors), mouse aim, live coin pickup, cone
+map connectivity (all twelve floors), mouse aim, live coin pickup, cone
 detection filling → caught → card, LOS hiding draining, searchlight exposure,
 laser-gate zap, siren sweep, fog beam-shrink, blackouts, full campaign → win →
 endless escalation, leaderboard persistence, twin thumbstick touch lifecycle,
