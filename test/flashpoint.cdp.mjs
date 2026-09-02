@@ -366,6 +366,58 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- difficulty modes ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl("__fp.setDiff('standard')");
+ok('standard is the default shape', await evl(`(() => {
+  const m = __fp.diffMods;
+  return m.bot === 1 && m.fill === 1 && m.batt === 1 && m.kit === 0 && m.score === 1;
+})()`));
+
+const diffs = await evl(`(() => {
+  const read = (id) => {
+    __fp.setDiff(id);
+    mode = 'playing'; invuln = 999; loop = 0; alertLvl = 0;
+    mapIdx = 0; loadMap(0); hud(); __fp.resetKit();
+    return { id, speed: +__fp.botSpeedMult.toFixed(3), coin: __fp.coinValue(), kit: __fp.kit };
+  };
+  const out = [read('casual'), read('standard'), read('blackout')];
+  __fp.setDiff('standard');
+  return JSON.stringify(out);
+})()`);
+const dm = JSON.parse(diffs);
+const [cas, std, blk] = dm;
+ok('casual drones are slower than standard', cas.speed < std.speed, diffs);
+ok('blackout drones are faster', blk.speed > std.speed, diffs);
+ok('casual hands you more kit', cas.kit.flare > std.kit.flare && cas.kit.emp > std.kit.emp, diffs);
+ok('blackout hands you less', blk.kit.flare < std.kit.flare, diffs);
+ok('and blackout never goes below nothing', Object.values(blk.kit).every(v => v >= 0), diffs);
+ok('harder play is worth more', blk.coin > std.coin && cas.coin < std.coin, diffs);
+
+ok('the torch drains faster on blackout', await evl(`(() => {
+  const drainFor = (id) => {
+    __fp.setDiff(id);
+    mode = 'playing'; invuln = 999; mapIdx = 0; loadMap(0); hud();
+    beamOn = true; __fp.setBatt(100);
+    for (let i = 0; i < 30; i++) update(0.05);
+    return __fp.batt;
+  };
+  const b = drainFor('blackout'), s2 = drainFor('standard'), c = drainFor('casual');
+  __fp.setDiff('standard');
+  return b < s2 && s2 < c;
+})()`));
+
+ok('the button cycles all three and sticks', await evl(`(() => {
+  __fp.setDiff('standard'); toMenu();
+  const b = document.getElementById('diffBtn');
+  const seen = [];
+  for (let i = 0; i < 3; i++) { b.click(); seen.push(__fp.diff); }
+  const stored = localStorage.getItem('flashpoint.diff');
+  __fp.setDiff('standard');
+  return seen.join(',') === 'blackout,casual,standard' && stored === 'standard';
+})()`));
+
 /* ---- achievements ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

@@ -354,6 +354,7 @@
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
     </div>
     <button class="btn" id="startBtn">BREAK IN</button>
+    <button class="btn ghost" id="diffBtn" type="button">DIFFICULTY — STANDARD</button>
     <button class="btn ghost" id="dailyBtn" type="button">DAILY RUN — OFF</button>
     <p id="achCount"></p>
     <p id="dailySeed"></p>
@@ -769,6 +770,19 @@ let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
 let waterAt = new Uint8Array(T.COLS * T.ROWS);
+/* Standard is all ones, so it is exactly the game as tuned. The other two lean
+   on the same handful of numbers rather than special-casing anything. */
+const DIFFS = [
+  { id: 'casual',   name: 'CASUAL',   bot: 0.86, fill: 0.78, batt: 0.72, kit:  1, alert: 0.5, score: 0.7 },
+  { id: 'standard', name: 'STANDARD', bot: 1,    fill: 1,    batt: 1,    kit:  0, alert: 1,   score: 1 },
+  { id: 'blackout', name: 'BLACKOUT', bot: 1.12, fill: 1.28, batt: 1.35, kit: -1, alert: 1.5, score: 1.5 }
+];
+let diffIdx = (() => {
+  try { const v = DIFFS.findIndex(d => d.id === localStorage.getItem('flashpoint.diff')); return v < 0 ? 1 : v; }
+  catch (e) { return 1; }
+})();
+const D = () => DIFFS[diffIdx];
+
 let alertLvl = 0, alertCool = 0;
 /* Twelve, each one about a system this game actually has rather than a
    participation prize. Per-floor flags are what make the negative ones
@@ -1456,7 +1470,7 @@ function update(dt) {
   /* torch battery */
   const battWas = Math.ceil(batt / 5);
   if (beamOn) {
-    batt = Math.max(0, batt - T.BATT_DRAIN * dt);
+    batt = Math.max(0, batt - T.BATT_DRAIN * D().batt * dt);
     if (batt <= 0) { beamOn = false; battDead = true; sfx.blackout(); toast('TORCH DEAD — LET IT REST', 2.4); }
   } else {
     batt = Math.min(T.BATT_MAX, batt + T.BATT_RECOVER * dt);
@@ -1583,8 +1597,12 @@ function drawCat(ct) {
   ctx.restore();
 }
 
+/* One definition, so the test hook cannot drift from what the drones actually
+   use - which is exactly what happened when difficulty was added. */
+const speedMult = () => botSpd * D().bot * (1 + alertLvl * T.ALERT_STEP * D().alert) * (sirenT > 0 ? 1.28 : 1);
+
 function updateBots(dt) {
-  const sm = botSpd * (1 + alertLvl * T.ALERT_STEP) * (sirenT > 0 ? 1.28 : 1);
+  const sm = speedMult();
   const patches = beamPatches();
   for (const b of bots) {
     b.blink = Math.max(0, b.blink - dt);
@@ -1747,7 +1765,7 @@ function updateMeter(dt) {
     let mult = searchOnly ? 0.7 : 1;
     if (!searchOnly) for (const e of emitters) { if (e.kind === 'exit' || e.kind === 'search' || e.dead) continue; if (blackout > 0) continue; if (Math.hypot(e.x - player.x, e.y - player.y) < e.r * 0.8) { mult = T.EXPOSE_MULT; break; } }
     const wasBelow = meter < 0.55;
-    meter = Math.min(1, meter + T.SEE_FILL * mult * dt);
+    meter = Math.min(1, meter + T.SEE_FILL * D().fill * mult * dt);
     if (wasBelow && meter >= 0.55 && !searchOnly) bumpAlert();
     redPulse = Math.max(redPulse, meter);
     if (meter >= 1) caught();
@@ -3013,15 +3031,17 @@ function bumpAlert() {
 
 function resetKit() {
   alertLvl = 0; alertCool = 0;
+  const k = D().kit;
   if (dailyOn) seedDaily();   /* same day, same building, every time */
-  flares = T.KIT.flare;
-  smokePellets = T.KIT.smoke;
-  empCharges = T.KIT.emp;
-  decoyCharges = T.KIT.decoy;
-  magCharges = T.KIT.mag;
+  const kv = (n) => Math.max(0, n + k);
+  flares = kv(T.KIT.flare);
+  smokePellets = kv(T.KIT.smoke);
+  empCharges = Math.max(0, T.KIT.emp + Math.max(0, k));
+  decoyCharges = Math.max(0, T.KIT.decoy + Math.max(0, k));
+  magCharges = Math.max(0, T.KIT.mag + Math.max(0, k));
 }
 
-const coinValue = () => Math.round(T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
+const coinValue = () => Math.round(D().score * T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
 
 /* Throw a coin you are carrying. It clatters where it lands and drones walk to
    noise - but the floor still wants every coin, so you have just moved gold you
@@ -3217,6 +3237,13 @@ function renderAchs() {
   if (c) c.textContent = got + ' / ' + ACHS.length + ' UNLOCKED';
 }
 
+function renderDiff() {
+  const b = $('diffBtn');
+  if (!b) return;
+  b.textContent = 'DIFFICULTY — ' + D().name;
+  b.classList.toggle('on', diffIdx !== 1);
+}
+
 function renderDaily() {
   const b = $('dailyBtn'), sd = $('dailySeed');
   if (b) { b.textContent = dailyOn ? 'DAILY RUN — ON' : 'DAILY RUN — OFF'; b.classList.toggle('on', dailyOn); }
@@ -3327,6 +3354,7 @@ function toMenu() {
   renderStats();
   renderDaily();
   renderAchs();
+  renderDiff();
 }
 function togglePause() {
   if (mode !== 'playing') return;
@@ -3496,6 +3524,11 @@ bindBtn('resumeBtn', togglePause);
 bindBtn('quitBtn', toMenu);
 bindBtn('pauseBtn', togglePause);
 bindBtn('muteBtn', toggleMute);
+bindBtn('diffBtn', () => {
+  diffIdx = (diffIdx + 1) % DIFFS.length;
+  try { localStorage.setItem('flashpoint.diff', D().id); } catch (e) {}
+  renderDiff();
+});
 bindBtn('dailyBtn', () => { dailyOn = !dailyOn; if (dailyOn) seedDaily(); renderDaily(); hud(); });
 /* the same actions the keys fire, so touch reaches every gadget */
 bindBtn('itTorch', () => { if (!battDead) { beamOn = !beamOn; sfx.ui(); hud(); } });
@@ -3538,6 +3571,7 @@ renderFloors();
 renderStats();
 renderDaily();
 renderAchs();
+renderDiff();
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
 let last = performance.now();
@@ -3570,12 +3604,15 @@ window.__fp = {
   resetAchs() { achs = {}; try { localStorage.setItem('flashpoint.achs', '{}'); } catch (e) {} renderAchs(); },
   unlock(id) { unlock(id); return !!achs[id]; },
   get floorFlags() { return { seen: fSeen, sprint: fSprint, noticed: fNoticed, emp: fEmp }; },
+  get diff() { return D().id; },
+  get diffMods() { return Object.assign({}, D()); },
+  setDiff(id) { const i = DIFFS.findIndex(d => d.id === id); if (i >= 0) diffIdx = i; renderDiff(); return D().id; },
   get dailyOn() { return dailyOn; },
   get dailySeed() { return todaySeed(); },
   setDaily(v) { dailyOn = !!v; if (dailyOn) seedDaily(); renderStats(); hud(); return dailyOn; },
   rngProbe(n) { const out = []; for (let i = 0; i < n; i++) out.push(+rng().toFixed(6)); return out; },
   bumpAlert() { alertCool = 0; bumpAlert(); return alertLvl; },
-  get botSpeedMult() { return botSpd * (1 + alertLvl * T.ALERT_STEP) * (sirenT > 0 ? 1.28 : 1); },
+  get botSpeedMult() { return speedMult(); },
   beamPatches() { return beamPatches(); },
   seesLight(i) { const q = seesYourLight(bots[i], beamPatches()); return q ? { x: Math.round(q.x), y: Math.round(q.y) } : null; },
   get mapCheck() { return mapCheck; }, get touch() { return TOUCH; },

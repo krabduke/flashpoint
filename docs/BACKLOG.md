@@ -50,7 +50,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] D3 Run alert level — persists across floors for the whole run, capped at 4 notches (+32%)
 - [x] D4 Daily seed — gameplay RNG seeded from the date; cosmetic noise deliberately left unseeded
 - [x] D5 Achievements — 12, each about a system this game has; per-floor flags answer the negative ones
-- [ ] D6 Difficulty modes — Casual / Standard / Blackout
+- [x] D6 Difficulty modes — Casual / Standard / Blackout; standard is all-ones so the tuned game is untouched
 - [ ] D7 Endless modifiers — one random rule per loop
 - [ ] D8 Ghost replay — your best run's path drawn faintly behind you
 
@@ -130,3 +130,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · D3 · alert level 0-4, +8% drone speed each, survives the stairs, 8 assertions
 - 2026-09-02 · D4 · daily run toggle + seed display, mulberry32 from YYYYMMDD, 6 assertions
 - 2026-09-03 · D5 · 12 achievements + menu grid, 10 assertions; de-flaked the pre-existing laser test
+- 2026-09-03 · D6 · three modes across 6 shared numbers, score scales 0.7/1/1.5, 10 assertions; speedMult() extracted so the hook cannot drift

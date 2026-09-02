@@ -217,6 +217,16 @@ It also asserts pixels where a predicate is not enough: that a lit coin is
 actually brighter than the floor beside it, that a remembered one stays findable,
 and that a filling meter really does turn the screen edge red.
 
+## Three ways to play
+
+**Standard** is the game as tuned. **Casual** slows the drones, fills the meter
+more gently, stretches the torch and hands you a spare of everything. **Blackout**
+does the opposite: faster drones, a meter that fills in a quarter less time, a
+torch that dies a third sooner, and you start with nothing but what you find.
+
+Gold is worth 0.7x, 1x and 1.5x respectively, so the leaderboard keeps meaning
+something across all three.
+
 ## Twelve things worth doing
 
 Unlocks are about the systems rather than attendance: clear a floor without being
