@@ -67,7 +67,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 
 ## F · Look
 
-- [ ] F1 Drone sprite pass — match the quality of the redrawn thief
+- [x] F1 Drone sprite pass — the real fault was state-blindness, not detail; patrol/invest/chase now read at a glance
 - [ ] F2 Exit door — a real door, not a beacon blob
 - [ ] F3 Coin sprite — distinct silhouette per floor theme
 - [ ] F4 Caught sequence — a held beat before the card
@@ -141,3 +141,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · E6 · radio cooldown 4.5s, re-target guard, negative timers clamped, 5 assertions
 - 2026-09-03 · E7 · hearR() scales with floor, loop and wariness, 4 assertions
 - 2026-09-03 · E8 · four drones, four distinct clocks, 6 assertions — **section E complete**
+- 2026-09-03 · F1 · drone redrawn with per-state lens ramp, vent, rotors and rim; pixel-asserted as three distinct states

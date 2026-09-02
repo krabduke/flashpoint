@@ -2568,57 +2568,106 @@ function drawLasers() {
 function drawBotBody(b) {
   const a = revealed(b) ? 1 : (b.state === 'chase' ? 0.75 : 0);
   if (a <= 0) return;
+  /* what the drone is doing, in one number, so every part of it can agree */
+  const heat = b.state === 'chase' ? 1 : (b.state === 'invest' || b.wary > 0 ? 0.5 : 0);
+  const alerted = heat > 0;
+  const spin = 20 + heat * 26;
+
   ctx.save(); ctx.translate(b.x, b.y);
   ctx.globalAlpha = a * 0.5;
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.beginPath(); ctx.ellipse(2, 7, 13, 5.5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.beginPath(); ctx.ellipse(2, 8, 13, 5.5, 0, 0, TAU); ctx.fill();
   ctx.globalAlpha = a;
   ctx.rotate(b.face);
-  ctx.scale(1, 1 + Math.sin(time * 2 + b.sweepP) * 0.03);
-  /* rotor blur */
+  ctx.scale(1, 1 + Math.sin(time * (2 + heat * 3) + b.sweepP) * 0.035);
+
+  /* rotors: two blurred discs that visibly speed up when it means business */
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = a * 0.2;
-  ctx.fillStyle = '#9fb4ff';
-  for (const s of [-1, 1]) {
-    ctx.save(); ctx.translate(s * 6, s * 12); ctx.rotate(time * 20 * s);
-    ctx.beginPath(); ctx.ellipse(0, 0, 10, 2.4, 0, 0, TAU); ctx.fill();
+  for (const sgn of [-1, 1]) {
+    ctx.save(); ctx.translate(-2, sgn * 11);
+    ctx.globalAlpha = a * (0.13 + heat * 0.1);
+    ctx.fillStyle = alerted ? '#ffb0a0' : '#9fb4ff';
+    ctx.beginPath(); ctx.arc(0, 0, 9.5, 0, TAU); ctx.fill();
+    ctx.globalAlpha = a * (0.3 + heat * 0.25);
+    ctx.rotate(time * spin * sgn);
+    ctx.beginPath(); ctx.ellipse(0, 0, 9.5, 1.7, 0, 0, TAU); ctx.fill();
     ctx.restore();
   }
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a;
-  /* arms */
-  ctx.strokeStyle = '#14161f'; ctx.lineWidth = 3.5;
-  ctx.beginPath(); ctx.moveTo(-4, -6); ctx.lineTo(-11, -12); ctx.moveTo(-4, 6); ctx.lineTo(-11, 12); ctx.stroke();
-  /* angular chassis */
-  ctx.fillStyle = '#262b3a';
+
+  /* booms out to the rotors */
+  ctx.strokeStyle = '#12141d'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-3, -5); ctx.lineTo(-2, -11); ctx.moveTo(-3, 5); ctx.lineTo(-2, 11); ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  /* chassis */
+  const body = ctx.createLinearGradient(6, -10, -10, 10);
+  body.addColorStop(0, '#333a4e'); body.addColorStop(1, '#1b1f2c');
+  ctx.fillStyle = body;
   ctx.beginPath();
   ctx.moveTo(13, 0); ctx.lineTo(7, -9); ctx.lineTo(-8, -10); ctx.lineTo(-13, -4);
   ctx.lineTo(-13, 4); ctx.lineTo(-8, 10); ctx.lineTo(7, 9); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = '#3d4560'; ctx.lineWidth = 1.3; ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.beginPath(); ctx.moveTo(-8, -10); ctx.lineTo(7, -9); ctx.stroke();
-  /* hazard stripes on the flank */
+  ctx.strokeStyle = '#0a0c13'; ctx.lineWidth = 1.6; ctx.stroke();
+  /* panel lines, so the flank is not one flat shape */
+  ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-7, -9.6); ctx.lineTo(-7, 9.6);
+  ctx.moveTo(1, -9.2); ctx.lineTo(1, 9.2);
+  ctx.stroke();
+
+  /* cold rim down the leading edge - the same language the thief uses, and what
+     makes the silhouette pop the instant your beam finds it */
+  ctx.strokeStyle = alerted ? 'rgba(255,170,150,.75)' : 'rgba(178,196,240,.55)';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(-8, -10); ctx.lineTo(7, -9); ctx.lineTo(13, 0);
+  ctx.stroke();
+
+  /* hazard stripes on the tail */
   ctx.save();
-  ctx.beginPath(); ctx.rect(-12.5, -10, 5, 20); ctx.clip();
-  for (let i = -3; i < 3; i++) { ctx.fillStyle = i % 2 ? '#d8a021' : '#221a06'; ctx.fillRect(-12.5, i * 4, 5, 4); }
+  ctx.beginPath(); ctx.rect(-12.6, -10, 5, 20); ctx.clip();
+  for (let i = -3; i < 3; i++) { ctx.fillStyle = i % 2 ? '#d8a021' : '#221a06'; ctx.fillRect(-12.6, i * 4, 5, 4); }
   ctx.restore();
-  /* sensor dome + lens */
-  ctx.fillStyle = '#0e1018'; ctx.beginPath(); ctx.arc(4, 0, 6.6, 0, TAU); ctx.fill();
-  const hot = b.state === 'chase';
-  const gl = ctx.createRadialGradient(5, -1, 1, 4, 0, 6);
-  gl.addColorStop(0, '#fff'); gl.addColorStop(0.35, hot ? '#ff6a50' : '#e04038'); gl.addColorStop(1, '#4a0d08');
-  ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(4, 0, 5.4, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(4, 0, 3, time * 5 + b.sweepP, time * 5 + b.sweepP + 0.9); ctx.stroke();
-  /* vent glow */
-  ctx.strokeStyle = hot ? 'rgba(255,90,70,0.9)' : 'rgba(120,200,255,0.5)'; ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.moveTo(-6, -6.5); ctx.lineTo(-6, 6.5); ctx.stroke();
-  /* antenna beacon */
-  ctx.strokeStyle = '#5a6382'; ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.moveTo(-9, -9); ctx.quadraticCurveTo(-14, -13, -13, -16); ctx.stroke();
-  ctx.fillStyle = (Math.sin(time * 8) > 0) ? '#ffd166' : '#5a4a22';
-  ctx.beginPath(); ctx.arc(-13, -16, 1.8, 0, TAU); ctx.fill();
+
+  /* the eye: colour, size and scan speed all say the same thing */
+  const lensR = 5.0 + heat * 1.1;
+  ctx.fillStyle = '#0b0d14'; ctx.beginPath(); ctx.arc(4, 0, lensR + 1.4, 0, TAU); ctx.fill();
+  const ramp = heat === 1 ? ['#ffffff', '#ff6a50', '#5a1008']
+    : heat > 0 ? ['#ffe0b8', '#ff9a44', '#3a1206']
+    : ['#c8705f', '#8f2f26', '#25090722'.slice(0, 7)];
+  const gl = ctx.createRadialGradient(5, -1, 0.8, 4, 0, lensR);
+  gl.addColorStop(0, ramp[0]);
+  gl.addColorStop(0.34, ramp[1]);
+  gl.addColorStop(1, ramp[2]);
+  ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(4, 0, lensR, 0, TAU); ctx.fill();
+  /* the scan line inside the lens, quick and jumpy when alerted */
+  ctx.strokeStyle = 'rgba(255,255,255,' + (0.3 + heat * 0.55) + ')'; ctx.lineWidth = 1;
+  const sc = time * (4 + heat * 9) + b.sweepP;
+  ctx.beginPath(); ctx.arc(4, 0, lensR * 0.55, sc, sc + (0.9 - heat * 0.35)); ctx.stroke();
+  /* bloom, only once it has a reason */
+  if (heat > 0) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = a * heat * (0.25 + 0.15 * Math.sin(time * (6 + heat * 8)));
+    ctx.drawImage(glowRedS, 4 - 18, -18, 36, 36);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a;
+  }
+
+  /* vent: cold on patrol, amber while it is unsure, hot on a chase */
+  ctx.strokeStyle = heat === 1 ? 'rgba(255,90,70,0.95)'
+    : heat > 0 ? 'rgba(255,170,60,0.8)' : 'rgba(120,200,255,0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-5, -6.5); ctx.lineTo(-5, 6.5); ctx.stroke();
+
+  /* antenna beacon, blinking faster the more awake it is */
+  ctx.strokeStyle = '#5a6382'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-9, -8); ctx.quadraticCurveTo(-14, -12, -13, -15.5); ctx.stroke();
+  ctx.fillStyle = (Math.sin(time * (6 + heat * 12)) > 0) ? (alerted ? '#ff6a50' : '#ffd166') : '#4a4128';
+  ctx.beginPath(); ctx.arc(-13, -15.5, 1.9, 0, TAU); ctx.fill();
+
   ctx.restore();
   ctx.globalAlpha = 1;
 }
+
 
 function drawBotCone(b) {
   const chase = b.state === 'chase', invest = b.state === 'invest';

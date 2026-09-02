@@ -374,6 +374,37 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- the drone reads its own state ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const droneLook = await evl(`(() => {
+  mode = 'playing'; invuln = 999; loop = 0; mapIdx = 0; loadMap(0); hud();
+  const b = bots[0];
+  player.x = b.x - 90; player.y = b.y; mouseWX = b.x; mouseWY = b.y;
+  for (let k = 0; k < 3; k++) update(0.016);
+  if (!revealed(b)) return JSON.stringify({ err: 'drone not lit' });
+  paused = true;
+  const sample = (st, wary) => {
+    b.state = st; b.wary = wary; b.glow = 0;
+    render();
+    const sx = (b.x - camNow.cx) * Z, sy = (b.y - camNow.cy) * Z;
+    const d = ctx.getImageData((sx - 4) * DPR, (sy - 4) * DPR, 8 * DPR, 8 * DPR).data;
+    let r = 0, g = 0, bl = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i+1]; bl += d[i+2]; n++; }
+    return { r: Math.round(r/n), g: Math.round(g/n), b: Math.round(bl/n) };
+  };
+  const out = { patrol: sample('patrol', 0), invest: sample('invest', T.WARY_T), chase: sample('chase', 0) };
+  paused = false;
+  return JSON.stringify(out);
+})()`);
+const dl = JSON.parse(droneLook);
+ok('a hunting drone burns brighter than a patrolling one',
+  !dl.err && (dl.chase.r + dl.chase.g + dl.chase.b) > (dl.patrol.r + dl.patrol.g + dl.patrol.b) + 40, droneLook);
+ok('an unsure drone reads warmer than a calm one',
+  !dl.err && dl.invest.g > dl.patrol.g + 15, droneLook);
+ok('all three states are distinguishable',
+  !dl.err && new Set([dl.patrol, dl.invest, dl.chase].map(c => c.r + ',' + c.g + ',' + c.b)).size === 3, droneLook);
+
 /* ---- idle personality: four drones, four clocks ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

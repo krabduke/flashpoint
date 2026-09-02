@@ -141,6 +141,11 @@ either. They see what their light sees, and nothing else.
   pace, appetite for stopping at corners, and whether it is the sort to loiter at
   the end of a leg. A patrol of four is four clocks rather than one, so learning a
   floor means learning its staff and not just its geometry.
+- **You can read a drone at a glance** — a calm one is cool grey with a dull lens
+  and a cold vent; one that is unsure runs amber throughout; one that has you
+  burns white-hot with a red bloom and a racing beacon. Its rotors speed up with
+  its mood. Knowing which of the four in the room has noticed you is the
+  difference between walking and running.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
