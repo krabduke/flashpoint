@@ -466,6 +466,8 @@ const T = {
   RADIO_COOL: 4.5,
   /* how much of HEAR_R a drone adds to a noise's own radius */
   HEAR_BASE: 0.35, HEAR_FLOOR: 0.02, HEAR_LOOP: 0.05, WARY_HEAR: 1.2,
+  /* per-drone quirks, so a patrol is not four copies of one clock */
+  DWELL_CHANCE: 0.35, DWELL_MIN: 0.5, DWELL_MAX: 1.9,
   PLATE_R: 17, PLATE_NOISE: 660,
   CRATE_R: 36, CRATE_T: 0.9, CRATE_NOISE: 540,
   MIRROR_LOSS: 0.82,
@@ -1143,7 +1145,10 @@ function spawnBots() {
       face: rand(0, TAU), route: rotatedRoute, wp: 1 % route.length, path: [], pathT: 0,
       state: 'patrol', tgt: null, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
-      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [], wary: 0, radioT: 0
+      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [], wary: 0, radioT: 0,
+      /* drawn through rng() so a daily run reproduces the same personalities */
+      sweepK: rand(0.7, 1.4), paceK: rand(0.9, 1.12), peekK: rand(0.7, 1.5),
+      dwellK: rand(0, 1), dwellT: 0
     });
   }
 }
@@ -1716,12 +1721,13 @@ function updateBots(dt) {
         if (done || b.stateT > T.SEARCH_T) giveUp(b);
         speed = T.BOT_INVEST * sm * 0.9;
       } else if (b.state === 'patrol') {
-        speed = T.BOT_PATROL * sm;
+        speed = T.BOT_PATROL * sm * b.paceK;
+        if (b.dwellT > 0) { b.dwellT = Math.max(0, b.dwellT - dt); speed = 0; }
         if (b.peekCool > 0) b.peekCool = Math.max(0, b.peekCool - dt);
         /* stop at a junction and look down the other way before carrying on */
         if (b.peekT <= 0 && b.peekCool <= 0 && isJunction(b.x, b.y)) {
-          b.peekT = T.PEEK_T;
-          b.peekCool = T.PEEK_COOL;
+          b.peekT = T.PEEK_T * b.peekK;
+          b.peekCool = T.PEEK_COOL * b.peekK;
           b.peekTo = b.face + (rng() < 0.5 ? -1 : 1) * T.PEEK_ARC;
         }
         if (b.peekT > 0) {
@@ -1757,7 +1763,7 @@ function updateBots(dt) {
     /* idle sweep while stationary or searching */
     if (b.radioT > 0) b.radioT = Math.max(0, b.radioT - dt);
     if (b.wary > 0) b.wary = Math.max(0, b.wary - dt);
-    const sweepK = b.wary > 0 ? T.WARY_SWEEP : 1;
+    const sweepK = (b.wary > 0 ? T.WARY_SWEEP : 1) * b.sweepK;
     if (!b.path.length && b.state !== 'chase') b.face += Math.sin(time * 1.7 + b.sweepP) * T.BOT_SWEEP * sweepK * dt * 6;
 
     /* cone rays (shared for draw + detection) */
@@ -1880,7 +1886,13 @@ function giveUp(b) {
   }
 }
 
-function advanceWp(b) { if (b.route.length) b.wp = (b.wp + 1) % b.route.length; }
+function advanceWp(b) {
+  if (b.route.length) b.wp = (b.wp + 1) % b.route.length;
+  /* the loiterers stop at the end of a leg; the brisk ones never do */
+  if (b.dwellK !== undefined && b.dwellK < T.DWELL_CHANCE && b.state === 'patrol') {
+    b.dwellT = T.DWELL_MIN + b.dwellK / T.DWELL_CHANCE * (T.DWELL_MAX - T.DWELL_MIN);
+  }
+}
 function retarget(b, x, y) { b.path = pathFind(b.x, b.y, x, y); }
 function faceToward(b, x, y, dt) {
   const want = Math.atan2(y - b.y, x - b.x);
@@ -3821,6 +3833,9 @@ window.__fp = {
   get botPeek() { return bots.map(b => +b.peekT.toFixed(2)); },
   get botWary() { return bots.map(b => +(b.wary || 0).toFixed(2)); },
   get botRadioT() { return bots.map(b => +(b.radioT || 0).toFixed(2)); },
+  botTraits() { return bots.map(b => ({ sweep: +b.sweepK.toFixed(3), pace: +b.paceK.toFixed(3), peek: +b.peekK.toFixed(3), dwell: +b.dwellK.toFixed(3) })); },
+  get botDwell() { return bots.map(b => +(b.dwellT || 0).toFixed(2)); },
+  advanceWpFor(i) { bots[i].state = 'patrol'; advanceWp(bots[i]); return +bots[i].dwellT.toFixed(2); },
   hearReach(i) { return Math.round(hearR(bots[i])); },
   hearReachBare() { return Math.round(hearR(null)); },
   get botWp() { return bots.map(b => b.wp); },

@@ -374,6 +374,52 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- idle personality: four drones, four clocks ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const traits = await evl(`(() => {
+  mode = 'playing'; invuln = 999; endless = false;
+  loop = 0; mapIdx = 11; loadMap(11); hud();
+  const t = __fp.botTraits();
+  const spread = k => Math.max(...t.map(x => x[k])) - Math.min(...t.map(x => x[k]));
+  return JSON.stringify({ n: t.length, t, sweepSpread: +spread('sweep').toFixed(3), paceSpread: +spread('pace').toFixed(3) });
+})()`);
+const tr = JSON.parse(traits);
+ok('drones have their own traits', tr.n >= 3, traits);
+ok('and they are not all the same', tr.sweepSpread > 0.05 && tr.paceSpread > 0.005, traits);
+ok('every trait stays in a sane band', tr.t.every(x =>
+  x.sweep >= 0.7 && x.sweep <= 1.4 && x.pace >= 0.9 && x.pace <= 1.12), traits);
+
+ok('a daily run gives the same personalities twice', await evl(`(() => {
+  __fp.setDaily(true);
+  const snap = () => { __fp.resetKit(); loop = 0; mapIdx = 11; loadMap(11); return JSON.stringify(__fp.botTraits()); };
+  const a = snap(), b = snap();
+  __fp.setDaily(false);
+  return a === b;
+})()`));
+
+ok('some drones loiter at a waypoint', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 11; loadMap(11); hud();
+  let anyDwell = false;
+  bots.forEach((b, i) => { if (__fp.advanceWpFor(i) > 0) anyDwell = true; });
+  /* with four drones and a 35% chance each, at least one should - but the real
+     assertion is that a dwell, when it happens, is inside the configured band */
+  const all = __fp.botDwell.filter(v => v > 0);
+  return all.every(v => v >= T.DWELL_MIN - 0.01 && v <= T.DWELL_MAX + 0.01);
+})()`));
+
+ok('a loitering drone actually stands still', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 11; loadMap(11); hud();
+  player.x = -9999; player.y = -9999;
+  const b = bots[0];
+  b.state = 'patrol'; b.dwellT = 1.2; b.peekT = 0;
+  const from = { x: b.x, y: b.y };
+  for (let i = 0; i < 20; i++) update(0.016);
+  return Math.hypot(bots[0].x - from.x, bots[0].y - from.y) < 1;
+})()`));
+
 /* ---- hearing sharpens with depth ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

@@ -63,7 +63,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] E5 Realistic give-up — rejoin the route at the nearest waypoint, then stay wary; fixed a 967px stale-waypoint walk
 - [x] E6 Radio cooldown — 4.5s per drone, plus committed drones are not re-yanked; also clamped four drifting timers
 - [x] E7 Hearing acuity per floor — 165px on the House to 268px in the Penthouse, +20% while wary
-- [ ] E8 Idle personality — small per-drone variation in sweep and pause
+- [x] E8 Idle personality — per-drone sweep, pace, peek and loiter traits, drawn through rng() so dailies reproduce
 
 ## F · Look
 
@@ -140,3 +140,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · E5 · giveUp() rejoins route nearby (967px walk removed) + 7s wary period, 6 assertions
 - 2026-09-03 · E6 · radio cooldown 4.5s, re-target guard, negative timers clamped, 5 assertions
 - 2026-09-03 · E7 · hearR() scales with floor, loop and wariness, 4 assertions
+- 2026-09-03 · E8 · four drones, four distinct clocks, 6 assertions — **section E complete**

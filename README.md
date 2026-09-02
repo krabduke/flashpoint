@@ -137,6 +137,10 @@ either. They see what their light sees, and nothing else.
   its own radius; one in the Penthouse catches it at 268px, and a loop of the
   building sharpens them again. A drone that has just lost you listens twenty
   percent harder than one that has not.
+- **No two drones are quite alike** — each one gets its own sweep width, walking
+  pace, appetite for stopping at corners, and whether it is the sort to loiter at
+  the end of a leg. A patrol of four is four clocks rather than one, so learning a
+  floor means learning its staff and not just its geometry.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
