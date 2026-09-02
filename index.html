@@ -52,6 +52,9 @@
   #battWrap.low #battFill{background:#ff9f43}
   #battWrap.dead #battFill{background:#ff4646}
   #battWrap.off{opacity:.55}
+  #keyRow{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.2em;
+    color:#ffd166;margin-top:5px}
+  #keyRow:empty{display:none}
   #flareRow{display:flex;gap:4px;margin-top:6px;align-items:center}
   #flareRow:empty{display:none}
   #flareRow i{width:7px;height:11px;border-radius:2px;background:#ffb347;
@@ -243,6 +246,7 @@
       <div id="who"></div>
       <div id="battWrap"><i id="battFill"></i></div>
       <div id="flareRow"></div>
+      <div id="keyRow"></div>
       <div id="puRow"></div>
     </div>
     <div class="hud-block mid">
@@ -367,6 +371,8 @@ const T = {
   /* magnet: harvest a dark room without spending torch on it. Every coin it
      lands still fires the pickup noise, so a big haul is a loud one. */
   MAG_N: 1, MAG_T: 8, MAG_R: 96, MAG_PULL: 132,
+  /* doors: a keycard is the fast way through, picking is the exposed way */
+  PICK_T: 1.5, DOOR_R: 40, KEY_R: 22, DOOR_NOISE: 250,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -453,11 +459,11 @@ const MAPS = [
   { name: 'THE ABANDONED', depth: 'WARD', theme: 'ward', coins: 8, bots: 2, rows: [
     '############################',
     '#.P...x..#.....N#...x...c..#',
-    '#........#..x...#..........#',
+    '#.K......#..x...#..........#',
     '#..####..#......#...####...#',
     '#..#..c..#....x.#.I.#..L..x#',
     '#..#.....#......#...#......#',
-    '#..####..####.###...#..#####',
+    '#..####..####D###...#..#####',
     '#..................x#c.....#',
     '####.#####.########.####.###',
     '#..c......#x..L..#....N....#',
@@ -494,9 +500,9 @@ const MAPS = [
     lasers: [[9,1,9,3],[14,5,14,7],[20,9,20,11],[10,13,10,15]], rows: [
     '############################',
     '#.P....#...c#....#..c.#...c#',
-    '#......#....#.I..#....#....#',
+    '#......#....#.IK.#....#....#',
     '#......#....#....#....#....#',
-    '#..........................#',
+    '#......D...................#',
     '#......#....#....#....#....#',
     '#......#....#....#....#....#',
     '#......#....#....#....#...c#',
@@ -516,9 +522,9 @@ const MAPS = [
     '#.P........................#',
     '#.#######..#######..######.#',
     '#.#....c#..#....c#..#...c#.#',
-    '#.#.....#..#..I..#..#....#.#',
+    '#.#.....#..#.KI..#..#....#.#',
     '#.#.....#..#.....#..#....#.#',
-    '#.###.###..###.###..##.###.#',
+    '#.###D###..###.###..##.###.#',
     '#.............R............#',
     '#..........................#',
     '#...........c.......c.....c#',
@@ -554,13 +560,13 @@ const MAPS = [
   { name: 'THE CORE', depth: 'CORE', theme: 'core', coins: 12, bots: 3, spd: 1.25, siren: true, blackout: true, rows: [
     '############################',
     '#.P...........c.......c....#',
-    '#...####............####...#',
+    '#.K.####............####...#',
     '#...####............####...#',
     '#...####.....S......####...#',
     '#................Z.........#',
     '#..........######..........#',
     '#.#####...c######....#####c#',
-    '#.#........######.c......#.#',
+    '#.#...D....######.c......#.#',
     '#.#c..#.R..######....#...#.#',
     '#.#####....######....#####.#',
     '#..........######..I...c...#',
@@ -594,6 +600,7 @@ let smokes = [], smokePellets = 1;
 let emps = [], empCharges = 1;
 let decoys = [], decoyCharges = 1;
 let magT = 0, magCharges = 1;
+let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -751,6 +758,7 @@ function loadMap(idx) {
   const rows = M.rows;
   grid = new Uint8Array(T.COLS * T.ROWS);
   coinList = []; emitters = []; propsXY = []; powerups = [];
+  doors = []; keycards = [];
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
     const ch = rows[y][x] || '#';
     const cx = (x + 0.5) * T.TILE, cy = (y + 0.5) * T.TILE;
@@ -761,6 +769,8 @@ function loadMap(idx) {
     if (ch === 'L') emitters.push({ x: cx, y: cy, r: rand(130, 175), col: TH.lamp, flick: rand(0, 9), kind: 'lamp', base: 1 });
     if (ch === 'N') emitters.push({ x: cx, y: cy, r: rand(95, 140), col: Math.random() < 0.5 ? TH.lamp : TH.accent, flick: rand(0, 9), kind: 'neon', base: 1 });
     if (ch === 'S') emitters.push({ x: cx, y: cy, r: 250, col: '#ffe9b0', flick: 0, kind: 'search', ang: rand(0, TAU), spin: rand(0.45, 0.8) * (Math.random() < 0.5 ? -1 : 1), rays: new Float32Array(17) });
+    if (ch === 'D') { grid[y * T.COLS + x] = 1; doors.push({ gx: x, gy: y, x: cx, y: cy, open: false }); }
+    if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
     if (ch === 'B') powerups.push({ x: cx, y: cy, kind: 'B', got: false, ph: rand(0, TAU) });
     if (ch === 'R' || ch === 'Z' || ch === 'I') powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
     if (ch === 'x') propsXY.push({ x: cx, y: cy, k: TH.props[irand(TH.props.length)], r: rand(0, TAU) });
@@ -788,6 +798,7 @@ function loadMap(idx) {
   emps = []; empCharges = T.EMP_N;
   decoys = []; decoyCharges = T.DECOY_N;
   magT = 0; magCharges = T.MAG_N;
+  hasKey = false; pickT = 0; pickOn = null;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -1029,6 +1040,29 @@ function update(dt) {
     if (u.kind === 'B') { batt = Math.min(T.BATT_MAX, batt + T.BATT_PICKUP); battDead = false; toast('CELL — TORCH TOPPED UP', 2.2); }
     hud();
   }
+  /* keycards */
+  for (const k of keycards) {
+    if (k.got) continue;
+    if (Math.hypot(k.x - player.x, k.y - player.y) > T.KEY_R) continue;
+    k.got = true; hasKey = true;
+    sfx.unlock(); burst(k.x, k.y, glowGoldS, 12, 150);
+    toast('KEYCARD — ONE DOOR, NO WAITING', 2.2);
+    hud();
+  }
+
+  /* doors: a card opens one instantly, otherwise you stand still and pick it */
+  const shut = nearestShutDoor();
+  if (!shut) { if (pickT !== 0) { pickT = 0; pickOn = null; hud(); } }
+  else if (hasKey) { hasKey = false; openDoor(shut); pickT = 0; pickOn = null; hud(); }
+  else {
+    if (pickOn !== shut) { pickOn = shut; pickT = 0; }
+    if (Math.hypot(player.vx, player.vy) > 6) pickT = 0;
+    else {
+      pickT += dt;
+      if (pickT >= T.PICK_T) { openDoor(shut); pickT = 0; pickOn = null; hud(); }
+    }
+  }
+
   /* magnet drags loose gold in */
   if (magT > 0) {
     magT = Math.max(0, magT - dt);
@@ -1743,6 +1777,8 @@ function render() {
   for (const k of smokes) drawSmoke(k);
   for (const m of emps) drawEmp(m);
   for (const d of decoys) drawDecoy(d);
+  for (const d of doors) drawDoor(d);
+  for (const k of keycards) if (!k.got) drawKeycard(k);
   /* the bots: the darkness hides them — your beam is the only truth */
   if (mode !== 'menu') { for (const b of bots) drawBotBody(b); }
   ctx.globalCompositeOperation = 'lighter';
@@ -1960,6 +1996,56 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawDoor(d) {
+  const T2 = T.TILE;
+  ctx.save();
+  if (d.open) {
+    /* a frame left standing open */
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#5c8f6e'; ctx.lineWidth = 2;
+    ctx.strokeRect(d.gx * T2 + 2, d.gy * T2 + 2, T2 - 4, T2 - 4);
+    ctx.setLineDash([3, 5]);
+    ctx.globalAlpha = 0.25;
+    ctx.beginPath(); ctx.moveTo(d.gx * T2 + 2, d.gy * T2 + T2 / 2); ctx.lineTo(d.gx * T2 + T2 - 2, d.gy * T2 + T2 / 2); ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    const g = ctx.createLinearGradient(d.gx * T2, d.gy * T2, d.gx * T2, d.gy * T2 + T2);
+    g.addColorStop(0, '#3b3346'); g.addColorStop(1, '#241f2e');
+    ctx.fillStyle = g;
+    ctx.fillRect(d.gx * T2 + 1, d.gy * T2 + 1, T2 - 2, T2 - 2);
+    ctx.strokeStyle = 'rgba(255,209,102,.5)'; ctx.lineWidth = 1.4;
+    ctx.strokeRect(d.gx * T2 + 3, d.gy * T2 + 3, T2 - 6, T2 - 6);
+    /* the lock */
+    ctx.fillStyle = '#ffd166';
+    ctx.globalAlpha = 0.75 + 0.25 * Math.sin(time * 2.4 + d.gx);
+    ctx.beginPath(); ctx.arc(d.x, d.y, 2.6, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(255,209,102,.35)'; ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(d.gx * T2 + 6, d.gy * T2 + i * T2 / 4);
+      ctx.lineTo(d.gx * T2 + T2 - 6, d.gy * T2 + i * T2 / 4);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawKeycard(k) {
+  const pulse = 0.5 + 0.5 * Math.sin(time * 2.8 + k.ph);
+  ctx.save(); ctx.translate(k.x, k.y);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.14 + 0.10 * pulse;
+  ctx.drawImage(glowGoldS, -16, -16, 32, 32);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.rotate(Math.sin(time * 1.1 + k.ph) * 0.2);
+  ctx.fillStyle = '#1a1626'; rr(ctx, -6, -4, 12, 8, 1.6); ctx.fill();
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.1; rr(ctx, -6, -4, 12, 8, 1.6); ctx.stroke();
+  ctx.fillStyle = '#ffd166'; ctx.globalAlpha = 0.6 + 0.4 * pulse;
+  ctx.fillRect(-3.5, -1.8, 4, 3.6);
+  ctx.restore();
 }
 
 function drawDecoy(d) {
@@ -2215,6 +2301,18 @@ function drawPlayer() {
   ctx.drawImage(glowWhiteS, 11.6, -4.2, 8.6, 8.6);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 
+  /* picking a lock: a ring that fills while you stand still */
+  if (pickT > 0) {
+    ctx.save(); ctx.rotate(-a);
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = 'rgba(255,209,102,.28)'; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.arc(0, 0, 17, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.arc(0, 0, 17, -Math.PI / 2, -Math.PI / 2 + TAU * (pickT / T.PICK_T)); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   /* magnet reach */
   if (magT > 0) {
     ctx.save(); ctx.rotate(-a);
@@ -2354,6 +2452,28 @@ const empSuppressed = (x, y) => emps.some(m => Math.hypot(m.x - x, m.y - y) < m.
 /* Gold does not need to be visible to be pulled. Eight seconds of dragging any
    loose coin within reach toward you - which is how you strip a black room
    without lighting it, at the price of every pickup being heard. */
+/* A door is a wall until it is not. grid is read live by isWall and the
+   raycasts, so clearing the cell opens it for movement and sight at once - the
+   baked map canvas is the only thing that needs telling. */
+function openDoor(d) {
+  if (d.open) return;
+  d.open = true;
+  grid[d.gy * T.COLS + d.gx] = 0;
+  renderMapCanvas();
+  makeNoise(d.x, d.y, T.DOOR_NOISE);
+  sfx.door();
+}
+
+function nearestShutDoor() {
+  let best = null, bd = T.DOOR_R;
+  for (const d of doors) {
+    if (d.open) continue;
+    const dist = Math.hypot(d.x - player.x, d.y - player.y);
+    if (dist < bd) { bd = dist; best = d; }
+  }
+  return best;
+}
+
 function runMagnet() {
   if (mode !== 'playing' || magCharges <= 0) { sfx.ui(); return false; }
   magCharges--;
@@ -2572,6 +2692,9 @@ function hud() {
     bw.classList.toggle('dead', battDead);
     bw.classList.toggle('off', !beamOn);
   }
+
+  const kr = $('keyRow');
+  if (kr) kr.textContent = (mode === 'playing' && hasKey) ? '⬛ KEYCARD' : '';
 
   /* flares in hand */
   const fr = $('flareRow');
@@ -2850,7 +2973,13 @@ window.__fp = {
   runMagnet() { return runMagnet(); },
   get magCharges() { return magCharges; },
   get magT() { return +magT.toFixed(2); },
-  setMag(n) { magCharges = n; hud(); }
+  setMag(n) { magCharges = n; hud(); },
+  get doorsN() { return doors.length; },
+  get doorsShut() { return doors.filter(d => !d.open).length; },
+  get hasKey() { return hasKey; },
+  get pickT() { return +pickT.toFixed(2); },
+  doorPoints() { return doors.map(d => ({ x: d.x, y: d.y, open: d.open })); },
+  keyPoints() { return keycards.filter(k => !k.got).map(k => ({ x: k.x, y: k.y })); }
 };
 </script>
 </body>

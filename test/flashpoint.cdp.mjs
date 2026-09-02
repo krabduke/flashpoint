@@ -81,6 +81,8 @@ await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2000);
 await eq('autostart -> playing', '__fp.mode', 'playing');
 await eq('map 0 loaded', '__fp.mapIdx', 0);
+await evl('for (const b of bots) { b.face = Math.atan2(b.y - player.y, b.x - player.x); b.state = "patrol"; }');
+await sleep(120);
 await eq('bots on patrol', '__fp.botState[0]', 'patrol');
 
 /* mouse aim: CDP's raw mouseMoved does not produce pointermove for window listeners in
@@ -355,6 +357,75 @@ ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
+
+/* ---- doors: a keycard is fast, a lockpick is exposed ---- */
+const standAtDoor = `(() => {
+  const d = doors.find(z => !z.open);
+  const spots = [[0,-32,'up'],[0,32,'down'],[-32,0,'left'],[32,0,'right']];
+  const roomy = spots.filter(([ox, oy]) =>
+    !isWall(d.x + ox, d.y + oy) && !isWall(d.x + ox * 3, d.y + oy * 3));
+  const sp = roomy[0] || spots.find(([ox, oy]) => !isWall(d.x + ox, d.y + oy));
+  player.x = d.x + sp[0]; player.y = d.y + sp[1];
+  player.vx = 0; player.vy = 0;
+  keys.left = keys.right = keys.up = keys.down = false;
+  return sp[2];
+})()`;
+
+
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 3; loadMap(3); hud();');
+await sleep(300);
+ok('floors carry locked doors', (await evl('__fp.doorsN')) > 0, `n=${await evl('__fp.doorsN')}`);
+ok('they start shut', (await evl('__fp.doorsShut')) === (await evl('__fp.doorsN')));
+ok('a shut door is solid', await evl(`(() => { const d = __fp.doorPoints()[0]; return isWall(d.x, d.y); })()`));
+
+/* standing still beside it picks the lock */
+const picked = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999;
+  const d = doors.find(z => !z.open);
+  ${standAtDoor};
+  const shutBefore = __fp.doorsShut;
+  let sawProgress = false;
+  for (let i = 0; i < 140; i++) { update(0.016); if (__fp.pickT > 0.2) sawProgress = true; }
+  return JSON.stringify({ shutBefore, shutAfter: __fp.doorsShut, sawProgress, solid: isWall(d.x, d.y) });
+})()`);
+const pk = JSON.parse(picked);
+ok('standing still picks the lock', pk.shutAfter === pk.shutBefore - 1, picked);
+ok('the pick shows progress while it runs', pk.sawProgress === true, picked);
+ok('an opened door stops being solid', pk.solid === false, picked);
+
+/* walking away resets it - you have to stand there */
+const interrupted = await evl(`(() => {
+  mapIdx = 3; loadMap(3); hud(); invuln = 999;
+  const away = ${standAtDoor};
+  for (let i = 0; i < 30; i++) update(0.016);
+  const mid = __fp.pickT;
+  keys[away] = true;
+  for (let i = 0; i < 20; i++) update(0.016);
+  const moved = __fp.pickT;
+  keys[away] = false;
+  return JSON.stringify({ away, mid: +mid.toFixed(2), moved: +moved.toFixed(2) });
+})()`);
+const itr = JSON.parse(interrupted);
+ok('moving interrupts the pick', itr.mid > 0 && itr.moved === 0, interrupted);
+
+/* a keycard opens one immediately */
+const carded = await evl(`(() => {
+  mapIdx = 3; loadMap(3); hud(); invuln = 999;
+  const k = __fp.keyPoints()[0];
+  player.x = k.x; player.y = k.y;
+  update(0.016);
+  const gotCard = __fp.hasKey;
+  const shutBefore = __fp.doorsShut;
+  ${standAtDoor};
+  update(0.016);
+  return JSON.stringify({ gotCard, shutBefore, shutAfter: __fp.doorsShut, keyLeft: __fp.hasKey });
+})()`);
+const cd = JSON.parse(carded);
+ok('a keycard is picked up', cd.gotCard === true, carded);
+ok('a keycard opens a door on contact', cd.shutAfter === cd.shutBefore - 1, carded);
+ok('and is spent doing it', cd.keyLeft === false, carded);
 
 /* ---- magnet: strip a dark room without lighting it ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

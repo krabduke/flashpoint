@@ -58,6 +58,11 @@ either. They see what their light sees, and nothing else.
   within reach toward you, lit or not, which is how you strip a black room
   without spending torch on it. Every coin it lands still fires the pickup noise,
   so a big haul is a loud one.
+- **Locked doors take a card or a wait** — four floors seal a corridor behind a
+  lock. A keycard found elsewhere opens one the moment you reach it. Without one
+  you pick it, which takes a second and a half of standing perfectly still in a
+  doorway, and moving cancels it. There is always a way through, so no floor can
+  strand you.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
