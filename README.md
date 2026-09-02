@@ -68,6 +68,11 @@ either. They see what their light sees, and nothing else.
   nine floors, one on the House and four in the CORE, and what you carry goes
   down the stairs with you. A flare you skipped on floor two is a flare you do
   not have when the lights go out.
+- **Cameras never move, so they have a safe side** — the secured floors mount
+  fixed lenses on the walls, each looking down its longest clear line. Unlike a
+  sweeping searchlight there is no waiting for it to pass: you learn the angle
+  and take the other route. They are on the same circuit as everything else, so
+  smoke breaks their line and an EMP puts them out.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
@@ -93,7 +98,7 @@ either. They see what their light sees, and nothing else.
 | 2 | The Warehouse | swaying hang-lamps, dust shafts | 1 fast patroller |
 | 3 | Neon Heights | rain, flickering neon pools | 2 bots, crossing loops |
 | 4 | The Abandoned | near-dark, random 4s blackouts | 2 bots in the black |
-| 5 | The Museum | marble slabs, golden calm | 2 bots + **sweeping searchlights** — stand in one and the meter fills |
+| 5 | The Museum | marble slabs, golden calm | 2 bots + **sweeping searchlights** + a fixed camera |
 | 6 | The Server Farm | cold raised panels, LED racks | 2 bots + **pulsing laser gates** — a live beam spikes detection and screams your position |
 | 7 | The Bank Vault | brass-lit vault rooms | 3 bots + **siren sweeps** — periodically every drone wakes and its cone grows |
 | 8 | The Fog Docks | rain, amber dock lamps | 3 bots + **fog banks** — your beam strangles to a candle for six seconds |

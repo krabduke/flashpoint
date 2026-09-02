@@ -358,6 +358,61 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- fixed cameras: a cone that never moves, so it has a safe side ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 6; loadMap(6); hud();');
+await sleep(300);
+ok('secured floors carry cameras', (await evl('__fp.camN')) > 0, `n=${await evl('__fp.camN')}`);
+
+const still = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const a0 = __fp.camPoints()[0].ang;
+  for (let i = 0; i < 60; i++) update(0.016);
+  return JSON.stringify({ a0, a1: __fp.camPoints()[0].ang, spin: __fp.camPoints()[0].spin });
+})()`);
+const st = JSON.parse(still);
+ok('a camera does not sweep', st.a0 === st.a1 && st.spin === 0, still);
+
+ok('a camera looks down open floor, not into a wall', await evl(`(() => {
+  const c = __fp.camPoints()[0];
+  let d = 0;
+  while (d < c.r && !isWall(c.x + Math.cos(c.ang) * d, c.y + Math.sin(c.ang) * d)) d += 8;
+  return d > 60;
+})()`), await evl(`(() => { const c = __fp.camPoints()[0];
+  let d = 0; while (d < c.r && !isWall(c.x + Math.cos(c.ang) * d, c.y + Math.sin(c.ang) * d)) d += 8;
+  return 'clear=' + d; })()`));
+
+/* it raises the alarm through the searchlight path it shares */
+const camAlarm = await evl(`(() => {
+  mode = 'playing'; mapIdx = 6; loadMap(6); hud();
+  emps.length = 0; smokes.length = 0; searchLit = false;
+  for (const b of bots) { b.state = 'patrol'; b.alerted = false; b.path = []; }
+  const c = emitters.find(e => e.cam);
+  /* stand in its beam */
+  let d = 40;
+  player.x = c.x + Math.cos(c.ang) * d; player.y = c.y + Math.sin(c.ang) * d;
+  for (const b of bots) b.face = Math.atan2(b.y - player.y, b.x - player.x);
+  invuln = 0;
+  updateMeter(0.016);
+  const lit = searchLit;
+  /* and smoke should hide you from it, same as any searchlight */
+  searchLit = false;
+  smokes.push({ x: player.x, y: player.y, r: T.SMOKE_R, life: T.SMOKE_T, ph: 0 });
+  updateMeter(0.016);
+  return JSON.stringify({ lit, litThroughSmoke: searchLit });
+})()`);
+const ca = JSON.parse(camAlarm);
+ok('a camera raises the alarm', ca.lit === true, camAlarm);
+ok('smoke hides you from a camera too', ca.litThroughSmoke === false, camAlarm);
+
+ok('an EMP kills a camera', await evl(`(() => {
+  smokes.length = 0; searchLit = false;
+  __fp.setEmp(1); __fp.fireEmp(); update(0.016);
+  const c = emitters.find(e => e.cam);
+  return c.dead === true;
+})()`));
+
 /* ---- the kit is a run-long resource, found not granted ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

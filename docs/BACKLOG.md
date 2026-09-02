@@ -27,7 +27,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 
 ## B · Map elements
 
-- [ ] B1 `C` fixed camera — searchlight with `spin: 0`
+- [x] B1 `C` fixed camera — searchlight with `spin: 0`, aimed down its longest clear line
 - [ ] B2 `V` vent — player passes, drones cannot path through
 - [ ] B3 `G` glass — blocks movement, not sight
 - [x] B4 `D` locked door + `K` key — done with A8; a lockpick with nothing to pick is half a feature
@@ -117,3 +117,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · A8+B4 · doors, keycards, lock picking on 4 floors, 10 assertions; de-flaked the patrol test
 - 2026-09-02 · A9 · item bar (7 gadgets, tappable, clear of thumbsticks), 7 assertions; toMenu now refreshes the HUD
 - 2026-09-02 · A10 · 20 pickups across 9 floors, kit carries between floors with caps, 6 assertions
+- 2026-09-02 · B1 · 6 cameras on 4 secured floors, wall-mounted, auto-aimed, 6 assertions
