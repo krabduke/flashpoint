@@ -356,6 +356,37 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- coin toss: a distraction that costs you the walk back ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('an empty pocket cannot be thrown', (await evl('__fp.tossCoin()')) === false);
+await evl(`(() => { const p = __fp.coinPoints()[0]; __fp.teleport(p.x, p.y); })()`);
+await sleep(300);
+const heldBefore = await evl('__fp.coins');
+await evl('score = 1000');
+const scoreBefore = await evl('__fp.score');
+const looseBefore = await evl('__fp.loose');
+await evl('noise.length = 0');
+ok('picking one up arms the throw', heldBefore > 0, `coins=${heldBefore}`);
+ok('a held coin throws', (await evl('__fp.tossCoin()')) === true);
+await sleep(250);
+ok('throwing spends the coin', (await evl('__fp.coins')) === heldBefore - 1, `${heldBefore} -> ${await evl('__fp.coins')}`);
+ok('and refunds its score', (await evl('__fp.score')) === scoreBefore - (await evl('__fp.coinValue()')), `${scoreBefore} -> ${await evl('__fp.score')}`);
+ok('the coin is back on the floor', (await evl('__fp.loose')) === looseBefore + 1, `${looseBefore} -> ${await evl('__fp.loose')}`);
+ok('it lands away from you', await evl(`(() => {
+  const far = coinList.filter(c => !c.got).map(c => Math.hypot(c.x - player.x, c.y - player.y));
+  return Math.max(...far) > 40;
+})()`));
+ok('it clatters loud enough to draw a drone', (await evl('noise.length')) > 0, `noise=${await evl('noise.length')}`);
+ok('a thrown coin is already known to you', await evl(`(() => {
+  const c = coinList[coinList.length - 1];
+  return c.seen === true;
+})()`));
+ok('the floor still wants every coin', await evl(`(() => {
+  __fp.clearCoins();
+  return exitOpen === true;
+})()`));
+
 /* ---- flares: buy light at a distance, pay in attention ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

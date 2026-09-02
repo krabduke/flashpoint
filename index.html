@@ -344,6 +344,7 @@ const T = {
   BATT_MAX: 100, BATT_DRAIN: 2.2, BATT_RECOVER: 3.4, BATT_WAKE: 15, BATT_PICKUP: 40,
   /* flares: buy light at a distance, and pay for it in attention */
   FLARE_N: 2, FLARE_T: 11, FLARE_FADE: 2.5, FLARE_R: 155, FLARE_THROW: 230, FLARE_NOISE: 480,
+  TOSS_THROW: 300, TOSS_NOISE: 520,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -974,7 +975,7 @@ function update(dt) {
     if (c.got) continue;
     if (Math.hypot(c.x - player.x, c.y - player.y) < 20) {
       c.got = true; coins++;
-      score += Math.round(T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
+      score += coinValue();
       sfx.pickup(); burst(c.x, c.y, glowGoldS, 12, 150);
       makeNoise(c.x, c.y, T.NOISE_PICKUP);
       if (coins >= coinsTotal) { exitOpen = true; unlockFlash = 1; sfx.unlock(); }
@@ -2183,6 +2184,30 @@ let toastTimer = 0;
 /* A flare lands where it can: along the aim until a wall stops it. Because it is
    an emitter, coins inside it light up through code that already exists - and
    unlike mains lamps it keeps burning through a blackout. */
+const coinValue = () => Math.round(T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
+
+/* Throw a coin you are carrying. It clatters where it lands and drones walk to
+   noise - but the floor still wants every coin, so you have just moved gold you
+   need toward something that is coming to look at it. */
+function tossCoin() {
+  if (mode !== 'playing' || coins <= 0) { sfx.ui(); return false; }
+  let tx = player.x, ty = player.y;
+  const cx = Math.cos(player.aim), cy = Math.sin(player.aim);
+  for (let d = 8; d <= T.TOSS_THROW; d += 8) {
+    const nx = player.x + cx * d, ny = player.y + cy * d;
+    if (isWall(nx, ny)) break;
+    tx = nx; ty = ny;
+  }
+  coins--;
+  score = Math.max(0, score - coinValue());
+  coinList.push({ x: tx, y: ty, ph: rand(0, TAU), got: false, seen: true });
+  makeNoise(tx, ty, T.TOSS_NOISE);
+  sfx.pickup(); burst(tx, ty, glowGoldS, 10, 130);
+  exitOpen = coins >= coinsTotal;
+  hud();
+  return true;
+}
+
 function throwFlare() {
   if (mode !== 'playing' || flares <= 0) { sfx.ui(); return false; }
   flares--;
@@ -2390,6 +2415,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'r' || e.key === 'R') && (mode === 'playing' || mode === 'caught')) startGame();
   if ((e.key === 'f' || e.key === 'F') && mode === 'playing' && !battDead) { beamOn = !beamOn; sfx.ui(); hud(); }
   if ((e.key === 'q' || e.key === 'Q') && mode === 'playing') { throwFlare(); }
+  if ((e.key === 'e' || e.key === 'E') && mode === 'playing') { tossCoin(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if ((e.key === 'p' || e.key === 'P')) togglePause();
 });
@@ -2585,7 +2611,10 @@ window.__fp = {
   get flaresLit() { return emitters.filter(e => e.kind === 'flare').length; },
   throwFlare() { return throwFlare(); },
   setFlares(n) { flares = n; hud(); },
-  flarePoints() { return emitters.filter(e => e.kind === 'flare').map(e => ({ x: e.x, y: e.y, life: +e.life.toFixed(2) })); }
+  flarePoints() { return emitters.filter(e => e.kind === 'flare').map(e => ({ x: e.x, y: e.y, life: +e.life.toFixed(2) })); },
+  tossCoin() { return tossCoin(); },
+  coinValue() { return coinValue(); },
+  get loose() { return coinList.filter(c => !c.got).length; }
 };
 </script>
 </body>

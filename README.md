@@ -39,6 +39,10 @@ either. They see what their light sees, and nothing else.
   it, and it keeps burning through a blackout when every mains lamp is dead. It
   also lands loudly, and drones walk toward light. You are buying sight with
   attention.
+- **Throw a coin to be somewhere else** — `E` lobs one you are carrying. It
+  clatters where it lands and drones walk to noise. The floor still wants every
+  coin, though, so you have moved gold you need toward the thing now coming to
+  look at it.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
@@ -84,6 +88,7 @@ add bots and speed, and your best depth per device is kept.
 | Ping of doubt | — | just stop moving |
 | Torch on/off | `F` | HUD buttons |
 | Throw a flare | `Q` | HUD buttons |
+| Throw a coin | `E` | HUD buttons |
 | Mute / pause | `M` / `P` | HUD buttons |
 | Restart | `R`, or `Space` on the card | tap the button |
 
