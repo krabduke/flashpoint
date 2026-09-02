@@ -374,6 +374,40 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- hearing sharpens with depth ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const hearing = await evl(`(() => {
+  mode = 'playing'; invuln = 999; endless = false;
+  const at = (floor, lp) => { loop = lp; mapIdx = floor; loadMap(floor); hud(); return __fp.hearReachBare(); };
+  const f1 = at(0, 0), f6 = at(5, 0), f12 = at(11, 0), looped = at(0, 2);
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const b = bots[0];
+  b.wary = 0; const calm = __fp.hearReach(0);
+  b.wary = T.WARY_T; const jumpy = __fp.hearReach(0);
+  b.wary = 0;
+  return JSON.stringify({ f1, f6, f12, looped, calm, jumpy });
+})()`);
+const hr = JSON.parse(hearing);
+ok('deeper floors hear further', hr.f12 > hr.f6 && hr.f6 > hr.f1, hearing);
+ok('a loop of the building sharpens them', hr.looped > hr.f1, hearing);
+ok('a wary drone listens harder', hr.jumpy > hr.calm, hearing);
+
+ok('a noise just inside reach is heard, just outside is not', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const b = bots[0];
+  b.wary = 0; b.state = 'patrol';
+  const reach = __fp.hearReach(0);
+  const probe = (extra) => {
+    noise.length = 0;
+    /* a zero-radius noise, so the drone's own reach is the only thing being tested */
+    noise.push({ x: b.x + reach + extra, y: b.y, r: 0, t: 0.3 });
+    return !!nearestNoise(b);
+  };
+  return probe(-20) === true && probe(40) === false;
+})()`));
+
 /* ---- radio cooldown: one call, then wait ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

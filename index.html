@@ -464,6 +464,8 @@ const T = {
   LEAD_T: 0.55, REPATH: 0.22,
   WARY_T: 7, WARY_SWEEP: 2.1, WARY_RANGE: 1.12,
   RADIO_COOL: 4.5,
+  /* how much of HEAR_R a drone adds to a noise's own radius */
+  HEAR_BASE: 0.35, HEAR_FLOOR: 0.02, HEAR_LOOP: 0.05, WARY_HEAR: 1.2,
   PLATE_R: 17, PLATE_NOISE: 660,
   CRATE_R: 36, CRATE_T: 0.9, CRATE_NOISE: 540,
   MIRROR_LOSS: 0.82,
@@ -1886,9 +1888,17 @@ function faceToward(b, x, y, dt) {
   const turn = T.BOT_TURN * (b.state === 'chase' ? 1.8 : 1) * dt;
   b.face += clamp(d, -turn, turn);
 }
+/* Deeper floors are staffed by better ears, a loop of the building sharpens them
+   further, and a drone that has just lost you listens harder than one that has
+   not. Applied to how far past a noise's own radius a drone can still catch it. */
+const hearR = b => T.HEAR_R
+  * (T.HEAR_BASE + mapIdx * T.HEAR_FLOOR + loop * T.HEAR_LOOP)
+  * ((b && b.wary > 0) ? T.WARY_HEAR : 1);
+
 function nearestNoise(b) {
   let best = null, bd = 1e9;
-  for (const n of noise) { const d = Math.hypot(n.x - b.x, n.y - b.y); if (d < n.r + T.HEAR_R * 0.35 && d < bd) { bd = d; best = n; } }
+  const reach = hearR(b);
+  for (const n of noise) { const d = Math.hypot(n.x - b.x, n.y - b.y); if (d < n.r + reach && d < bd) { bd = d; best = n; } }
   return best;
 }
 /* Two points along the beam, pulled back to whatever the rays actually hit, so a
@@ -3811,6 +3821,8 @@ window.__fp = {
   get botPeek() { return bots.map(b => +b.peekT.toFixed(2)); },
   get botWary() { return bots.map(b => +(b.wary || 0).toFixed(2)); },
   get botRadioT() { return bots.map(b => +(b.radioT || 0).toFixed(2)); },
+  hearReach(i) { return Math.round(hearR(bots[i])); },
+  hearReachBare() { return Math.round(hearR(null)); },
   get botWp() { return bots.map(b => b.wp); },
   giveUpBot(i) { giveUp(bots[i]); return bots[i].wp; },
   botRouteLen(i) { return (bots[i].route || []).length; },

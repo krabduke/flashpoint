@@ -133,6 +133,10 @@ either. They see what their light sees, and nothing else.
   you distracted it, and for the next few seconds it sweeps wider and sees a
   little further. The safest moment to move is not the one right after it turns
   away.
+- **Better ears further down** — a drone on the House catches noise 165px past
+  its own radius; one in the Penthouse catches it at 268px, and a loop of the
+  building sharpens them again. A drone that has just lost you listens twenty
+  percent harder than one that has not.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
