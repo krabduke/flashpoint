@@ -247,6 +247,25 @@
     color:#cfc6ee;font-variant-numeric:tabular-nums;order:1}
   #statRow div.hero dd{color:#ffe9a8}
   @media (max-width:430px){#statRow dd{font-size:13px}}
+  #achGrid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(26px,1fr));gap:4px;margin-top:10px;
+  }
+  #achGrid:empty{display:none}
+  #achGrid span{
+    aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    border-radius:6px;border:1px solid rgba(120,110,170,.22);
+    background:rgba(14,11,28,.6);
+    font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:#3a3450;
+    cursor:default;
+  }
+  #achGrid span.got{
+    border-color:rgba(255,209,102,.6);color:#ffe9a8;
+    background:linear-gradient(180deg,rgba(58,42,16,.6),rgba(24,16,42,.6));
+    box-shadow:0 0 10px rgba(255,190,80,.18);
+  }
+  #achCount{font-family:'Orbitron',monospace;font-size:8.5px;letter-spacing:.24em;
+    color:#5e5679;text-align:center;margin-top:6px}
+  #achCount:empty{display:none}
   .floor-caption{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.26em;text-transform:uppercase;
     color:#8d84b3;text-align:center;margin-top:10px;min-height:12px}
   @media (max-width:430px){#floorGrid{gap:4px}.floor{font-size:11px;border-radius:6px}}
@@ -329,12 +348,14 @@
       <div id="floorGrid" role="group" aria-label="Floor select"></div>
       <p id="floorCaption" class="floor-caption">&nbsp;</p>
       <dl id="statRow"></dl>
+      <div id="achGrid"></div>
     </div>
     <div class="namerow">
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
     </div>
     <button class="btn" id="startBtn">BREAK IN</button>
     <button class="btn ghost" id="dailyBtn" type="button">DAILY RUN — OFF</button>
+    <p id="achCount"></p>
     <p id="dailySeed"></p>
     <p class="hint"><span class="key">WASD</span> move · <span class="key">MOUSE</span> aim beam · <span class="key">SHIFT</span> sprint (loud)</p>
     <p class="hint" id="touchHint" style="display:none">left thumb move (tilt far = sprint) · right thumb aims the beam</p>
@@ -749,6 +770,34 @@ let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
 let waterAt = new Uint8Array(T.COLS * T.ROWS);
 let alertLvl = 0, alertCool = 0;
+/* Twelve, each one about a system this game actually has rather than a
+   participation prize. Per-floor flags are what make the negative ones
+   ("without being seen") answerable at the point you take the stairs. */
+const ACHS = [
+  ['first',   'FIRST LIGHT',        'Clear a floor'],
+  ['deep',    'DEEP',               'Reach floor 9'],
+  ['escape',  'ESCAPED',            'Clear the whole campaign'],
+  ['clean',   'CLEAN SWEEP',        'Clear a floor without being detected'],
+  ['unlit',   'DARK ROOM',          'Take a coin with your torch off'],
+  ['pick',    'LOCKSMITH',          'Pick a lock without a keycard'],
+  ['glass',   'LOOKING GLASS',      'Find a coin by mirror light'],
+  ['quiet',   'QUIET PROFESSIONAL', 'Clear a floor without sprinting'],
+  ['unseen',  'UNNOTICED',          'Clear a floor without your light being spotted'],
+  ['emp',     'LIGHTS OUT',         'Clear a floor after firing an EMP'],
+  ['magpie',  'MAGPIE',             'Leave a floor with every coin on it'],
+  ['perfect', 'UNTOUCHED',          'Win with the alert level still at zero']
+];
+let achs = (() => { try { return JSON.parse(localStorage.getItem('flashpoint.achs') || '{}') || {}; } catch (e) { return {}; } })();
+let fSeen = false, fSprint = false, fNoticed = false, fEmp = false;
+
+function unlock(id) {
+  if (achs[id]) return;
+  achs[id] = 1;
+  try { localStorage.setItem('flashpoint.achs', JSON.stringify(achs)); } catch (e) {}
+  const a = ACHS.find(z => z[0] === id);
+  if (a) toast('UNLOCKED — ' + a[1], 2.6);
+  renderAchs();
+}
 let plates = [];
 let crates = [], crateT = 0, crateOn = null;
 let mirrors = [];
@@ -998,6 +1047,7 @@ function loadMap(idx) {
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
   puLens = 0; puShoe = 0; puGhost = 0;
   batt = T.BATT_MAX; beamOn = true; battDead = false;
+  fSeen = false; fSprint = false; fNoticed = false; fEmp = false;
   /* live objects clear with the floor; what you are carrying does not */
   smokes = []; emps = []; decoys = []; magT = 0;
   hasKey = false; pickT = 0; pickOn = null;
@@ -1240,6 +1290,7 @@ function update(dt) {
     }
   } else if (sprinting && spd > 0) {
     stepT -= dt;
+    fSprint = true;
     if (stepT <= 0) { stepT = T.NOISE_SPRINT; if (puShoe <= 0) makeNoise(player.x, player.y, T.STEP_R * haulNoise()); sfx.step(); }
   } else stepT = 0;
 
@@ -1282,6 +1333,9 @@ function update(dt) {
   for (const c of coinList) {
     if (c.got) continue;
     if (Math.hypot(c.x - player.x, c.y - player.y) < 20) {
+      if (!beamOn) unlock('unlit');
+      if (mirrorBeam && inFan(c.x, c.y, mirrorBeam.x, mirrorBeam.y, mirrorBeam.ang, T.FL_HALF, mirrorBeam.range, mirrorBeam.hits, T.FL_RAYS)
+          && !inFan(c.x, c.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS)) unlock('glass');
       c.got = true; coins++;
       score += coinValue();
       sfx.pickup(); burst(c.x, c.y, glowGoldS, 12, 150);
@@ -1350,7 +1404,7 @@ function update(dt) {
     if (Math.hypot(player.vx, player.vy) > 6) pickT = 0;
     else {
       pickT += dt;
-      if (pickT >= T.PICK_T) { openDoor(shut); pickT = 0; pickOn = null; hud(); }
+      if (pickT >= T.PICK_T) { openDoor(shut); unlock('pick'); pickT = 0; pickOn = null; hud(); }
     }
   }
 
@@ -1557,6 +1611,7 @@ function updateBots(dt) {
           b.glow = 0;
           b.state = 'invest'; b.stateT = 0;
           retarget(b, lit.x, lit.y);
+          fNoticed = true;
           if (b.eyeGlint <= 0) { b.eyeGlint = 1; sfx.notice(); }
         }
       } else b.glow = Math.max(0, b.glow - dt * T.BEAM_FADE);
@@ -1726,6 +1781,13 @@ function nextMap() {
   const last = mapIdx >= MAPS.length - 1;
   score += T.CLEAR_BONUS;
   sfx.door();
+  unlock('first');
+  if (!fSeen) unlock('clean');
+  if (!fSprint) unlock('quiet');
+  if (!fNoticed) unlock('unseen');
+  if (fEmp) unlock('emp');
+  if (coins >= coinsTotal) unlock('magpie');
+  if (mapIdx >= 8) unlock('deep');
   stats.floors++; saveStats();
   if (!endless && !completedLevels.includes(mapIdx)) {
     completedLevels.push(mapIdx);
@@ -1754,6 +1816,8 @@ function win() {
   renderRecords($('recEsc'));
   $('escaped').classList.remove('hidden');
   setRain(false);
+  unlock('escape');
+  if (alertLvl === 0) unlock('perfect');
   endRun(true, totalRunCoins);
   /* mark all levels completed on full win */
   completedLevels = MAPS.map((_, i) => i);
@@ -2940,6 +3004,7 @@ let toastTimer = 0;
 /* One notch per incident, with a cooldown so a single scare cannot stack, and
    it never resets until the run does. */
 function bumpAlert() {
+  fSeen = true;
   if (alertCool > 0 || alertLvl >= T.ALERT_MAX) return;
   alertLvl++; alertCool = T.ALERT_COOL;
   toast('ALERT LEVEL ' + alertLvl + ' — THEY ARE FASTER NOW', 2.2);
@@ -3064,7 +3129,7 @@ function dropDecoy() {
 
 function fireEmp() {
   if (mode !== 'playing' || empCharges <= 0) { sfx.ui(); return false; }
-  empCharges--;
+  empCharges--; fEmp = true;
   emps.push({ x: player.x, y: player.y, r: T.EMP_R, life: T.EMP_T });
   makeNoise(player.x, player.y, 300);
   sfx.emp();
@@ -3140,6 +3205,16 @@ const PADLOCK = '<svg class="padlock" viewBox="0 0 24 24" aria-hidden="true"><re
 function nextFloorIdx() {
   for (let i = 0; i < MAPS.length; i++) if (!completedLevels.includes(i)) return i;
   return MAPS.length - 1;
+}
+
+function renderAchs() {
+  const el = $('achGrid'), c = $('achCount');
+  if (!el) return;
+  const got = ACHS.filter(a => achs[a[0]]).length;
+  el.innerHTML = ACHS.map(a =>
+    '<span class="' + (achs[a[0]] ? 'got' : '') + '" title="' + a[1] + ' — ' + a[2] + '">'
+    + (achs[a[0]] ? a[1].slice(0, 2) : '·') + '</span>').join('');
+  if (c) c.textContent = got + ' / ' + ACHS.length + ' UNLOCKED';
 }
 
 function renderDaily() {
@@ -3251,6 +3326,7 @@ function toMenu() {
   renderFloors();
   renderStats();
   renderDaily();
+  renderAchs();
 }
 function togglePause() {
   if (mode !== 'playing') return;
@@ -3461,6 +3537,7 @@ hud();
 renderFloors();
 renderStats();
 renderDaily();
+renderAchs();
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
 let last = performance.now();
@@ -3487,6 +3564,12 @@ window.__fp = {
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
   get haulNoise() { return +haulNoise().toFixed(3); },
   get alertLvl() { return alertLvl; },
+  get achs() { return JSON.parse(JSON.stringify(achs)); },
+  get achCount() { return ACHS.filter(a => achs[a[0]]).length; },
+  get achTotal() { return ACHS.length; },
+  resetAchs() { achs = {}; try { localStorage.setItem('flashpoint.achs', '{}'); } catch (e) {} renderAchs(); },
+  unlock(id) { unlock(id); return !!achs[id]; },
+  get floorFlags() { return { seen: fSeen, sprint: fSprint, noticed: fNoticed, emp: fEmp }; },
   get dailyOn() { return dailyOn; },
   get dailySeed() { return todaySeed(); },
   setDaily(v) { dailyOn = !!v; if (dailyOn) seedDaily(); renderStats(); hud(); return dailyOn; },

@@ -171,11 +171,19 @@ await evl('mapIdx = 5; loadMap(5);');
 await sleep(300);
 await eq('server has 4 laser gates', '__fp.lasersN', 4);
 const lm = JSON.parse(await evl('JSON.stringify(__fp.laserMid)'));
-await evl('invuln = 0; meter = 0;');
-await evl(`__fp.teleport(${lm.x}, ${lm.y})`);
-await sleep(400);
-const lz = await evl('__fp.meter');
-ok('laser zap spikes meter', lz > 0.3, 'meter=' + lz?.toFixed?.(2));
+const lz = await evl(`(() => {
+  mode = 'playing'; invuln = 0; meter = 0;
+  __fp.teleport(${lm.x}, ${lm.y});
+  let peak = 0;
+  for (let i = 0; i < 200; i++) {
+    invuln = 0;
+    update(0.016);
+    if (meter > peak) peak = meter;
+    if (mode !== 'playing') break;
+  }
+  return peak;
+})()`);
+ok('laser zap spikes meter', lz > 0.3, 'peak=' + lz?.toFixed?.(2));
 
 /* bank siren sweep */
 await evl('mapIdx = 6; loadMap(6);');
@@ -357,6 +365,61 @@ ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
+
+/* ---- achievements ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('__fp.resetAchs()');
+ok('there are twelve achievements', (await evl('__fp.achTotal')) === 12, `n=${await evl('__fp.achTotal')}`);
+ok('a fresh device has none', (await evl('__fp.achCount')) === 0);
+
+ok('clearing a floor unlocks the first', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+  for (let i = 0; i < 5; i++) update(0.016);
+  return __fp.achs.first === 1;
+})()`));
+
+/* the negative ones are the interesting half: they must NOT fire when the thing happened */
+const negs = await evl(`(() => {
+  __fp.resetAchs();
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  /* sprint, get seen, get noticed - none of the clean awards should land */
+  keys.sprint = true; keys.right = true;
+  for (let i = 0; i < 40; i++) update(0.016);
+  keys.sprint = false; keys.right = false;
+  __fp.bumpAlert();
+  const flags = __fp.floorFlags;
+  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+  for (let i = 0; i < 5; i++) update(0.016);
+  return JSON.stringify({ flags, a: __fp.achs });
+})()`);
+const ng = JSON.parse(negs);
+ok('sprinting is recorded', ng.flags.sprint === true, negs);
+ok('being detected is recorded', ng.flags.seen === true, negs);
+ok('a sloppy floor awards no clean sweep', !ng.a.clean, negs);
+ok('and no quiet professional', !ng.a.quiet, negs);
+ok('but it still counts as a floor cleared', ng.a.first === 1, negs);
+
+ok('a clean floor does award them', await evl(`(() => {
+  __fp.resetAchs();
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+  for (let i = 0; i < 5; i++) update(0.016);
+  const a = __fp.achs;
+  return !!(a.clean && a.quiet && a.unseen && a.magpie);
+})()`));
+
+ok('they persist and show on the menu', await evl(`(() => {
+  toMenu();
+  const cells = document.querySelectorAll('#achGrid span');
+  const got = document.querySelectorAll('#achGrid span.got');
+  return cells.length === 12 && got.length === __fp.achCount && got.length > 0
+    && document.getElementById('achCount').textContent.includes('/ 12');
+})()`));
 
 /* ---- daily run: the same building for everyone, today ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

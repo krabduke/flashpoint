@@ -217,6 +217,14 @@ It also asserts pixels where a predicate is not enough: that a lit coin is
 actually brighter than the floor beside it, that a remembered one stays findable,
 and that a filling meter really does turn the screen edge red.
 
+## Twelve things worth doing
+
+Unlocks are about the systems rather than attendance: clear a floor without being
+detected, without sprinting, or without your light ever being spotted; take a
+coin with your torch off; pick a lock with no keycard; find gold by mirror light;
+leave a floor with every coin on it; win with the alert level still at zero. They
+sit under the floor picker and live on your device with everything else.
+
 ## Daily run
 
 Turn on **Daily Run** from the menu and everything the game rolls comes from
