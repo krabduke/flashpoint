@@ -358,6 +358,52 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- daily run: the same building for everyone, today ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('daily is off by default', (await evl('__fp.dailyOn')) === false);
+ok('the seed is todays date', (await evl('__fp.dailySeed')) === Number(
+  new Date().getFullYear() * 10000 + (new Date().getMonth() + 1) * 100 + new Date().getDate()),
+  `seed=${await evl('__fp.dailySeed')}`);
+
+const dailyRng = await evl(`(() => {
+  __fp.setDaily(true);
+  __fp.resetKit();
+  const a = __fp.rngProbe(6);
+  __fp.resetKit();
+  const b = __fp.rngProbe(6);
+  __fp.setDaily(false);
+  const c = __fp.rngProbe(6);
+  const d = __fp.rngProbe(6);
+  return JSON.stringify({ a, b, c, d });
+})()`);
+const dr2 = JSON.parse(dailyRng);
+ok('a daily run repeats exactly', JSON.stringify(dr2.a) === JSON.stringify(dr2.b), dailyRng);
+ok('an ordinary run does not', JSON.stringify(dr2.c) !== JSON.stringify(dr2.d), dailyRng);
+
+ok('a daily floor lays out identically twice', await evl(`(() => {
+  __fp.setDaily(true);
+  const snap = () => {
+    __fp.resetKit(); loop = 0; mapIdx = 2; loadMap(2);
+    return JSON.stringify(emitters.map(e => [Math.round(e.x), Math.round(e.y), Math.round(e.r), +(e.ang || 0).toFixed(3)]));
+  };
+  const one = snap(), two = snap();
+  __fp.setDaily(false);
+  return one === two;
+})()`));
+
+ok('the toggle is on the menu and works', await evl(`(() => {
+  toMenu();
+  const b = document.getElementById('dailyBtn');
+  const before = __fp.dailyOn;
+  b.click();
+  const after = __fp.dailyOn;
+  const labelled = b.textContent.includes('ON') && b.classList.contains('on');
+  const seedShown = document.getElementById('dailySeed').textContent.includes(String(__fp.dailySeed));
+  b.click();
+  return before === false && after === true && labelled && seedShown && __fp.dailyOn === false;
+})()`));
+
 /* ---- run alert level: a sloppy floor costs you later ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

@@ -170,6 +170,14 @@
   .btn.red{background:linear-gradient(180deg,#ffd0c8,#ff7a6e 55%,#e04a4a);box-shadow:0 0 30px rgba(255,90,90,.4),inset 0 1px 0 rgba(255,255,255,.7)}
   .btn.ghost{background:transparent;color:#cfc6ee;border:1px solid rgba(140,130,200,.4);box-shadow:none;font-size:12px;padding:12px 30px}
   .btn.ghost:hover{border-color:rgba(180,170,240,.8);color:#fff}
+  .btn.ghost.on{border-color:rgba(255,209,102,.85);color:#ffe9a8;
+    box-shadow:0 0 18px rgba(255,190,80,.2)}
+  #dailySeed{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.24em;
+    color:#5e5679;margin-top:-6px}
+  #dailySeed:empty{display:none}
+  #dailyTag{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.2em;
+    color:#ffd166;margin-top:5px}
+  #dailyTag:empty{display:none}
 
   .card{
     display:flex;flex-direction:column;align-items:center;gap:6px;
@@ -281,6 +289,7 @@
       <div id="flareRow"></div>
       <div id="keyRow"></div>
       <div id="alertRow"></div>
+      <div id="dailyTag"></div>
       <div id="puRow"></div>
     </div>
     <div class="hud-block mid">
@@ -325,6 +334,8 @@
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
     </div>
     <button class="btn" id="startBtn">BREAK IN</button>
+    <button class="btn ghost" id="dailyBtn" type="button">DAILY RUN — OFF</button>
+    <p id="dailySeed"></p>
     <p class="hint"><span class="key">WASD</span> move · <span class="key">MOUSE</span> aim beam · <span class="key">SHIFT</span> sprint (loud)</p>
     <p class="hint" id="touchHint" style="display:none">left thumb move (tilt far = sprint) · right thumb aims the beam</p>
     <p class="hint" style="opacity:.75">heard = hunted. seen = it's over.</p>
@@ -448,8 +459,22 @@ const coinsEl = $('coins'), mapNameEl = $('mapName'), depthLabelEl = $('depthLab
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, k) => a + (b - a) * k;
-const rand = (a, b) => a + Math.random() * (b - a);
-const irand = n => Math.floor(Math.random() * n);
+/* Gameplay randomness runs through here so a Daily Run can be made identical for
+   everyone: same lamp sizes, same drone facings, same searchlight directions.
+   Cosmetic noise (audio buffers, particle scatter) deliberately stays unseeded. */
+let dailyOn = false, dRng = 0;
+const mulberry = () => {
+  dRng |= 0; dRng = dRng + 0x6D2B79F5 | 0;
+  let t = Math.imul(dRng ^ dRng >>> 15, 1 | dRng);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
+const rng = () => dailyOn ? mulberry() : Math.random();
+const todaySeed = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
+const seedDaily = () => { dRng = todaySeed(); };
+
+const rand = (a, b) => a + rng() * (b - a);
+const irand = n => Math.floor(rng() * n);
 const angDiff = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
 let seed = 1; const srand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 
@@ -911,8 +936,8 @@ function loadMap(idx) {
     if (ch === 'E') exitPt = { x: cx, y: cy };
     if (ch === 'c') coinList.push({ x: cx, y: cy, ph: rand(0, TAU), got: false, seen: false });
     if (ch === 'L') emitters.push({ x: cx, y: cy, r: rand(130, 175), col: TH.lamp, flick: rand(0, 9), kind: 'lamp', base: 1 });
-    if (ch === 'N') emitters.push({ x: cx, y: cy, r: rand(95, 140), col: Math.random() < 0.5 ? TH.lamp : TH.accent, flick: rand(0, 9), kind: 'neon', base: 1 });
-    if (ch === 'S') emitters.push({ x: cx, y: cy, r: 250, col: '#ffe9b0', flick: 0, kind: 'search', ang: rand(0, TAU), spin: rand(0.45, 0.8) * (Math.random() < 0.5 ? -1 : 1), rays: new Float32Array(17) });
+    if (ch === 'N') emitters.push({ x: cx, y: cy, r: rand(95, 140), col: rng() < 0.5 ? TH.lamp : TH.accent, flick: rand(0, 9), kind: 'neon', base: 1 });
+    if (ch === 'S') emitters.push({ x: cx, y: cy, r: 250, col: '#ffe9b0', flick: 0, kind: 'search', ang: rand(0, TAU), spin: rand(0.45, 0.8) * (rng() < 0.5 ? -1 : 1), rays: new Float32Array(17) });
     /* A camera is a searchlight that never moves, so every rule that already
        applies to one - the alarm, an EMP killing it, smoke breaking its line -
        applies here for free. It only needs pointing somewhere useful. */
@@ -2923,6 +2948,7 @@ function bumpAlert() {
 
 function resetKit() {
   alertLvl = 0; alertCool = 0;
+  if (dailyOn) seedDaily();   /* same day, same building, every time */
   flares = T.KIT.flare;
   smokePellets = T.KIT.smoke;
   empCharges = T.KIT.emp;
@@ -3116,6 +3142,12 @@ function nextFloorIdx() {
   return MAPS.length - 1;
 }
 
+function renderDaily() {
+  const b = $('dailyBtn'), sd = $('dailySeed');
+  if (b) { b.textContent = dailyOn ? 'DAILY RUN — ON' : 'DAILY RUN — OFF'; b.classList.toggle('on', dailyOn); }
+  if (sd) sd.textContent = dailyOn ? 'SEED ' + todaySeed() + ' · SAME BUILDING FOR EVERYONE TODAY' : '';
+}
+
 function renderStats() {
   const el = $('statRow');
   if (!el) return;
@@ -3218,6 +3250,7 @@ function toMenu() {
   hud();
   renderFloors();
   renderStats();
+  renderDaily();
 }
 function togglePause() {
   if (mode !== 'playing') return;
@@ -3256,6 +3289,9 @@ function hud() {
     set('itDecoy', decoyCharges > 0);
     set('itMag', magCharges > 0, magT > 0);
   }
+
+  const dt2 = $('dailyTag');
+  if (dt2) dt2.textContent = (mode === 'playing' && dailyOn) ? 'DAILY ' + todaySeed() : '';
 
   const ar = $('alertRow');
   if (ar) ar.innerHTML = (mode === 'playing' && alertLvl > 0)
@@ -3384,6 +3420,7 @@ bindBtn('resumeBtn', togglePause);
 bindBtn('quitBtn', toMenu);
 bindBtn('pauseBtn', togglePause);
 bindBtn('muteBtn', toggleMute);
+bindBtn('dailyBtn', () => { dailyOn = !dailyOn; if (dailyOn) seedDaily(); renderDaily(); hud(); });
 /* the same actions the keys fire, so touch reaches every gadget */
 bindBtn('itTorch', () => { if (!battDead) { beamOn = !beamOn; sfx.ui(); hud(); } });
 bindBtn('itFlare', throwFlare);
@@ -3423,6 +3460,7 @@ whoEl.textContent = name || 'ANON';
 hud();
 renderFloors();
 renderStats();
+renderDaily();
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
 let last = performance.now();
@@ -3436,6 +3474,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
+if (location.search.includes('daily')) { dailyOn = true; seedDaily(); renderStats(); }
 if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
@@ -3448,6 +3487,10 @@ window.__fp = {
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
   get haulNoise() { return +haulNoise().toFixed(3); },
   get alertLvl() { return alertLvl; },
+  get dailyOn() { return dailyOn; },
+  get dailySeed() { return todaySeed(); },
+  setDaily(v) { dailyOn = !!v; if (dailyOn) seedDaily(); renderStats(); hud(); return dailyOn; },
+  rngProbe(n) { const out = []; for (let i = 0; i < n; i++) out.push(+rng().toFixed(6)); return out; },
   bumpAlert() { alertCool = 0; bumpAlert(); return alertLvl; },
   get botSpeedMult() { return botSpd * (1 + alertLvl * T.ALERT_STEP) * (sirenT > 0 ? 1.28 : 1); },
   beamPatches() { return beamPatches(); },

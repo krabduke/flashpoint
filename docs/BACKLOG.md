@@ -48,7 +48,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] D1 Drones notice your beam — time-based, so sweeping is safe and staring is not
 - [x] D2 Heavy pockets — footstep radius scales with carried gold; 520 empty to 806 full
 - [x] D3 Run alert level — persists across floors for the whole run, capped at 4 notches (+32%)
-- [ ] D4 Daily seed — same layout for everyone, per calendar day
+- [x] D4 Daily seed — gameplay RNG seeded from the date; cosmetic noise deliberately left unseeded
 - [ ] D5 Achievements — 12 of them, shown on the menu
 - [ ] D6 Difficulty modes — Casual / Standard / Blackout
 - [ ] D7 Endless modifiers — one random rule per loop
@@ -128,3 +128,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · D1 · drones investigate lit floor after 1.15s of clear view; smoke and a dark torch both hide it, 6 assertions
 - 2026-09-02 · D2 · haulNoise() scales step and splash radius up to 1.55x, 5 assertions
 - 2026-09-02 · D3 · alert level 0-4, +8% drone speed each, survives the stairs, 8 assertions
+- 2026-09-02 · D4 · daily run toggle + seed display, mulberry32 from YYYYMMDD, 6 assertions

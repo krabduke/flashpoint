@@ -217,6 +217,16 @@ It also asserts pixels where a predicate is not enough: that a lit coin is
 actually brighter than the floor beside it, that a remembered one stays findable,
 and that a filling meter really does turn the screen edge red.
 
+## Daily run
+
+Turn on **Daily Run** from the menu and everything the game rolls comes from
+today's date instead of chance: the same lamp sizes, the same drone facings, the
+same searchlight directions, for everyone, all day. The seed is printed under the
+button so two people can check they played the same building. Audio texture and
+particle scatter stay unseeded, because nobody is comparing those.
+
+Add `?daily` to the URL to start in it.
+
 ## What it remembers
 
 A lifetime record sits under the floor picker: runs played, campaigns cleared,
