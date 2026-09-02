@@ -43,6 +43,10 @@ either. They see what their light sees, and nothing else.
   clatters where it lands and drones walk to noise. The floor still wants every
   coin, though, so you have moved gold you need toward the thing now coming to
   look at it.
+- **Smoke hides you from yourself too** — one pellet a floor, dropped at your
+  feet with `X`. Nothing sees through it: not a drone's cone, not a searchlight.
+  But you are standing in the same cloud, so your own beam chokes to a stub while
+  you are inside it. Cover and blindness are the same nine seconds.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
@@ -89,6 +93,7 @@ add bots and speed, and your best depth per device is kept.
 | Torch on/off | `F` | HUD buttons |
 | Throw a flare | `Q` | HUD buttons |
 | Throw a coin | `E` | HUD buttons |
+| Drop smoke | `X` | HUD buttons |
 | Mute / pause | `M` / `P` | HUD buttons |
 | Restart | `R`, or `Space` on the card | tap the button |
 

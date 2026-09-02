@@ -58,6 +58,9 @@
     box-shadow:0 0 8px rgba(255,179,71,.65)}
   #flareRow i.spent{background:transparent;box-shadow:none;
     border:1px solid rgba(255,179,71,.35)}
+  #flareRow i.smk{background:#b0b0c4;box-shadow:0 0 8px rgba(176,176,196,.5);margin-left:3px}
+  #flareRow i.smk.spent{background:transparent;box-shadow:none;
+    border:1px solid rgba(176,176,196,.35)}
   #puRow{display:flex;gap:6px;margin-top:6px;pointer-events:none}
   .pu{
     display:flex;align-items:center;gap:5px;
@@ -345,6 +348,8 @@ const T = {
   /* flares: buy light at a distance, and pay for it in attention */
   FLARE_N: 2, FLARE_T: 11, FLARE_FADE: 2.5, FLARE_R: 155, FLARE_THROW: 230, FLARE_NOISE: 480,
   TOSS_THROW: 300, TOSS_NOISE: 520,
+  /* smoke: you are hidden and blind at the same time. That is the whole trade. */
+  SMOKE_N: 1, SMOKE_T: 9, SMOKE_FADE: 2, SMOKE_R: 96, SMOKE_BEAM: 0.42,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -568,6 +573,7 @@ let searchLit = false;
 let powerups = [], puLens = 0, puShoe = 0, puGhost = 0;
 let batt = 100, beamOn = true, battDead = false;
 let flares = 2;
+let smokes = [], smokePellets = 1;
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -674,6 +680,7 @@ const sfx = {
   door() { tone(600, 900, 0.3, 0.16); },
   beat() { tone(58, 42, 0.1, 0.25); },
   flare() { noiseBurst(0.22, 0.22, 900); tone(420, 900, 0.3, 0.14); },
+  smoke() { noiseBurst(0.5, 0.12, 260); },
   ui() { tone(700, 900, 0.06, 0.08); }
 };
 function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
@@ -754,6 +761,7 @@ function loadMap(idx) {
   puLens = 0; puShoe = 0; puGhost = 0;
   batt = T.BATT_MAX; beamOn = true; battDead = false;
   flares = T.FLARE_N;
+  smokes = []; smokePellets = T.SMOKE_N;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -836,7 +844,7 @@ const cellOf = (x, y) => {
 };
 function isWallCell(gx, gy) { return gx < 0 || gy < 0 || gx >= T.COLS || gy >= T.ROWS || grid[gy * T.COLS + gx] === 1; }
 function isWall(wx, wy) { return isWallCell(wx / T.TILE | 0, wy / T.TILE | 0); }
-const flRange = () => beamOn ? T.FL_RANGE * flScale * (puLens > 0 ? T.PU_LENS_MULT : 1) : 0;
+const flRange = () => beamOn ? T.FL_RANGE * flScale * (puLens > 0 ? T.PU_LENS_MULT : 1) * (inSmoke(player.x, player.y) ? T.SMOKE_BEAM : 1) : 0;
 const botRange = b => b.range * (blackout > 0 ? 0.6 : 1) * (sirenT > 0 ? 1.3 : 1);
 function ptSeg(px, py, l) {
   const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len2 = dx * dx + dy * dy;
@@ -995,6 +1003,12 @@ function update(dt) {
     if (u.kind === 'B') { batt = Math.min(T.BATT_MAX, batt + T.BATT_PICKUP); battDead = false; toast('CELL — TORCH TOPPED UP', 2.2); }
     hud();
   }
+  /* smoke thins out */
+  for (let i = smokes.length - 1; i >= 0; i--) {
+    smokes[i].life -= dt;
+    if (smokes[i].life <= 0) smokes.splice(i, 1);
+  }
+
   /* flares burn down */
   for (let i = emitters.length - 1; i >= 0; i--) {
     const e = emitters[i];
@@ -1226,6 +1240,7 @@ function botSees(b) {
   if (d > range) return false;
   if (Math.abs(angDiff(Math.atan2(dy, dx), b.face)) > b.half) return false;
   if (!losClear(b.x, b.y, player.x, player.y)) return false;
+  if (smokeAcross(b.x, b.y, player.x, player.y)) return false;
   return true;
 }
 
@@ -1234,7 +1249,7 @@ function updateMeter(dt) {
   if (invuln <= 0) {
     for (const b of bots) if (botSees(b)) anySees = true;
     if (!anySees) for (const e of emitters) {
-      if (e.kind === 'search' && inFan(player.x, player.y, e.x, e.y, e.ang, 0.13, e.r, e.rays, 16)) { anySees = true; searchOnly = true; break; }
+      if (e.kind === 'search' && inFan(player.x, player.y, e.x, e.y, e.ang, 0.13, e.r, e.rays, 16) && !smokeAcross(e.x, e.y, player.x, player.y)) { anySees = true; searchOnly = true; break; }
     }
   }
   /* A searchlight used to fill the meter and nothing else - the drones never knew.
@@ -1666,6 +1681,7 @@ function render() {
   for (const c of coinList) if (!c.got) drawCoin(c);
   for (const u of powerups) if (!u.got) drawPowerup(u);
   for (const e of emitters) if (e.kind === 'flare') drawFlare(e);
+  for (const k of smokes) drawSmoke(k);
   /* the bots: the darkness hides them — your beam is the only truth */
   if (mode !== 'menu') { for (const b of bots) drawBotBody(b); }
   ctx.globalCompositeOperation = 'lighter';
@@ -1883,6 +1899,23 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawSmoke(k) {
+  const fade = Math.min(1, k.life / T.SMOKE_FADE);
+  const grow = Math.min(1, (T.SMOKE_T - k.life) / 0.7);
+  const r = k.r * (0.55 + 0.45 * grow);
+  ctx.save();
+  for (let i = 0; i < 5; i++) {
+    const a = k.ph + i * 1.257 + time * 0.22;
+    const ox = Math.cos(a) * r * 0.3, oy = Math.sin(a * 1.3) * r * 0.24;
+    const g = ctx.createRadialGradient(k.x + ox, k.y + oy, 2, k.x + ox, k.y + oy, r * 0.72);
+    g.addColorStop(0, 'rgba(176,176,196,' + 0.3 * fade + ')');
+    g.addColorStop(1, 'rgba(150,150,172,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(k.x + ox, k.y + oy, r * 0.72, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawFlare(e) {
@@ -2189,6 +2222,23 @@ const coinValue = () => Math.round(T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.
 /* Throw a coin you are carrying. It clatters where it lands and drones walk to
    noise - but the floor still wants every coin, so you have just moved gold you
    need toward something that is coming to look at it. */
+const smokeAcross = (x1, y1, x2, y2) =>
+  smokes.some(k => ptSeg(k.x, k.y, { x1, y1, x2, y2 }) < k.r * (k.life > T.SMOKE_FADE ? 1 : k.life / T.SMOKE_FADE));
+const inSmoke = (x, y) => smokes.some(k => Math.hypot(k.x - x, k.y - y) < k.r);
+
+/* Drop a screening cloud at your feet. It breaks their sightline through it -
+   and yours, because you are standing in the same cloud. */
+function dropSmoke() {
+  if (mode !== 'playing' || smokePellets <= 0) { sfx.ui(); return false; }
+  smokePellets--;
+  smokes.push({ x: player.x, y: player.y, r: T.SMOKE_R, life: T.SMOKE_T, ph: rand(0, TAU) });
+  makeNoise(player.x, player.y, 200);
+  sfx.smoke();
+  toast('SMOKE — THEY CANNOT SEE THROUGH IT, NOR CAN YOU', 2.4);
+  hud();
+  return true;
+}
+
 function tossCoin() {
   if (mode !== 'playing' || coins <= 0) { sfx.ui(); return false; }
   let tx = player.x, ty = player.y;
@@ -2370,6 +2420,7 @@ function hud() {
   const fr = $('flareRow');
   if (fr) fr.innerHTML = mode === 'playing'
     ? Array.from({ length: T.FLARE_N }, (_, i) => '<i class="' + (i < flares ? '' : 'spent') + '"></i>').join('')
+      + Array.from({ length: T.SMOKE_N }, (_, i) => '<i class="smk' + (i < smokePellets ? '' : ' spent') + '"></i>').join('')
     : '';
 
   /* active power-ups */
@@ -2416,6 +2467,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'f' || e.key === 'F') && mode === 'playing' && !battDead) { beamOn = !beamOn; sfx.ui(); hud(); }
   if ((e.key === 'q' || e.key === 'Q') && mode === 'playing') { throwFlare(); }
   if ((e.key === 'e' || e.key === 'E') && mode === 'playing') { tossCoin(); }
+  if ((e.key === 'x' || e.key === 'X') && mode === 'playing') { dropSmoke(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if ((e.key === 'p' || e.key === 'P')) togglePause();
 });
@@ -2614,7 +2666,12 @@ window.__fp = {
   flarePoints() { return emitters.filter(e => e.kind === 'flare').map(e => ({ x: e.x, y: e.y, life: +e.life.toFixed(2) })); },
   tossCoin() { return tossCoin(); },
   coinValue() { return coinValue(); },
-  get loose() { return coinList.filter(c => !c.got).length; }
+  get loose() { return coinList.filter(c => !c.got).length; },
+  dropSmoke() { return dropSmoke(); },
+  get smokePellets() { return smokePellets; },
+  get smokesLive() { return smokes.length; },
+  setSmoke(n) { smokePellets = n; hud(); },
+  inSmokeNow() { return inSmoke(player.x, player.y); }
 };
 </script>
 </body>

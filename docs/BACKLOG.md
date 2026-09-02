@@ -17,7 +17,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] A1 Torch battery — finite charge, drains lit, recovers off; `B` pickups
 - [x] A2 Flares — throwable light, 11s, loud on landing
 - [x] A3 Coin toss — spend a coin to make noise elsewhere
-- [ ] A4 Smoke pellet — a cloud that blocks drone line of sight
+- [x] A4 Smoke pellet — a cloud that blocks drone line of sight
 - [ ] A5 EMP charge — kills lamps, lasers and cameras in radius for 5s
 - [ ] A6 Decoy — a dummy that drones investigate
 - [ ] A7 Magnet — pulls loose coins within 90px for 8s
@@ -110,3 +110,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · A1 · torch battery, F toggles, `B` cells, HUD bar, 10 assertions
 - 2026-09-02 · A2 · flares on Q, 2 per floor, survive blackouts, 10 assertions
 - 2026-09-02 · A3 · coin toss on E, coin lands and stays collectible, 10 assertions
+- 2026-09-02 · A4 · smoke on X, blocks drones and searchlights, chokes your own beam, 8 assertions

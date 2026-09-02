@@ -356,6 +356,63 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- smoke: hidden and blind at the same time ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('you carry one pellet', (await evl('__fp.smokePellets')) === 1, `n=${await evl('__fp.smokePellets')}`);
+
+/* a drone staring straight at you loses you when the cloud goes up */
+const screened = await evl(`(() => {
+  invuln = 0; smokes.length = 0;
+  const b = bots[0];
+  b.x = player.x + 90; b.y = player.y;
+  b.face = Math.PI; b.state = 'patrol';
+  castCone(b.rays, b.x, b.y, b.face, b.half, T.BOT_RAYS, botRange(b));
+  const before = botSees(b);
+  __fp.dropSmoke();
+  const after = botSees(b);
+  return JSON.stringify({ before, after });
+})()`);
+const sc = JSON.parse(screened);
+ok('smoke breaks a drone sightline', sc.before === true && sc.after === false, screened);
+ok('dropping spends the pellet', (await evl('__fp.smokePellets')) === 0);
+ok('the cloud is live', (await evl('__fp.smokesLive')) === 1);
+
+/* and it costs you your own sight, through the same beam scaling fog uses */
+const blind = await evl(`(() => {
+  const inside = __fp.inSmokeNow();
+  const rIn = flRange();
+  const sx = player.x, sy = player.y;
+  player.x = sx + 600;
+  const rOut = flRange();
+  player.x = sx; player.y = sy;
+  return JSON.stringify({ inside, rIn: Math.round(rIn), rOut: Math.round(rOut) });
+})()`);
+const bl = JSON.parse(blind);
+ok('standing in your own smoke chokes your beam', bl.inside === true && bl.rIn < bl.rOut * 0.6, blind);
+
+/* a searchlight cannot pick you out through it */
+const litThrough = await evl(`(() => {
+  mapIdx = 4; loadMap(4); hud();
+  __fp.lightMeWithSearch();
+  updateMeter(0.016);
+  const seenClear = searchLit;
+  searchLit = false;
+  smokes.push({ x: player.x, y: player.y, r: T.SMOKE_R, life: T.SMOKE_T, ph: 0 });
+  updateMeter(0.016);
+  return JSON.stringify({ seenClear, seenSmoked: searchLit });
+})()`);
+const lt = JSON.parse(litThrough);
+ok('smoke hides you from a searchlight', lt.seenClear === true && lt.seenSmoked === false, litThrough);
+
+const thinned = await evl(`(() => { smokes.length = 0;
+  smokes.push({ x: player.x, y: player.y, r: T.SMOKE_R, life: 0.3, ph: 0 });
+  for (let i = 0; i < 30; i++) update(0.05);
+  return __fp.smokesLive; })()`);
+ok('smoke thins out and is cleaned up', thinned === 0, `live=${thinned}`);
+await evl('__fp.setSmoke(0)');
+ok('you cannot drop a pellet you do not have', (await evl('__fp.dropSmoke()')) === false);
+
 /* ---- coin toss: a distraction that costs you the walk back ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
