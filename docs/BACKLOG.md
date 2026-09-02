@@ -61,7 +61,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] E3 Corner peeking — pause and sweep where a corridor turns or branches, with a cooldown
 - [x] E4 Predictive intercept — 0.55s lead, falls back to your actual position when the lead is blocked
 - [x] E5 Realistic give-up — rejoin the route at the nearest waypoint, then stay wary; fixed a 967px stale-waypoint walk
-- [ ] E6 Radio cooldown — stop every drone re-broadcasting the same sighting
+- [x] E6 Radio cooldown — 4.5s per drone, plus committed drones are not re-yanked; also clamped four drifting timers
 - [ ] E7 Hearing acuity per floor — deeper drones hear further
 - [ ] E8 Idle personality — small per-drone variation in sweep and pause
 
@@ -138,3 +138,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · E3 · drones stop and look at junctions; 156 peek frames measured, all stationary, 5 assertions
 - 2026-09-03 · E4 · drones cut corners rather than tail; A* throttled to 4.5Hz per drone, 6 assertions
 - 2026-09-03 · E5 · giveUp() rejoins route nearby (967px walk removed) + 7s wary period, 6 assertions
+- 2026-09-03 · E6 · radio cooldown 4.5s, re-target guard, negative timers clamped, 5 assertions

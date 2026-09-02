@@ -463,6 +463,7 @@ const T = {
   /* short enough to cut a corner, not long enough to feel psychic */
   LEAD_T: 0.55, REPATH: 0.22,
   WARY_T: 7, WARY_SWEEP: 2.1, WARY_RANGE: 1.12,
+  RADIO_COOL: 4.5,
   PLATE_R: 17, PLATE_NOISE: 660,
   CRATE_R: 36, CRATE_T: 0.9, CRATE_NOISE: 540,
   MIRROR_LOSS: 0.82,
@@ -1140,7 +1141,7 @@ function spawnBots() {
       face: rand(0, TAU), route: rotatedRoute, wp: 1 % route.length, path: [], pathT: 0,
       state: 'patrol', tgt: null, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
-      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [], wary: 0
+      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [], wary: 0, radioT: 0
     });
   }
 }
@@ -1714,7 +1715,7 @@ function updateBots(dt) {
         speed = T.BOT_INVEST * sm * 0.9;
       } else if (b.state === 'patrol') {
         speed = T.BOT_PATROL * sm;
-        if (b.peekCool > 0) b.peekCool -= dt;
+        if (b.peekCool > 0) b.peekCool = Math.max(0, b.peekCool - dt);
         /* stop at a junction and look down the other way before carrying on */
         if (b.peekT <= 0 && b.peekCool <= 0 && isJunction(b.x, b.y)) {
           b.peekT = T.PEEK_T;
@@ -1722,7 +1723,7 @@ function updateBots(dt) {
           b.peekTo = b.face + (rng() < 0.5 ? -1 : 1) * T.PEEK_ARC;
         }
         if (b.peekT > 0) {
-          b.peekT -= dt;
+          b.peekT = Math.max(0, b.peekT - dt);
           speed = 0;
           /* out and back, so it ends up facing roughly where it was going */
           const k = 1 - Math.abs(b.peekT / T.PEEK_T - 0.5) * 2;
@@ -1752,7 +1753,8 @@ function updateBots(dt) {
     }
 
     /* idle sweep while stationary or searching */
-    if (b.wary > 0) b.wary -= dt;
+    if (b.radioT > 0) b.radioT = Math.max(0, b.radioT - dt);
+    if (b.wary > 0) b.wary = Math.max(0, b.wary - dt);
     const sweepK = b.wary > 0 ? T.WARY_SWEEP : 1;
     if (!b.path.length && b.state !== 'chase') b.face += Math.sin(time * 1.7 + b.sweepP) * T.BOT_SWEEP * sweepK * dt * 6;
 
@@ -1830,11 +1832,21 @@ function flankPoint(tx, ty, ang, claimed) {
    they arrived nose to tail. Each drone now gets its own bearing on you, which
    makes the net close from several sides instead of one. */
 function radio(src) {
+  /* One drone re-broadcasting the same sighting every time it blinks would drag
+     the whole net back and forth. It gets one call, then has to wait. */
+  if (src.radioT > 0) return 0;
+  src.radioT = T.RADIO_COOL;
   const r = T.RADIO_R + mapIdx * 30;
   const heard = bots.filter(o => o !== src && o.state !== 'chase'
     && Math.hypot(o.x - src.x, o.y - src.y) <= r);
   const claimed = [];
   heard.forEach((o, i) => {
+    /* already on its way somewhere close by? leave it alone */
+    if (o.state === 'invest' && o.flankX !== undefined
+        && Math.hypot(o.flankX - player.x, o.flankY - player.y) < T.FLANK_R * T.TILE * 1.6) {
+      claimed.push({ x: o.flankX, y: o.flankY });
+      return;
+    }
     /* spread the arrivals around you, starting from where each drone already is */
     const own = Math.atan2(o.y - player.y, o.x - player.x);
     const ang = own + (i - (heard.length - 1) / 2) * (TAU / Math.max(3, heard.length + 1));
@@ -3798,6 +3810,7 @@ window.__fp = {
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
   get botPeek() { return bots.map(b => +b.peekT.toFixed(2)); },
   get botWary() { return bots.map(b => +(b.wary || 0).toFixed(2)); },
+  get botRadioT() { return bots.map(b => +(b.radioT || 0).toFixed(2)); },
   get botWp() { return bots.map(b => b.wp); },
   giveUpBot(i) { giveUp(bots[i]); return bots[i].wp; },
   botRouteLen(i) { return (bots[i].route || []).length; },

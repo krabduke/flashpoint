@@ -374,6 +374,51 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- radio cooldown: one call, then wait ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const radio = await evl(`(() => {
+  mode = 'playing'; invuln = 999; loop = 0; mapIdx = 11; loadMap(11); hud();
+  player.x = spawnPt.x; player.y = spawnPt.y;
+  bots.forEach((b, i) => {
+    b.x = player.x + 120 + i * 20; b.y = player.y;
+    b.state = 'patrol'; b.path = []; b.radioT = 0; b.flankX = undefined;
+  });
+  const first = __fp.radioFrom(0);
+  const coolAfter = __fp.botRadioT[0];
+  const second = __fp.radioFrom(0);      /* immediately again */
+  return JSON.stringify({ first, second, coolAfter });
+})()`);
+const rd2 = JSON.parse(radio);
+ok('the first call reaches the others', rd2.first >= 1, radio);
+ok('an immediate second call is ignored', rd2.second === 0, radio);
+ok('and the caller is on cooldown', rd2.coolAfter > 0, radio);
+
+ok('the cooldown wears off', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const b = bots[0];
+  b.radioT = 0.2;
+  for (let i = 0; i < 30; i++) update(0.016);
+  return __fp.botRadioT[0] === 0;
+})()`));
+
+ok('a drone already heading somewhere close is left alone', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 11; loadMap(11); hud();
+  player.x = spawnPt.x; player.y = spawnPt.y;
+  bots.forEach((b, i) => {
+    b.x = player.x + 120 + i * 20; b.y = player.y;
+    b.state = 'patrol'; b.path = []; b.radioT = 0; b.flankX = undefined;
+  });
+  __fp.radioFrom(0);
+  const before = __fp.botFlanks();
+  bots[0].radioT = 0;
+  __fp.radioFrom(0);
+  const after = __fp.botFlanks();
+  /* the already-committed drones keep the point they were given */
+  return JSON.stringify(before) === JSON.stringify(after);
+})()`));
+
 /* ---- giving up: rejoin the route nearby, and stay jumpy ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
