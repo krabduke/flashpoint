@@ -52,6 +52,12 @@
   #battWrap.low #battFill{background:#ff9f43}
   #battWrap.dead #battFill{background:#ff4646}
   #battWrap.off{opacity:.55}
+  #flareRow{display:flex;gap:4px;margin-top:6px;align-items:center}
+  #flareRow:empty{display:none}
+  #flareRow i{width:7px;height:11px;border-radius:2px;background:#ffb347;
+    box-shadow:0 0 8px rgba(255,179,71,.65)}
+  #flareRow i.spent{background:transparent;box-shadow:none;
+    border:1px solid rgba(255,179,71,.35)}
   #puRow{display:flex;gap:6px;margin-top:6px;pointer-events:none}
   .pu{
     display:flex;align-items:center;gap:5px;
@@ -224,6 +230,7 @@
       <div id="score">0</div>
       <div id="who"></div>
       <div id="battWrap"><i id="battFill"></i></div>
+      <div id="flareRow"></div>
       <div id="puRow"></div>
     </div>
     <div class="hud-block mid">
@@ -335,6 +342,8 @@ const T = {
   /* the torch is a resource: ~45s of continuous light, and it comes back slowly.
      Turns "sweep everything" into "choose where to look". */
   BATT_MAX: 100, BATT_DRAIN: 2.2, BATT_RECOVER: 3.4, BATT_WAKE: 15, BATT_PICKUP: 40,
+  /* flares: buy light at a distance, and pay for it in attention */
+  FLARE_N: 2, FLARE_T: 11, FLARE_FADE: 2.5, FLARE_R: 155, FLARE_THROW: 230, FLARE_NOISE: 480,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -557,6 +566,7 @@ let shake = 0, redPulse = 0, unlockFlash = 0;
 let searchLit = false;
 let powerups = [], puLens = 0, puShoe = 0, puGhost = 0;
 let batt = 100, beamOn = true, battDead = false;
+let flares = 2;
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -662,6 +672,7 @@ const sfx = {
   blackout() { tone(700, 90, 0.4, 0.16, 'square'); noiseBurst(0.15, 0.1, 180); },
   door() { tone(600, 900, 0.3, 0.16); },
   beat() { tone(58, 42, 0.1, 0.25); },
+  flare() { noiseBurst(0.22, 0.22, 900); tone(420, 900, 0.3, 0.14); },
   ui() { tone(700, 900, 0.06, 0.08); }
 };
 function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
@@ -741,6 +752,7 @@ function loadMap(idx) {
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
   puLens = 0; puShoe = 0; puGhost = 0;
   batt = T.BATT_MAX; beamOn = true; battDead = false;
+  flares = T.FLARE_N;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -982,6 +994,14 @@ function update(dt) {
     if (u.kind === 'B') { batt = Math.min(T.BATT_MAX, batt + T.BATT_PICKUP); battDead = false; toast('CELL — TORCH TOPPED UP', 2.2); }
     hud();
   }
+  /* flares burn down */
+  for (let i = emitters.length - 1; i >= 0; i--) {
+    const e = emitters[i];
+    if (e.kind !== 'flare') continue;
+    e.life -= dt;
+    if (e.life <= 0) emitters.splice(i, 1);
+  }
+
   /* torch battery */
   const battWas = Math.ceil(batt / 5);
   if (beamOn) {
@@ -1568,7 +1588,8 @@ function render() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = TH.ink; ctx.fillRect(0, 0, W, H);
 
-  const flick = (e) => e.kind === 'exit' ? 0.85
+  const flick = (e) => e.kind === 'flare' ? Math.min(1, e.life / T.FLARE_FADE) * (0.72 + 0.28 * Math.sin(time * 17 + e.flick))
+    : e.kind === 'exit' ? 0.85
     : e.kind === 'neon' ? (Math.sin(time * 13 + e.flick * 7) > -0.9 ? 0.8 + 0.2 * Math.sin(time * 2.6 + e.flick) : 0.15)
     : (0.86 + 0.14 * Math.sin(time * 2.2 + e.flick));
 
@@ -1593,7 +1614,7 @@ function render() {
   }
   /* lamp holes */
   for (const e of emitters) {
-    if (blackout > 0 && e.kind !== 'exit') continue;
+    if (blackout > 0 && e.kind !== 'exit' && e.kind !== 'flare') continue;
     const a = flick(e);
     if (e.kind === 'search') {
       const gsf = darkCtx.createRadialGradient(e.x, e.y, 4, e.x, e.y, e.r);
@@ -1643,6 +1664,7 @@ function render() {
   /* coins: always readable; in the beam they light up fully */
   for (const c of coinList) if (!c.got) drawCoin(c);
   for (const u of powerups) if (!u.got) drawPowerup(u);
+  for (const e of emitters) if (e.kind === 'flare') drawFlare(e);
   /* the bots: the darkness hides them — your beam is the only truth */
   if (mode !== 'menu') { for (const b of bots) drawBotBody(b); }
   ctx.globalCompositeOperation = 'lighter';
@@ -1850,17 +1872,30 @@ function drawBotCone(b) {
 function coinLight(c) {
   if (mode === 'menu') return 'lit';
   if (inFan(c.x, c.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS)) { c.seen = true; return 'lit'; }
-  if (blackout <= 0) {
-    for (const e of emitters) {
-      if (e.kind === 'search' || e.kind === 'exit') continue;
-      if (Math.hypot(e.x - c.x, e.y - c.y) < e.r * 0.72) { c.seen = true; return 'lit'; }
-    }
+  for (const e of emitters) {
+    if (e.kind === 'search' || e.kind === 'exit') continue;
+    if (blackout > 0 && e.kind !== 'flare') continue;
+    if (Math.hypot(e.x - c.x, e.y - c.y) < e.r * 0.72) { c.seen = true; return 'lit'; }
   }
   if (c.seen) return 'mark';
   /* close enough to catch a glint off it without the beam - stops you walking
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawFlare(e) {
+  const fade = Math.min(1, e.life / T.FLARE_FADE);
+  const spit = 0.7 + 0.3 * Math.sin(time * 21 + e.flick);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = fade * (0.5 + 0.3 * spit);
+  ctx.drawImage(glowGoldS, e.x - 17, e.y - 17, 34, 34);
+  ctx.globalAlpha = fade;
+  ctx.fillStyle = '#fff3d0';
+  ctx.beginPath(); ctx.arc(e.x, e.y, 2 + spit, 0, TAU); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
 }
 
 function drawPowerup(u) {
@@ -2145,6 +2180,27 @@ function setName(v) {
 }
 /* transient field notice - top centre, never eats pointer events */
 let toastTimer = 0;
+/* A flare lands where it can: along the aim until a wall stops it. Because it is
+   an emitter, coins inside it light up through code that already exists - and
+   unlike mains lamps it keeps burning through a blackout. */
+function throwFlare() {
+  if (mode !== 'playing' || flares <= 0) { sfx.ui(); return false; }
+  flares--;
+  let fx = player.x, fy = player.y;
+  const cx = Math.cos(player.aim), cy = Math.sin(player.aim);
+  for (let d = 8; d <= T.FLARE_THROW; d += 8) {
+    const nx = player.x + cx * d, ny = player.y + cy * d;
+    if (isWall(nx, ny)) break;
+    fx = nx; fy = ny;
+  }
+  emitters.push({ x: fx, y: fy, r: T.FLARE_R, col: '#ffb347', flick: rand(0, 9),
+    kind: 'flare', base: 1, life: T.FLARE_T });
+  makeNoise(fx, fy, T.FLARE_NOISE);
+  sfx.flare(); burst(fx, fy, glowGoldS, 18, 210);
+  hud();
+  return true;
+}
+
 function toast(msg, secs) {
   const el = $('toast');
   if (!el) return;
@@ -2285,6 +2341,12 @@ function hud() {
     bw.classList.toggle('off', !beamOn);
   }
 
+  /* flares in hand */
+  const fr = $('flareRow');
+  if (fr) fr.innerHTML = mode === 'playing'
+    ? Array.from({ length: T.FLARE_N }, (_, i) => '<i class="' + (i < flares ? '' : 'spent') + '"></i>').join('')
+    : '';
+
   /* active power-ups */
   const row = $('puRow');
   if (row) {
@@ -2327,6 +2389,7 @@ window.addEventListener('keydown', e => {
   }
   if ((e.key === 'r' || e.key === 'R') && (mode === 'playing' || mode === 'caught')) startGame();
   if ((e.key === 'f' || e.key === 'F') && mode === 'playing' && !battDead) { beamOn = !beamOn; sfx.ui(); hud(); }
+  if ((e.key === 'q' || e.key === 'Q') && mode === 'playing') { throwFlare(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if ((e.key === 'p' || e.key === 'P')) togglePause();
 });
@@ -2517,7 +2580,12 @@ window.__fp = {
   get beamOn() { return beamOn; },
   get battDead() { return battDead; },
   setBatt(v) { batt = v; },
-  toggleBeam() { if (!battDead) { beamOn = !beamOn; hud(); } return beamOn; }
+  toggleBeam() { if (!battDead) { beamOn = !beamOn; hud(); } return beamOn; },
+  get flares() { return flares; },
+  get flaresLit() { return emitters.filter(e => e.kind === 'flare').length; },
+  throwFlare() { return throwFlare(); },
+  setFlares(n) { flares = n; hud(); },
+  flarePoints() { return emitters.filter(e => e.kind === 'flare').map(e => ({ x: e.x, y: e.y, life: +e.life.toFixed(2) })); }
 };
 </script>
 </body>

@@ -356,6 +356,54 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- flares: buy light at a distance, pay in attention ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('you start a floor with flares', (await evl('__fp.flares')) === 2, `n=${await evl('__fp.flares')}`);
+await evl('noise.length = 0');
+ok('a flare throws', (await evl('__fp.throwFlare()')) === true);
+await sleep(250);
+ok('it burns on the floor', (await evl('__fp.flaresLit')) === 1, `lit=${await evl('__fp.flaresLit')}`);
+ok('throwing spends one', (await evl('__fp.flares')) === 1);
+ok('it lands away from you, not on you', await evl(`(() => {
+  const f = __fp.flarePoints()[0];
+  return Math.hypot(f.x - __fp.pos.x, f.y - __fp.pos.y) > 40;
+})()`), await evl('JSON.stringify(__fp.flarePoints()[0])'));
+ok('it is loud enough to be heard', (await evl('noise.length')) > 0, `noise=${await evl('noise.length')}`);
+
+/* a flare lights gold your own torch is not pointed at */
+const flareLights = await evl(`(() => {
+  mapIdx = 0; loadMap(0); hud(); __fp.forgetCoins();
+  const c = __fp.coinPoints()[0];
+  player.x = c.x - 300; player.y = c.y;
+  mouseWX = player.x - 200; mouseWY = player.y;
+  castCone(flHits, player.x, player.y, player.aim, T.FL_HALF, T.FL_RAYS, flRange());
+  const before = coinList.filter(z => !z.got && coinLight(z) === 'lit').length;
+  emitters.push({ x: c.x, y: c.y, r: T.FLARE_R, col: '#ffb347', flick: 0, kind: 'flare', base: 1, life: T.FLARE_T });
+  const after = coinList.filter(z => !z.got && coinLight(z) === 'lit').length;
+  return JSON.stringify({ before, after });
+})()`);
+const fl = JSON.parse(flareLights);
+ok('a flare reveals gold your beam is not on', fl.after > fl.before, flareLights);
+
+/* mains lamps die in a blackout; a flare does not */
+const inDark = await evl(`(() => {
+  blackout = 3.6;
+  const c = __fp.coinPoints()[0];
+  return coinLight(coinList.find(z => !z.got && Math.abs(z.x - c.x) < 1 && Math.abs(z.y - c.y) < 1));
+})()`);
+ok('a flare still burns through a blackout', inDark === 'lit', `state=${inDark}`);
+await evl('blackout = 0; emitters = emitters.filter(e => e.kind !== "flare");');
+
+/* it burns out */
+const burnt = await evl(`(() => { const e = emitters.find(x => x.kind === 'flare');
+  emitters.push({ x: player.x, y: player.y, r: T.FLARE_R, col: '#ffb347', flick: 0, kind: 'flare', base: 1, life: 0.4 });
+  for (let i = 0; i < 40; i++) update(0.05);
+  return __fp.flaresLit; })()`);
+ok('a flare burns out and is cleaned up', burnt === 0, `lit=${burnt}`);
+await evl('__fp.setFlares(0)');
+ok('you cannot throw one you do not have', (await evl('__fp.throwFlare()')) === false);
+
 /* ---- power-ups ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

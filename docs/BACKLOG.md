@@ -15,7 +15,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 ## A · Items and tools
 
 - [x] A1 Torch battery — finite charge, drains lit, recovers off; `B` pickups
-- [ ] A2 Flares — throwable light, 11s, loud on landing
+- [x] A2 Flares — throwable light, 11s, loud on landing
 - [ ] A3 Coin toss — spend a coin to make noise elsewhere
 - [ ] A4 Smoke pellet — a cloud that blocks drone line of sight
 - [ ] A5 EMP charge — kills lamps, lasers and cameras in radius for 5s
@@ -108,3 +108,4 @@ Append one line per completed item: `date · id · commit · note`.
 
 - 2026-09-02 · seeded · fd5652d · backlog written
 - 2026-09-02 · A1 · torch battery, F toggles, `B` cells, HUD bar, 10 assertions
+- 2026-09-02 · A2 · flares on Q, 2 per floor, survive blackouts, 10 assertions
