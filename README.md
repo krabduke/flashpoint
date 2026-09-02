@@ -119,6 +119,10 @@ either. They see what their light sees, and nothing else.
   to where you were and then searches outward from it, four or five spots in a
   widening spiral, before it gives up and goes back on patrol. Ducking round a
   corner buys you seconds, not safety.
+- **They check the other way** — a patrolling drone stops where a corridor turns
+  or branches, sweeps its cone out and back, then carries on. It makes a patrol
+  slower and much harder to time, because the pause happens exactly where you
+  would want to slip past behind it.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

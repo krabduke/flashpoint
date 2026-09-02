@@ -374,6 +374,68 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- corner peeking: a pause where a corridor turns ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('a straight corridor is not a junction', await evl(`(() => {
+  mode = 'playing'; invuln = 999; loop = 0; mapIdx = 0; loadMap(0); hud();
+  /* find a run of open floor with walls both sides - a corridor, not a turn */
+  for (let y = 2; y < 16; y++) for (let x = 2; x < 26; x++) {
+    const wx = (x + .5) * T.TILE, wy = (y + .5) * T.TILE;
+    if (isWall(wx, wy)) continue;
+    const T2 = T.TILE;
+    const straightH = isWall(wx, wy - T2) && isWall(wx, wy + T2) && !isWall(wx - T2, wy) && !isWall(wx + T2, wy);
+    if (straightH) return __fp.isJunctionAt(wx, wy) === false;
+  }
+  return true;
+})()`));
+
+ok('a turn is a junction', await evl(`(() => {
+  const T2 = T.TILE;
+  for (let y = 2; y < 16; y++) for (let x = 2; x < 26; x++) {
+    const wx = (x + .5) * T.TILE, wy = (y + .5) * T.TILE;
+    if (isWall(wx, wy)) continue;
+    const R = !isWall(wx + T2, wy), L = !isWall(wx - T2, wy);
+    const D = !isWall(wx, wy + T2), U = !isWall(wx, wy - T2);
+    if ((R + L + D + U) === 2 && (R || L) && (D || U)) return __fp.isJunctionAt(wx, wy) === true;
+  }
+  return true;
+})()`));
+
+const peek = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 1; loadMap(1); hud();
+  player.x = -9999; player.y = -9999;          /* keep them on patrol */
+  for (const b of bots) { b.state = 'patrol'; b.peekT = 0; b.peekCool = 0; }
+  let sawPeek = 0, stoodStill = 0;
+  for (let i = 0; i < 900; i++) {
+    const before = bots.map(b => ({ x: b.x, y: b.y }));
+    update(0.016);
+    bots.forEach((b, j) => {
+      if (b.peekT > 0) {
+        sawPeek++;
+        if (Math.hypot(b.x - before[j].x, b.y - before[j].y) < 0.5) stoodStill++;
+      }
+    });
+  }
+  return JSON.stringify({ sawPeek, stoodStill });
+})()`);
+const pk2 = JSON.parse(peek);
+ok('drones pause on patrol', pk2.sawPeek > 0, peek);
+ok('and they hold still while they look', pk2.stoodStill > pk2.sawPeek * 0.8, peek);
+
+ok('a peek does not stall a chase', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const b = bots[0];
+  player.x = b.x + 70; player.y = b.y;
+  b.face = Math.atan2(player.y - b.y, player.x - b.x);
+  b.state = 'patrol'; b.peekT = T.PEEK_T; b.peekCool = 0;
+  const from = Math.hypot(b.x - player.x, b.y - player.y);
+  for (let i = 0; i < 60; i++) update(0.016);
+  return bots[0].state === 'chase' && Math.hypot(bots[0].x - player.x, bots[0].y - player.y) < from;
+})()`));
+
 /* ---- spiral search: losing them means outrunning a search ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

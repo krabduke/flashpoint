@@ -459,6 +459,7 @@ const T = {
   PICK_T: 1.5, DOOR_R: 40, KEY_R: 22, DOOR_NOISE: 250,
   FLANK_R: 2.6,   /* tiles out from you that a radioed drone aims for */
   SEARCH_PTS: 5, SEARCH_R0: 1.6, SEARCH_RSTEP: 1.3, SEARCH_T: 9,
+  PEEK_T: 1.25, PEEK_COOL: 5.5, PEEK_ARC: 1.15,
   PLATE_R: 17, PLATE_NOISE: 660,
   CRATE_R: 36, CRATE_T: 0.9, CRATE_NOISE: 540,
   MIRROR_LOSS: 0.82,
@@ -1136,7 +1137,7 @@ function spawnBots() {
       face: rand(0, TAU), route: rotatedRoute, wp: 1 % route.length, path: [], pathT: 0,
       state: 'patrol', tgt: null, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
-      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0
+      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: []
     });
   }
 }
@@ -1702,7 +1703,23 @@ function updateBots(dt) {
         const done = (!b.searchPts || !b.searchPts.length) && !b.path.length;
         if (done || b.stateT > T.SEARCH_T) { b.state = 'patrol'; b.path = []; b.stateT = 0; b.searchPts = []; }
         speed = T.BOT_INVEST * sm * 0.9;
-      } else if (b.state === 'patrol') { speed = T.BOT_PATROL * sm; }
+      } else if (b.state === 'patrol') {
+        speed = T.BOT_PATROL * sm;
+        if (b.peekCool > 0) b.peekCool -= dt;
+        /* stop at a junction and look down the other way before carrying on */
+        if (b.peekT <= 0 && b.peekCool <= 0 && isJunction(b.x, b.y)) {
+          b.peekT = T.PEEK_T;
+          b.peekCool = T.PEEK_COOL;
+          b.peekTo = b.face + (rng() < 0.5 ? -1 : 1) * T.PEEK_ARC;
+        }
+        if (b.peekT > 0) {
+          b.peekT -= dt;
+          speed = 0;
+          /* out and back, so it ends up facing roughly where it was going */
+          const k = 1 - Math.abs(b.peekT / T.PEEK_T - 0.5) * 2;
+          b.face += angDiff(b.peekTo, b.face) * Math.min(1, dt * 3.2) * k;
+        }
+      }
 
       const n = nearestNoise(b);
       if (n && b.state === 'patrol') { b.state = 'invest'; b.stateT = 0; b.searchPts = searchSpiral(n.x, n.y, rand(0, TAU)); retarget(b, n.x, n.y); }
@@ -1744,6 +1761,17 @@ function chaseSpeed(b, sm) {
    falling back to the target itself if that side is solid. */
 /* Points spiralling out from where you were last seen, so losing a drone means
    outrunning a search rather than waiting out a timer. */
+/* A cell worth stopping at: somewhere a corridor branches or turns, which is
+   exactly where something could be waiting out of the drone's cone. */
+function isJunction(wx, wy) {
+  const c = cellOf(wx, wy);
+  const R = !isWallCell(c.gx + 1, c.gy), L = !isWallCell(c.gx - 1, c.gy);
+  const D = !isWallCell(c.gx, c.gy + 1), U = !isWallCell(c.gx, c.gy - 1);
+  const open = R + L + D + U;
+  if (open >= 3) return true;
+  return open === 2 && ((R || L) && (D || U));   /* a turn, not a straight run */
+}
+
 function searchSpiral(cx, cy, fromAng) {
   const out = [];
   for (let i = 0; i < T.SEARCH_PTS; i++) {
@@ -3729,6 +3757,8 @@ window.__fp = {
   get aim() { return player.aim; }, get pos() { return { x: player.x, y: player.y }; },
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
+  get botPeek() { return bots.map(b => +b.peekT.toFixed(2)); },
+  isJunctionAt(x, y) { return isJunction(x, y); },
   botSearchLeft() { return bots.map(b => (b.searchPts || []).length); },
   searchSpiralAt(x, y) { return searchSpiral(x, y, 0).map(q => ({ x: Math.round(q.x), y: Math.round(q.y) })); },
   botFlanks() { return bots.map(b => b.flankX === undefined ? null : { x: Math.round(b.flankX), y: Math.round(b.flankY) }); },
