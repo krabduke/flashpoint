@@ -1,0 +1,109 @@
+# Flashpoint — working backlog
+
+The loop's state lives here. Each pass: take the **first unticked item**, build it,
+prove it, commit, push, tick the box, append a line to the log at the bottom.
+
+A session that dies mid-run loses nothing — the next one reads this file and
+carries on. Nothing here depends on conversation context.
+
+**Definition of done for every item:** `node test/flashpoint.cdp.mjs` prints
+`ALL CHECKS PASSED`, and the change has a harness assertion of its own where the
+behaviour is assertable. Visual work gets a screenshot check instead.
+
+---
+
+## A · Items and tools
+
+- [ ] A1 Torch battery — finite charge, drains lit, recovers off; `B` pickups
+- [ ] A2 Flares — throwable light, 11s, loud on landing
+- [ ] A3 Coin toss — spend a coin to make noise elsewhere
+- [ ] A4 Smoke pellet — a cloud that blocks drone line of sight
+- [ ] A5 EMP charge — kills lamps, lasers and cameras in radius for 5s
+- [ ] A6 Decoy — a dummy that drones investigate
+- [ ] A7 Magnet — pulls loose coins within 90px for 8s
+- [ ] A8 Lockpick — opens `D` doors, takes 1.5s standing still
+- [ ] A9 Inventory + item switching on `1`/`2`/`3`
+- [ ] A10 Item pickups placed across all floors
+
+## B · Map elements
+
+- [ ] B1 `C` fixed camera — searchlight with `spin: 0`
+- [ ] B2 `V` vent — player passes, drones cannot path through
+- [ ] B3 `G` glass — blocks movement, not sight
+- [ ] B4 `D` locked door + `K` key
+- [ ] B5 `~` water — footsteps carry further
+- [ ] B6 `p` pressure plate — steps on it raise the alarm
+- [ ] B7 `M` mirror — reflects your beam around a corner
+- [ ] B8 Destructible crates — break for a coin, loudly
+
+## C · New floors
+
+- [ ] C1 Floor 10 · THE GALLERY — museum theme, 12 coins, 3 bots, siren
+- [ ] C2 Floor 11 · THE COLD STORE — docks theme, 13 coins, 3 bots, fog
+- [ ] C3 Floor 12 · THE PENTHOUSE — city theme, 14 coins, 4 bots, siren + blackout
+- [ ] C4 Un-hardcode "nine" — harness assertion, floor-grid CSS, README
+
+## D · Systems
+
+- [ ] D1 Drones notice your beam — a lit floor patch in their LOS draws them
+- [ ] D2 Heavy pockets — footstep radius scales with carried gold
+- [ ] D3 Run alert level — repeated detections permanently speed the floor's drones
+- [ ] D4 Daily seed — same layout for everyone, per calendar day
+- [ ] D5 Achievements — 12 of them, shown on the menu
+- [ ] D6 Difficulty modes — Casual / Standard / Blackout
+- [ ] D7 Endless modifiers — one random rule per loop
+- [ ] D8 Ghost replay — your best run's path drawn faintly behind you
+
+## E · Bot AI
+
+- [ ] E1 Flanking — a radioed drone takes a different route to the same place
+- [ ] E2 Spiral search — investigate outward from last known, not just to a point
+- [ ] E3 Corner peeking — pause and sweep at junctions
+- [ ] E4 Predictive intercept — chase where you are going, not where you were
+- [ ] E5 Realistic give-up — drift back to patrol via the last noise, not instantly
+- [ ] E6 Radio cooldown — stop every drone re-broadcasting the same sighting
+- [ ] E7 Hearing acuity per floor — deeper drones hear further
+- [ ] E8 Idle personality — small per-drone variation in sweep and pause
+
+## F · Look
+
+- [ ] F1 Drone sprite pass — match the quality of the redrawn thief
+- [ ] F2 Exit door — a real door, not a beacon blob
+- [ ] F3 Coin sprite — distinct silhouette per floor theme
+- [ ] F4 Caught sequence — a held beat before the card
+- [ ] F5 Win screen — a proper payoff, currently plain
+- [ ] F6 Floor transitions — a wipe rather than a hard cut
+- [ ] F7 Lighting falloff — softer, less linear
+- [ ] F8 Fog rendering — volumetric rather than flat alpha
+- [ ] F9 Rain — depth layers and splash
+- [ ] F10 Memory afterglow — warmer, longer, more legible
+- [ ] F11 Screen shake — tune per event, currently uniform
+- [ ] F12 Pause screen — currently bare
+
+## G · Sound
+
+- [ ] G1 Drone vocalisations — a servo chirp on state change
+- [ ] G2 Room tone per theme — a bed that changes with the floor
+- [ ] G3 Chase stinger — music that rises with the meter
+- [ ] G4 Footstep material — carpet, concrete, water, grating
+- [ ] G5 Spatial panning — pan by x offset from the player
+- [ ] G6 Coin pitch ladder — rising pitch as a floor empties
+
+## H · Interface
+
+- [ ] H1 Settings panel — volume, difficulty, reduced motion, colourblind
+- [ ] H2 Minimap of swept area — built from the memory canvas
+- [ ] H3 Exit compass — permanent, subtle, edge-anchored
+- [ ] H4 Leaderboard screen — currently a cramped table
+- [ ] H5 Toast queue — messages currently overwrite each other
+- [ ] H6 Tutorial pass — teach light-gated gold properly
+- [ ] H7 Colourblind mode — red cones are the whole game
+- [ ] H8 Mobile controls — bigger dead zones, better sprint threshold
+
+---
+
+## Log
+
+Append one line per completed item: `date · id · commit · note`.
+
+- 2026-09-02 · seeded · fd5652d · backlog written
