@@ -356,6 +356,51 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- decoy: a nuisance that keeps talking ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('you carry one decoy', (await evl('__fp.decoyCharges')) === 1, `n=${await evl('__fp.decoyCharges')}`);
+ok('a decoy drops', (await evl('__fp.dropDecoy()')) === true);
+ok('dropping spends the charge', (await evl('__fp.decoyCharges')) === 0);
+ok('it is sitting on the floor', (await evl('__fp.decoysLive')) === 1);
+
+/* unlike a coin, it keeps making noise - several pulses over its life */
+const pulses = await evl(`(() => {
+  invuln = 999;
+  let heard = 0, wasEmpty = true;
+  for (let i = 0; i < 200; i++) {
+    update(0.016);
+    if (noise.length > 0 && wasEmpty) { heard++; wasEmpty = false; }
+    if (noise.length === 0) wasEmpty = true;
+  }
+  return heard;
+})()`);
+ok('a decoy chirps again and again', pulses >= 2, `pulses=${pulses}`);
+
+/* a drone on patrol goes to look at it */
+const pulled = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999;
+  mapIdx = 0; loadMap(0); hud(); invuln = 999;
+  decoys.length = 0; noise.length = 0;
+  const b = bots[0];
+  b.state = 'patrol'; b.path = [];
+  player.x = b.x + 240; player.y = b.y;
+  __fp.setDecoy(1); __fp.dropDecoy();
+  const before = b.state;
+  for (let i = 0; i < 90; i++) update(0.016);
+  return JSON.stringify({ before, after: bots[0].state });
+})()`);
+const pl = JSON.parse(pulled);
+ok('a drone comes to investigate it', pl.before === 'patrol' && pl.after !== 'patrol', pulled);
+
+const spent = await evl(`(() => { mode = 'playing'; paused = false; invuln = 999; decoys.length = 0;
+  decoys.push({ x: player.x, y: player.y, life: 0.3, pulseT: 9, ph: 0 });
+  for (let i = 0; i < 30; i++) update(0.05);
+  return __fp.decoysLive; })()`);
+ok('a decoy runs down and is cleaned up', spent === 0, `live=${spent}`);
+await evl('__fp.setDecoy(0)');
+ok('you cannot drop one you do not have', (await evl('__fp.dropDecoy()')) === false);
+
 /* ---- EMP: kills the grid, and the light you were reading by ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

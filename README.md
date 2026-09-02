@@ -51,6 +51,9 @@ either. They see what their light sees, and nothing else.
   electric inside the bubble stops for five and a half seconds: lamps, neon,
   cameras, laser gates. It is local, so gates outside it keep running. And the
   lamps it kills were the ones showing you where the gold was.
+- **A decoy keeps talking** — one a floor on `V`. A thrown coin is a single
+  clatter and they drift back; a decoy chirps every second or so for twelve, which
+  is long enough to walk a corridor they were standing in.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
@@ -99,6 +102,7 @@ add bots and speed, and your best depth per device is kept.
 | Throw a coin | `E` | HUD buttons |
 | Drop smoke | `X` | HUD buttons |
 | Fire an EMP | `C` | HUD buttons |
+| Set a decoy | `V` | HUD buttons |
 | Mute / pause | `M` / `P` | HUD buttons |
 | Restart | `R`, or `Space` on the card | tap the button |
 

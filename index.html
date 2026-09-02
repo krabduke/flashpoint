@@ -64,6 +64,9 @@
   #flareRow i.emp{background:#9fd8ff;box-shadow:0 0 8px rgba(159,216,255,.55);margin-left:3px}
   #flareRow i.emp.spent{background:transparent;box-shadow:none;
     border:1px solid rgba(159,216,255,.35)}
+  #flareRow i.dec{background:#7dffc4;box-shadow:0 0 8px rgba(125,255,196,.5);margin-left:3px}
+  #flareRow i.dec.spent{background:transparent;box-shadow:none;
+    border:1px solid rgba(125,255,196,.35)}
   #puRow{display:flex;gap:6px;margin-top:6px;pointer-events:none}
   .pu{
     display:flex;align-items:center;gap:5px;
@@ -356,6 +359,8 @@ const T = {
   /* EMP: kills everything electric in reach - including the lamps that were
      showing you where the gold was */
   EMP_N: 1, EMP_T: 5.5, EMP_R: 230,
+  /* decoy: not a ping but a nuisance - it keeps chirping, so they keep coming */
+  DECOY_N: 1, DECOY_T: 12, DECOY_PULSE: 1.15, DECOY_NOISE: 560,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
@@ -581,6 +586,7 @@ let batt = 100, beamOn = true, battDead = false;
 let flares = 2;
 let smokes = [], smokePellets = 1;
 let emps = [], empCharges = 1;
+let decoys = [], decoyCharges = 1;
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -689,6 +695,7 @@ const sfx = {
   flare() { noiseBurst(0.22, 0.22, 900); tone(420, 900, 0.3, 0.14); },
   smoke() { noiseBurst(0.5, 0.12, 260); },
   emp() { tone(900, 60, 0.45, 0.22, 'square'); noiseBurst(0.3, 0.16, 140); },
+  decoy() { tone(1180, 1180, 0.05, 0.07, 'square'); },
   ui() { tone(700, 900, 0.06, 0.08); }
 };
 function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
@@ -771,6 +778,7 @@ function loadMap(idx) {
   flares = T.FLARE_N;
   smokes = []; smokePellets = T.SMOKE_N;
   emps = []; empCharges = T.EMP_N;
+  decoys = []; decoyCharges = T.DECOY_N;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -1012,6 +1020,15 @@ function update(dt) {
     if (u.kind === 'B') { batt = Math.min(T.BATT_MAX, batt + T.BATT_PICKUP); battDead = false; toast('CELL — TORCH TOPPED UP', 2.2); }
     hud();
   }
+  /* decoys chirp on a timer until they run down */
+  for (let i = decoys.length - 1; i >= 0; i--) {
+    const d = decoys[i];
+    d.life -= dt;
+    d.pulseT -= dt;
+    if (d.pulseT <= 0) { d.pulseT = T.DECOY_PULSE; makeNoise(d.x, d.y, T.DECOY_NOISE); sfx.decoy(); }
+    if (d.life <= 0) decoys.splice(i, 1);
+  }
+
   /* EMP bubbles decay, then one pass marks what they have killed */
   for (let i = emps.length - 1; i >= 0; i--) {
     emps[i].life -= dt;
@@ -1701,6 +1718,7 @@ function render() {
   for (const e of emitters) if (e.kind === 'flare') drawFlare(e);
   for (const k of smokes) drawSmoke(k);
   for (const m of emps) drawEmp(m);
+  for (const d of decoys) drawDecoy(d);
   /* the bots: the darkness hides them — your beam is the only truth */
   if (mode !== 'menu') { for (const b of bots) drawBotBody(b); }
   ctx.globalCompositeOperation = 'lighter';
@@ -1918,6 +1936,32 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawDecoy(d) {
+  const fade = Math.min(1, d.life / 1.5);
+  const beat = Math.max(0, Math.sin((T.DECOY_PULSE - d.pulseT) * 9));
+  ctx.save(); ctx.translate(d.x, d.y);
+  ctx.globalAlpha = fade * 0.5;
+  ctx.fillStyle = 'rgba(0,0,0,.6)';
+  ctx.beginPath(); ctx.ellipse(1, 3, 6, 3, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = fade;
+  ctx.fillStyle = '#1b1a28';
+  rr(ctx, -4, -5, 8, 10, 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(125,255,196,.7)'; ctx.lineWidth = 1;
+  rr(ctx, -4, -5, 8, 10, 2); ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = fade * (0.35 + 0.65 * beat);
+  ctx.fillStyle = '#7dffc4';
+  ctx.beginPath(); ctx.arc(0, -1, 1.8, 0, TAU); ctx.fill();
+  /* the sound going out */
+  if (beat > 0.05) {
+    ctx.globalAlpha = fade * beat * 0.3;
+    ctx.strokeStyle = '#7dffc4'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, 0, 8 + (1 - beat) * 26, 0, TAU); ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
 }
 
 function drawEmp(m) {
@@ -2270,6 +2314,18 @@ const empSuppressed = (x, y) => emps.some(m => Math.hypot(m.x - x, m.y - y) < m.
 
 /* One charge a floor. Everything electric inside the bubble stops: lamps, neon,
    cameras, laser gates. So does the light you were reading the room by. */
+/* A coin is one clatter and they drift back. A decoy keeps making noise for
+   twelve seconds, which is long enough to walk a route they were standing on. */
+function dropDecoy() {
+  if (mode !== 'playing' || decoyCharges <= 0) { sfx.ui(); return false; }
+  decoyCharges--;
+  decoys.push({ x: player.x, y: player.y, life: T.DECOY_T, pulseT: 0, ph: rand(0, TAU) });
+  sfx.ui();
+  toast('DECOY SET — IT WILL KEEP TALKING', 2.4);
+  hud();
+  return true;
+}
+
 function fireEmp() {
   if (mode !== 'playing' || empCharges <= 0) { sfx.ui(); return false; }
   empCharges--;
@@ -2475,6 +2531,7 @@ function hud() {
     ? Array.from({ length: T.FLARE_N }, (_, i) => '<i class="' + (i < flares ? '' : 'spent') + '"></i>').join('')
       + Array.from({ length: T.SMOKE_N }, (_, i) => '<i class="smk' + (i < smokePellets ? '' : ' spent') + '"></i>').join('')
       + Array.from({ length: T.EMP_N }, (_, i) => '<i class="emp' + (i < empCharges ? '' : ' spent') + '"></i>').join('')
+      + Array.from({ length: T.DECOY_N }, (_, i) => '<i class="dec' + (i < decoyCharges ? '' : ' spent') + '"></i>').join('')
     : '';
 
   /* active power-ups */
@@ -2523,6 +2580,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'e' || e.key === 'E') && mode === 'playing') { tossCoin(); }
   if ((e.key === 'x' || e.key === 'X') && mode === 'playing') { dropSmoke(); }
   if ((e.key === 'c' || e.key === 'C') && mode === 'playing') { fireEmp(); }
+  if ((e.key === 'v' || e.key === 'V') && mode === 'playing') { dropDecoy(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if ((e.key === 'p' || e.key === 'P')) togglePause();
 });
@@ -2732,7 +2790,12 @@ window.__fp = {
   get empsLive() { return emps.length; },
   setEmp(n) { empCharges = n; hud(); },
   get deadEmitters() { return emitters.filter(e => e.dead).length; },
-  get liveLasers() { return lasers.filter(l => l.on).length; }
+  get liveLasers() { return lasers.filter(l => l.on).length; },
+  dropDecoy() { return dropDecoy(); },
+  get decoyCharges() { return decoyCharges; },
+  get decoysLive() { return decoys.length; },
+  setDecoy(n) { decoyCharges = n; hud(); },
+  decoyPoints() { return decoys.map(d => ({ x: d.x, y: d.y, life: +d.life.toFixed(2) })); }
 };
 </script>
 </body>
