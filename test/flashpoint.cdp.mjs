@@ -358,6 +358,48 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- vents: you fit, they do not ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 1; loadMap(1); hud();');
+await sleep(300);
+ok('floors carry vents', (await evl('__fp.ventsN')) > 0, `n=${await evl('__fp.ventsN')}`);
+ok('a vent is walkable for you', await evl(`(() => {
+  const v = __fp.ventPoints()[0];
+  return !isWall(v.x, v.y);
+})()`));
+
+/* a drone routed across a vent must go around it */
+const routed = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const v = __fp.ventPoints()[0];
+  /* pick the two open cells the vent joins */
+  const S = T.TILE;
+  const lr = !isWall(v.x - S, v.y) && !isWall(v.x + S, v.y);
+  const a = lr ? { x: v.x - S, y: v.y } : { x: v.x, y: v.y - S };
+  const bb = lr ? { x: v.x + S, y: v.y } : { x: v.x, y: v.y + S };
+  const cells = __fp.botPathHits(a.x, a.y, bb.x, bb.y);
+  const ventCell = v.gy * T.COLS + v.gx;
+  return JSON.stringify({ len: cells.length, throughVent: cells.includes(ventCell) });
+})()`);
+const rt = JSON.parse(routed);
+ok('a drone will not path through a vent', rt.throughVent === false, routed);
+ok('it routes the long way round instead', rt.len > 1, routed);
+
+/* and the shortcut is real: straight through is shorter than their detour */
+const shortcut = await evl(`(() => {
+  const v = __fp.ventPoints()[0];
+  const S = T.TILE;
+  const lr = !isWall(v.x - S, v.y) && !isWall(v.x + S, v.y);
+  const a = lr ? { x: v.x - S, y: v.y } : { x: v.x, y: v.y - S };
+  const bb = lr ? { x: v.x + S, y: v.y } : { x: v.x, y: v.y + S };
+  return JSON.stringify({ yours: 2, theirs: __fp.botPathHits(a.x, a.y, bb.x, bb.y).length });
+})()`);
+const vcut = JSON.parse(shortcut);
+ok('the vent is worth taking', vcut.theirs > vcut.yours, shortcut);
+
+ok('vents never strand a coin', await evl(`(() => validateMaps() === 'ok')()`));
+
 /* ---- fixed cameras: a cone that never moves, so it has a safe side ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

@@ -73,6 +73,10 @@ either. They see what their light sees, and nothing else.
   sweeping searchlight there is no waiting for it to pass: you learn the angle
   and take the other route. They are on the same circuit as everything else, so
   smoke breaks their line and an EMP puts them out.
+- **Vents are yours alone** — grilles cut through walls that you fit through and
+  a drone does not. On the Warehouse the shortcut is two tiles for you against an
+  eighteen-tile detour for anything chasing you, which is the difference between
+  being followed and being lost.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

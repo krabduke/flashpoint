@@ -463,7 +463,7 @@ const MAPS = [
     '#.P.....x..L.......x....c..#',
     '#####.######.######.######.#',
     '#..c..............#........#',
-    '#.#####.#####.###.#.####.#.#',
+    '#.#####.#####.###.V.####.#.#',
     '#.....#x#L....#...#......#.#',
     '###.#.###..####.###.####.#.#',
     '#...#...#....#..#....#...#.#',
@@ -471,7 +471,7 @@ const MAPS = [
     '#.#c.....#.s...#.....#.....#',
     '#.#.#######.####.#######.#.#',
     '#.#.#....#..x#...#c...#..#.#',
-    '#.#.#.L..#....#..#.L..#.##.#',
+    '#.#.V.L..#....#..#.L..#.##.#',
     '#...#....#.....#.#....#....#',
     '#.###.####..x..#.#.####c##.#',
     '#....c..........Z...#..x.E.#',
@@ -505,14 +505,14 @@ const MAPS = [
     '#..####..#......#...####...#',
     '#..#..c..#.e..x.#.I.#..L..x#',
     '#..#.....#......#...#......#',
-    '#..####..####D###...#..#####',
+    '#..####..##V#D###...#..#####',
     '#..................x#c.....#',
     '####.#####.########.####.###',
     '#..c......#x..L..#....N....#',
     '#..#####..#......#...x.....#',
     '#.......#.#.######..######.#',
     '#.c...#...#.#...x.#......x.#',
-    '#...f.#...#.#...#.#####.####',
+    '#...f.#...V.#...#.#####.####',
     '#.....#####.#.Ec#....c.....#',
     '#..x........#...#.###..x...#',
     '#....L...c..#...#..........#',
@@ -545,11 +545,11 @@ const MAPS = [
     '#......#....#.IK.#....#....#',
     '#......#..e.#....#....#....#',
     '#......D...................#',
-    '#......#....#.f..#....#....#',
+    '#......V....#.f..#....#....#',
     '#......#....#....#...C#....#',
     '#......#....#....#....#...c#',
     '#......c........c..........#',
-    '#......#....#....#....#....#',
+    '#......#....#....V....#....#',
     '#......#....#....#....#....#',
     '#......#....#....#....#....#',
     '#..........................#',
@@ -607,10 +607,10 @@ const MAPS = [
     '#...####.....S......####...#',
     '#..e.............Z.........#',
     '#..........######....C.....#',
-    '#.#####...c######....#####c#',
+    '#.#####...c######....#V###c#',
     '#.#...D....######.c......#.#',
     '#.#c..#.R..######....#...#.#',
-    '#.#####....######....#####.#',
+    '#.##V##....######....#####.#',
     '#..........######..I...c...#',
     '#....C........c............#',
     '#...####............####...#',
@@ -643,6 +643,7 @@ let emps = [], empCharges = 1;
 let decoys = [], decoyCharges = 1;
 let magT = 0, magCharges = 1;
 let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
+let ventAt = new Uint8Array(T.COLS * T.ROWS);
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -806,6 +807,7 @@ function loadMap(idx) {
   grid = new Uint8Array(T.COLS * T.ROWS);
   coinList = []; emitters = []; propsXY = []; powerups = [];
   doors = []; keycards = [];
+  ventAt = new Uint8Array(T.COLS * T.ROWS);
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
     const ch = rows[y][x] || '#';
     const cx = (x + 0.5) * T.TILE, cy = (y + 0.5) * T.TILE;
@@ -821,6 +823,7 @@ function loadMap(idx) {
        applies here for free. It only needs pointing somewhere useful. */
     if (ch === 'C') emitters.push({ x: cx, y: cy, r: 205, col: '#ffe0c0', flick: 0, kind: 'search', cam: true, ang: 0, spin: 0, rays: new Float32Array(17) });
     if ('fsedm'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
+    if (ch === 'V') ventAt[y * T.COLS + x] = 1;
     if (ch === 'D') { grid[y * T.COLS + x] = 1; doors.push({ gx: x, gy: y, x: cx, y: cy, open: false }); }
     if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
     if (ch === 'B') powerups.push({ x: cx, y: cy, kind: 'B', got: false, ph: rand(0, TAU) });
@@ -1007,6 +1010,7 @@ function pathFind(sx, sy, tx, ty) {
     for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
       const nx = x + dx, ny = y + dy;
       if (isWallCell(nx, ny)) continue;
+      if (ventAt[ny * T.COLS + nx]) continue;   /* a drone does not fit */
       const j = ny * T.COLS + nx, ng = gCost[cur] + 1;
       if (ng < gCost[j]) {
         gCost[j] = ng; from[j] = cur;
@@ -1352,7 +1356,7 @@ function updateBots(dt) {
       else { b.x += dx / d * speed * dt; b.y += dy / d * speed * dt; faceToward(b, np.x, np.y, dt); }
     } else if (b.state === 'patrol') {
       b.x += Math.cos(b.face) * speed * 0.4 * dt; b.y += Math.sin(b.face) * speed * 0.4 * dt;
-      if (isWall(b.x, b.y)) { b.x -= Math.cos(b.face) * speed * dt; b.y -= Math.sin(b.face) * speed * dt; advanceWp(b); }
+      if (isWall(b.x, b.y) || ventAt[cellOf(b.x, b.y).i]) { b.x -= Math.cos(b.face) * speed * dt; b.y -= Math.sin(b.face) * speed * dt; advanceWp(b); }
     }
 
     /* idle sweep while stationary or searching */
@@ -1850,6 +1854,7 @@ function render() {
   for (const k of smokes) drawSmoke(k);
   for (const m of emps) drawEmp(m);
   for (const d of decoys) drawDecoy(d);
+  for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) drawVent(i);
   for (const d of doors) drawDoor(d);
   for (const k of keycards) if (!k.got) drawKeycard(k);
   /* the bots: the darkness hides them — your beam is the only truth */
@@ -2088,6 +2093,24 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawVent(i) {
+  const gx = i % T.COLS, gy = (i - gx) / T.COLS, S = T.TILE;
+  const px = gx * S, py = gy * S;
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,9,18,.85)';
+  ctx.fillRect(px + 3, py + 3, S - 6, S - 6);
+  ctx.strokeStyle = 'rgba(150,160,200,.4)'; ctx.lineWidth = 1.2;
+  ctx.strokeRect(px + 3, py + 3, S - 6, S - 6);
+  ctx.strokeStyle = 'rgba(150,160,200,.3)'; ctx.lineWidth = 1.6;
+  for (let k = 1; k <= 4; k++) {
+    ctx.beginPath();
+    ctx.moveTo(px + 7, py + 3 + k * (S - 6) / 5);
+    ctx.lineTo(px + S - 7, py + 3 + k * (S - 6) / 5);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawDoor(d) {
@@ -3016,6 +3039,9 @@ window.__fp = {
   get searchN() { return emitters.filter(e => e.kind === 'search').length; },
   get camN() { return emitters.filter(e => e.cam).length; },
   camPoints() { return emitters.filter(e => e.cam).map(e => ({ x: e.x, y: e.y, ang: +e.ang.toFixed(3), spin: e.spin, r: e.r })); },
+  get ventsN() { return ventAt.reduce((a, v) => a + v, 0); },
+  ventPoints() { const out = []; for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) { const gx = i % T.COLS; out.push({ gx, gy: (i - gx) / T.COLS, x: (gx + .5) * T.TILE, y: ((i - gx) / T.COLS + .5) * T.TILE }); } return out; },
+  botPathHits(x1, y1, x2, y2) { return pathFind(x1, y1, x2, y2).map(p => cellOf(p.x, p.y).i); },
   get laserMid() { const l = lasers.find(x => x.on) || lasers[0]; return l ? { x: (l.x1 + l.x2) / 2, y: (l.y1 + l.y2) / 2 } : null; },
   forceSiren() { sirenT = 5; nextSiren = 1e9; },
   forceFog() { fogT = 6; nextFog = 1e9; },
