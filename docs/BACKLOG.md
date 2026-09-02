@@ -56,7 +56,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 
 ## E · Bot AI
 
-- [ ] E1 Flanking — a radioed drone takes a different route to the same place
+- [x] E1 Flanking — each radioed drone gets its own approach bearing and claims it, so they surround rather than queue
 - [ ] E2 Spiral search — investigate outward from last known, not just to a point
 - [ ] E3 Corner peeking — pause and sweep at junctions
 - [ ] E4 Predictive intercept — chase where you are going, not where you were
@@ -133,3 +133,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · D6 · three modes across 6 shared numbers, score scales 0.7/1/1.5, 10 assertions; speedMult() extracted so the hook cannot drift
 - 2026-09-03 · D7 · 8 loop rules reusing existing systems, shown in the HUD, 10 assertions — **section D complete**
 - 2026-09-03 · D8 · ghost trails per floor, 8 assertions; fixed laser gates ignoring the spawn grace period and de-flaked the campaign block — **section D complete**
+- 2026-09-03 · E1 · flankPoint() with claim avoidance; 3 drones, 3 distinct points, 3 bearings, 6 assertions

@@ -372,6 +372,50 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- flanking: a radioed net closes from several sides ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const flank = await evl(`(() => {
+  mode = 'playing'; invuln = 999; endless = false;
+  loop = 0; mapIdx = 11; loadMap(11); hud();   /* the Penthouse, four drones */
+  /* stand them in open floor around the player so nobody is boxed in */
+  player.x = spawnPt.x; player.y = spawnPt.y;
+  const ring = [];
+  for (let a = 0; a < 8 && ring.length < bots.length + 1; a++) {
+    const ang = a / 8 * Math.PI * 2;
+    const x = player.x + Math.cos(ang) * 150, y = player.y + Math.sin(ang) * 150;
+    if (!isWall(x, y)) ring.push({ x, y });
+  }
+  if (ring.length < 2) return JSON.stringify({ err: 'no open ring' });
+  bots.forEach((b, i) => {
+    const p = ring[i % ring.length];
+    b.x = p.x; b.y = p.y; b.state = 'patrol'; b.path = []; b.flankX = undefined;
+  });
+  const src = bots[0];
+  src.state = 'chase';
+  const heard = __fp.radioFrom(0);
+  const flanks = __fp.botFlanks().filter(Boolean);
+  const uniq = new Set(flanks.map(f => f.x + ',' + f.y)).size;
+  const atPlayer = flanks.filter(f => Math.hypot(f.x - player.x, f.y - player.y) < 20).length;
+  const spread = flanks.map(f => Math.round(Math.atan2(f.y - player.y, f.x - player.x) * 180 / Math.PI));
+  return JSON.stringify({ heard, flanks: flanks.length, uniq, atPlayer, spread });
+})()`);
+const fl2 = JSON.parse(flank);
+ok('the radio reaches the other drones', fl2.heard >= 2, flank);
+ok('each gets its own approach point', fl2.uniq === fl2.flanks && fl2.flanks >= 2, flank);
+ok('they aim around you, not at you', fl2.atPlayer === 0, flank);
+ok('and from different bearings', new Set(fl2.spread).size >= 2, flank);
+
+ok('a flank point is always somewhere walkable', await evl(`(() => {
+  return __fp.botFlanks().filter(Boolean).every(f => !isWall(f.x, f.y));
+})()`));
+
+ok('their paths do not all end in the same cell', await evl(`(() => {
+  const ends = __fp.botPathEnds().filter(Boolean);
+  if (ends.length < 2) return true;
+  return new Set(ends.map(e => e.x + ',' + e.y)).size > 1;
+})()`));
+
 /* ---- ghost replay: your own best route through a floor ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

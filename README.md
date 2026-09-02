@@ -111,6 +111,10 @@ either. They see what their light sees, and nothing else.
   get lit by a spotlight, the alert level goes up a notch and every drone in the
   run gets 8% faster. It never falls until you start again, so a scrappy second
   floor is something you pay for in the CORE. Four notches is the ceiling.
+- **The net closes from several sides** — a drone that radios your position does
+  not send the others to the same cell any more. Each one gets its own bearing on
+  you and claims it, so they arrive spread around you rather than nose to tail
+  down one corridor. Backing into a room is a worse idea than it used to be.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
