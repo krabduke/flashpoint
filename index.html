@@ -783,6 +783,27 @@ let diffIdx = (() => {
 })();
 const D = () => DIFFS[diffIdx];
 
+/* One rule per endless loop, each one leaning on a system the game already has
+   rather than a knob invented for the occasion. Chosen from the loop number so a
+   daily endless run is the same for everybody. */
+const MODS = [
+  { id: 'swarm',  name: 'SWARM',          note: 'One more drone on every floor',   bots: 1 },
+  { id: 'trigger',name: 'HAIR TRIGGER',   note: 'They pin you down faster',        fill: 1.4 },
+  { id: 'deadair',name: 'DEAD AIR',       note: 'The torch burns out sooner',      batt: 1.6 },
+  { id: 'brown',  name: 'BROWNOUT',       note: 'The lamps stay off',              brown: true },
+  { id: 'grid',   name: 'GRID FAILURE',   note: 'Blackouts on every floor',        blackout: true },
+  { id: 'wail',   name: 'WAILING',        note: 'Sirens on every floor',           siren: true },
+  { id: 'haar',   name: 'SEA HAAR',       note: 'Fog on every floor',              fog: true },
+  { id: 'curse',  name: "MAGPIE'S CURSE", note: 'Gold pays double and rings loud', coin: 2, haul: 2 }
+];
+let modIdx = -1;
+const MOD = () => (endless && modIdx >= 0) ? MODS[modIdx] : {};
+function pickMod() {
+  modIdx = endless ? ((loop * 7 + (dailyOn ? todaySeed() : Math.floor(rng() * 997))) % MODS.length) : -1;
+  if (modIdx >= 0) toast('LOOP RULE — ' + MODS[modIdx].name + ': ' + MODS[modIdx].note, 3.2);
+  hud();
+}
+
 let alertLvl = 0, alertCool = 0;
 /* Twelve, each one about a system this game actually has rather than a
    participation prize. Per-floor flags are what make the negative ones
@@ -1027,8 +1048,8 @@ function loadMap(idx) {
     ph: rand(0, TAU), on: true, zapped: false
   }));
   botSpd = M.spd || 1;
-  blackoutMap = M.theme === 'ward' || !!M.blackout;
-  sirenT = 0; nextSiren = M.siren ? rand(8, 12) : 1e9;
+  blackoutMap = M.theme === 'ward' || !!M.blackout || !!MOD().blackout;
+  sirenT = 0; nextSiren = (M.siren || MOD().siren) ? rand(8, 12) : 1e9;
   fogT = 0; flScale = 1; nextFog = M.fog ? rand(7, 12) : 1e9;
   rusty = (M.rusty || []).map(([x, y]) => ({ i: y * T.COLS + x, t: 0 }));
   cats = (M.cat || []).map(([x, y]) => ({ x: (x + .5) * T.TILE, y: (y + .5) * T.TILE, vx: 0, vy: 0, r: 6, state: 'sleep', t: rand(1, 3), ph: rand(0, TAU), face: rand(0, TAU) }));
@@ -1077,7 +1098,7 @@ function loadMap(idx) {
 function spawnBots() {
   bots = [];
   const M = MAPS[mapIdx];
-  const want = Math.min(M.bots + loop, 5);
+  const want = Math.min(M.bots + loop + (MOD().bots || 0), 6);
   for (let i = 0; i < want; i++) {
     const route = (M.routes && M.routes[i % M.routes.length]) || fallbackRoute();
     /* start each bot at a different waypoint along the route to prevent clustering */
@@ -1244,7 +1265,7 @@ let beatT = 0;
 
 /* Gold is heavy and it jingles. A full run home is louder than an empty walk in,
    which is what makes the last stretch of a floor the frightening one. */
-const haulNoise = () => 1 + T.HAUL_NOISE * (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
+const haulNoise = () => 1 + T.HAUL_NOISE * (MOD().haul || 1) * (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
 
 function makeNoise(x, y, r) { noise.push({ x, y, r, t: 0.3 }); }
 
@@ -1450,7 +1471,7 @@ function update(dt) {
     emps[i].life -= dt;
     if (emps[i].life <= 0) emps.splice(i, 1);
   }
-  for (const e of emitters) e.dead = e.kind !== 'exit' && empSuppressed(e.x, e.y);
+  for (const e of emitters) e.dead = e.kind !== 'exit' && (empSuppressed(e.x, e.y) || (!!MOD().brown && (e.kind === 'lamp' || e.kind === 'neon')));
   for (const l of lasers) l.dead = empSuppressed((l.x1 + l.x2) / 2, (l.y1 + l.y2) / 2);
 
   /* smoke thins out */
@@ -1470,7 +1491,7 @@ function update(dt) {
   /* torch battery */
   const battWas = Math.ceil(batt / 5);
   if (beamOn) {
-    batt = Math.max(0, batt - T.BATT_DRAIN * D().batt * dt);
+    batt = Math.max(0, batt - T.BATT_DRAIN * D().batt * (MOD().batt || 1) * dt);
     if (batt <= 0) { beamOn = false; battDead = true; sfx.blackout(); toast('TORCH DEAD — LET IT REST', 2.4); }
   } else {
     batt = Math.min(T.BATT_MAX, batt + T.BATT_RECOVER * dt);
@@ -1519,6 +1540,7 @@ function update(dt) {
   /* fog banks strangle the beam */
   if (fogT > 0) fogT -= dt;
   else { nextFog -= dt; if (nextFog <= 0) { fogT = 6; nextFog = rand(14, 20); toast('FOG BANK — BEAM DYING', 2.5); } }
+  if (MOD().fog && nextFog > 1e8) nextFog = rand(6, 12);
   flScale += ((fogT > 0 ? 0.55 : 1) - flScale) * Math.min(1, dt * 1.6);
 
   /* neon signs overload and flash */
@@ -1765,7 +1787,7 @@ function updateMeter(dt) {
     let mult = searchOnly ? 0.7 : 1;
     if (!searchOnly) for (const e of emitters) { if (e.kind === 'exit' || e.kind === 'search' || e.dead) continue; if (blackout > 0) continue; if (Math.hypot(e.x - player.x, e.y - player.y) < e.r * 0.8) { mult = T.EXPOSE_MULT; break; } }
     const wasBelow = meter < 0.55;
-    meter = Math.min(1, meter + T.SEE_FILL * D().fill * mult * dt);
+    meter = Math.min(1, meter + T.SEE_FILL * D().fill * (MOD().fill || 1) * mult * dt);
     if (wasBelow && meter >= 0.55 && !searchOnly) bumpAlert();
     redPulse = Math.max(redPulse, meter);
     if (meter >= 1) caught();
@@ -1815,7 +1837,7 @@ function nextMap() {
   if (last && !endless) { win(); return; }
   totalRunCoins += coins;
   mapIdx = (mapIdx + 1) % MAPS.length;
-  if (mapIdx === 0) loop++;
+  if (mapIdx === 0) { loop++; pickMod(); }
   loadMap(mapIdx);
   hud();
 }
@@ -3041,7 +3063,7 @@ function resetKit() {
   magCharges = Math.max(0, T.KIT.mag + Math.max(0, k));
 }
 
-const coinValue = () => Math.round(D().score * T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
+const coinValue = () => Math.round((MOD().coin || 1) * D().score * T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
 
 /* Throw a coin you are carrying. It clatters where it lands and drones walk to
    noise - but the floor still wants every coin, so you have just moved gold you
@@ -3299,7 +3321,7 @@ function startGame() {
   mapIdx = completedLevels.length > 0 ? completedLevels.length : 0;
   loop = Math.floor(mapIdx / MAPS.length);
   mapIdx = mapIdx % MAPS.length;
-  endless = false; runT = 0; score = 0; totalRunCoins = 0;
+  endless = false; modIdx = -1; runT = 0; score = 0; totalRunCoins = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
@@ -3338,7 +3360,7 @@ function startFromFloor(floorIdx) {
 }
 function continueEndless() {
   sfx.ui();
-  endless = true; loop = 1; mapIdx = 0; loadMap(0);
+  endless = true; loop = 1; pickMod(); mapIdx = 0; loadMap(0);
   $('escaped').classList.add('hidden');
   mode = 'playing';
   hud();
@@ -3364,7 +3386,8 @@ function togglePause() {
 function hud() {
   coinsEl.textContent = coins + '/' + coinsTotal;
   $('score').textContent = score;
-  mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name;
+  mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name
+    + (modIdx >= 0 && endless ? ' · ' + MODS[modIdx].name : '');
   whoEl.textContent = name || 'ANON';
   /* torch charge */
   const bw = $('battWrap'), bf = $('battFill');
@@ -3604,6 +3627,11 @@ window.__fp = {
   resetAchs() { achs = {}; try { localStorage.setItem('flashpoint.achs', '{}'); } catch (e) {} renderAchs(); },
   unlock(id) { unlock(id); return !!achs[id]; },
   get floorFlags() { return { seen: fSeen, sprint: fSprint, noticed: fNoticed, emp: fEmp }; },
+  get loopMod() { return modIdx >= 0 ? MODS[modIdx].id : null; },
+  get loopModName() { return modIdx >= 0 ? MODS[modIdx].name : null; },
+  get modsTotal() { return MODS.length; },
+  setMod(i) { modIdx = i; hud(); return MOD().id || null; },
+  pickMod() { pickMod(); return __fp.loopMod; },
   get diff() { return D().id; },
   get diffMods() { return Object.assign({}, D()); },
   setDiff(id) { const i = DIFFS.findIndex(d => d.id === id); if (i >= 0) diffIdx = i; renderDiff(); return D().id; },

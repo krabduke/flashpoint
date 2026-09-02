@@ -366,6 +366,60 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- endless loop modifiers ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+ok('there are eight loop rules', (await evl('__fp.modsTotal')) === 8, `n=${await evl('__fp.modsTotal')}`);
+ok('the campaign runs without one', (await evl('__fp.loopMod')) === null);
+
+ok('entering endless picks a rule', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  continueEndless();
+  return __fp.loopMod !== null && __fp.loopModName !== null;
+})()`));
+
+const modEffects = await evl(`(() => {
+  mode = 'playing'; invuln = 999; endless = true; loop = 1;
+  const read = (i) => {
+    __fp.setMod(i);
+    mapIdx = 0; loadMap(0); hud();
+    const M = MAPS[0];
+    return { id: __fp.loopMod, bots: __fp.botsN, coin: __fp.coinValue(),
+             haulFull: (coins = coinsTotal, +__fp.haulNoise.toFixed(2)),
+             blackout: blackoutMap, siren: nextSiren < 1e8 };
+  };
+  const out = [];
+  for (let i = 0; i < __fp.modsTotal; i++) out.push(read(i));
+  __fp.setMod(-1); endless = false;
+  return JSON.stringify(out);
+})()`);
+const me = JSON.parse(modEffects);
+const byId = Object.fromEntries(me.map(m => [m.id, m]));
+ok('swarm adds a drone', byId.swarm.bots > byId.trigger.bots, modEffects);
+ok('the curse doubles gold', byId.curse.coin > byId.trigger.coin, modEffects);
+ok('and makes you ring louder with it', byId.curse.haulFull > byId.trigger.haulFull, modEffects);
+ok('grid failure blacks out an ordinary floor', byId.grid.blackout === true && byId.trigger.blackout === false, modEffects);
+ok('wailing puts sirens on an ordinary floor', byId.wail.siren === true && byId.trigger.siren === false, modEffects);
+
+ok('brownout kills the lamps', await evl(`(() => {
+  mode = 'playing'; endless = true; loop = 1;
+  __fp.setMod(3); mapIdx = 0; loadMap(0); emps.length = 0;
+  update(0.016);
+  const dead = emitters.filter(e => (e.kind === 'lamp' || e.kind === 'neon') && e.dead).length;
+  __fp.setMod(-1); endless = false; update(0.016);
+  const alive = emitters.filter(e => (e.kind === 'lamp' || e.kind === 'neon') && e.dead).length;
+  return dead > 0 && alive === 0;
+})()`));
+
+ok('a daily endless run picks the same rule twice', await evl(`(() => {
+  __fp.setDaily(true);
+  endless = true; loop = 3;
+  const a = __fp.pickMod();
+  const b = __fp.pickMod();
+  __fp.setDaily(false); endless = false; __fp.setMod(-1);
+  return a === b;
+})()`));
+
 /* ---- difficulty modes ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

@@ -217,6 +217,17 @@ It also asserts pixels where a predicate is not enough: that a lit coin is
 actually brighter than the floor beside it, that a remembered one stays findable,
 and that a filling meter really does turn the screen edge red.
 
+## Endless has rules
+
+Every loop past the campaign draws one of eight, printed beside the floor name:
+an extra drone on every floor, a meter that pins you faster, a torch that burns
+out sooner, lamps that stay dark, blackouts everywhere, sirens everywhere, fog
+everywhere, or a magpie's curse that pays double for gold and makes you ring
+like a bell carrying it.
+
+The rule comes from the loop number, so a daily endless run gives everyone the
+same one.
+
 ## Three ways to play
 
 **Standard** is the game as tuned. **Casual** slows the drones, fills the meter
