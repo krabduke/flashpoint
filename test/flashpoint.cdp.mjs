@@ -358,6 +358,62 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- mirrors: see round a corner without walking into it ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 2; loadMap(2); hud();');
+await sleep(300);
+ok('corners carry mirrors', (await evl('__fp.mirrorsN')) > 0, `n=${await evl('__fp.mirrorsN')}`);
+ok('a mirror is solid', await evl(`(() => { const m = __fp.mirrorPoints()[0]; return isWall(m.x, m.y); })()`));
+
+/* aim into a mirror and a second cone appears, turned off the first */
+const bounced = await evl(`(() => {
+  mode = 'playing'; invuln = 999; beamOn = true;
+  const m = __fp.mirrorPoints()[0];
+  /* stand down whichever corridor actually reaches it */
+  const S = T.TILE;
+  const sides = [[-1,0],[1,0],[0,-1],[0,1]].filter(([dx,dy]) => !isWall(m.x + dx*S, m.y + dy*S));
+  const [dx, dy] = sides[0];
+  player.x = m.x + dx * S * 1.5; player.y = m.y + dy * S * 1.5;
+  mouseWX = m.x; mouseWY = m.y;
+  update(0.016);
+  const mb = __fp.mirrorBeam;
+  if (!mb) return JSON.stringify({ ok: false, why: 'no reflected beam' });
+  const inAng = Math.atan2(m.y - player.y, m.x - player.x);
+  let turn = Math.abs(Math.atan2(Math.sin(mb.ang - inAng), Math.cos(mb.ang - inAng)));
+  return JSON.stringify({ ok: true, turnDeg: Math.round(turn * 180 / Math.PI), range: mb.range, at: { x: mb.x, y: mb.y }, mx: m.x, my: m.y });
+})()`);
+const mirRes = JSON.parse(bounced);
+ok('aiming at a mirror makes a second beam', mirRes.ok === true, bounced);
+ok('the beam turns a right angle', mirRes.ok && Math.abs(mirRes.turnDeg - 90) < 2, bounced);
+ok('the reflection starts just clear of the pane', mirRes.ok && Math.hypot(mirRes.at.x - mirRes.mx, mirRes.at.y - mirRes.my) < 30, bounced);
+ok('the reflection is shorter than the beam', mirRes.ok && mirRes.range < 345, bounced);
+
+/* and it genuinely lights things the direct beam cannot reach */
+const reach = await evl(`(() => {
+  const mb = __fp.mirrorBeam;
+  if (!mb) return JSON.stringify({ found: 0 });
+  let found = 0, firstAt = 0;
+  for (let d = 8; d < mb.range; d += 8) {
+    const px = mb.x + Math.cos(mb.ang) * d, py = mb.y + Math.sin(mb.ang) * d;
+    if (isWall(px, py)) break;
+    const direct = inFan(px, py, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS);
+    if (!direct && __fp.beamLitAt(px, py)) { found++; if (!firstAt) firstAt = d; }
+  }
+  return JSON.stringify({ found, firstAt });
+})()`);
+const rch = JSON.parse(reach);
+ok('a mirror lights what you cannot see directly', rch.found > 0, reach);
+
+ok('no reflection with the torch off', await evl(`(() => {
+  beamOn = false; update(0.016);
+  const none = __fp.mirrorBeam === null;
+  beamOn = true; update(0.016);
+  return none;
+})()`));
+
+ok('mirrors never strand a coin', await evl("validateMaps() === 'ok'"));
+
 /* ---- pressure plates: step on one and everyone knows ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

@@ -412,6 +412,7 @@ const T = {
   /* doors: a keycard is the fast way through, picking is the exposed way */
   PICK_T: 1.5, DOOR_R: 40, KEY_R: 22, DOOR_NOISE: 250,
   PLATE_R: 17, PLATE_NOISE: 660,
+  MIRROR_LOSS: 0.82,
   /* the kit you start a run with, and the most you can carry of each */
   /* water: you cannot cross a puddle quietly, not even in soft shoes */
   WATER_MULT: 1.4, WATER_STEP: 0.34,
@@ -486,7 +487,7 @@ const MAPS = [
     '#.Pc..............L.......c#',
     '#.d.######..#####..#######.#',
     '#...######..#####..#######.#',
-    '#...######..#####..#######.#',
+    '#...######..####M..#######.#',
     '#...N......c.........x....N#',
     '#L....x..........f.........#',
     '#...######..#####..#######.#',
@@ -494,7 +495,7 @@ const MAPS = [
     '#...######..#####..#######.#',
     '#c........N...x...R.......c#',
     '#.....................x..L.#',
-    '#...######..#####..#######.#',
+    '#...######..#####..M######.#',
     '#...######..#####..#######.#',
     '#...######..#####..#######.#',
     '#..c....x........N........c#',
@@ -526,7 +527,7 @@ const MAPS = [
     '#.P..........!..........x..#',
     '#....####..####..####c.....#',
     '#....####C.####..####......#',
-    '#....####..####..####......#',
+    '#....####..M###..####......#',
     '#...m.........!R...........#',
     '#....####..####..####......#',
     '#....####..####..####..S...#',
@@ -535,7 +536,7 @@ const MAPS = [
     '#..S.................s.....#',
     '#....####..####..####......#',
     '#....####..####..####......#',
-    '#....####..####..####......#',
+    '#....M###..####..####......#',
     '#..........................#',
     '#...c......c......c......c.#',
     '#.......x.........x.......E#',
@@ -547,7 +548,7 @@ const MAPS = [
     '#.P....#...c#....#..c.#...c#',
     '#......#....#.IK.#....#....#',
     '#......#..e.#....#....#....#',
-    '#......D...................#',
+    '#...........D..............#',
     '#......V....#.f..#....#....#',
     '#......#....#....#...C#....#',
     '#......#....#....#....#...c#',
@@ -569,7 +570,7 @@ const MAPS = [
     '#.#....c#..#....c#..#...c#.#',
     '#.#.....#..#.KI..#..#....#.#',
     '#.G.....#..#.....#.C#....#.#',
-    '#.###D###..###.###..##.###.#',
+    '#.M##D###..###.###..##.###.#',
     '#........s....R............#',
     '#..........................#',
     '#...........c.......c.....c#',
@@ -578,7 +579,7 @@ const MAPS = [
     '#.#c....#..#..d..#..#.f..#.#',
     '#.#.....G..#.....#..#....#.#',
     '#.#.....#..#.....#..#....#.#',
-    '#.#######..#######..######c#',
+    '#.M######..#######..######c#',
     '#.........c....!..c.......E#',
     '############################'
   ], routes: [[[2,1],[25,1],[25,8],[2,8],[2,1]],[[2,9],[25,9],[25,16],[2,16],[2,9]],[[5,4],[14,4],[22,4],[22,13],[14,13],[5,13],[5,4]]] },
@@ -607,7 +608,7 @@ const MAPS = [
     '#.P....!......c.......c....#',
     '#.K.####..f.......d.####...#',
     '#...####............####.s.#',
-    '#...####.....S......####...#',
+    '#...####.....S......###M...#',
     '#..e.............Z.........#',
     '#..........######....C.....#',
     '#.###G#...c######....#V###c#',
@@ -616,7 +617,7 @@ const MAPS = [
     '#.##V##....######....###G#!#',
     '#..........######..I...c...#',
     '#....C........c............#',
-    '#...####............####...#',
+    '#...####............###M...#',
     '#...####............####...#',
     '#...####............####..c#',
     '#c........c..S....c..!....E#',
@@ -650,6 +651,11 @@ let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
 let waterAt = new Uint8Array(T.COLS * T.ROWS);
 let plates = [];
+let mirrors = [];
+/* A mirror is a second light source, not a change to the raycast. castCone never
+   assumed the player was the origin, so the reflected fan just calls it again. */
+let mirrorBeam = null;
+let mirrorHits = new Float32Array(T.FL_RAYS + 1);
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -815,6 +821,7 @@ function loadMap(idx) {
   coinList = []; emitters = []; propsXY = []; powerups = [];
   doors = []; keycards = [];
   plates = [];
+  mirrors = []; mirrorBeam = null;
   ventAt = new Uint8Array(T.COLS * T.ROWS);
   glassAt = new Uint8Array(T.COLS * T.ROWS);
   waterAt = new Uint8Array(T.COLS * T.ROWS);
@@ -837,6 +844,7 @@ function loadMap(idx) {
        through it for free - losClear and both cones read the grid, so they need
        no changes at all. Only bodies are stopped, and only where bodies move. */
     if (ch === 'G') glassAt[y * T.COLS + x] = 1;
+    if (ch === 'M') { grid[y * T.COLS + x] = 1; mirrors.push({ gx: x, gy: y, x: cx, y: cy, slash: true }); }
     if (ch === '!') plates.push({ gx: x, gy: y, x: cx, y: cy, fired: false, flash: 0 });
     if (ch === '~') waterAt[y * T.COLS + x] = 1;
     if (ch === 'V') ventAt[y * T.COLS + x] = 1;
@@ -859,6 +867,14 @@ function loadMap(idx) {
   cats = (M.cat || []).map(([x, y]) => ({ x: (x + .5) * T.TILE, y: (y + .5) * T.TILE, vx: 0, vy: 0, r: 6, state: 'sleep', t: rand(1, 3), ph: rand(0, TAU), face: rand(0, TAU) }));
   belts = (M.belts || []).map(b => ({ x0: b[0] * T.TILE, y0: b[1] * T.TILE, x1: (b[2] + 1) * T.TILE, y1: (b[3] + 1) * T.TILE, vx: b[4], vy: b[5] }));
   surging = null; nextSurge = M.surge ? rand(6, 10) : 1e9;
+  /* a mirror faces the corner it sits in: the two open sides decide which
+     diagonal it is, so a beam down either corridor turns into the other */
+  for (const m of mirrors) {
+    const openR = !isWallCell(m.gx + 1, m.gy), openL = !isWallCell(m.gx - 1, m.gy);
+    const openD = !isWallCell(m.gx, m.gy + 1), openU = !isWallCell(m.gx, m.gy - 1);
+    m.slash = (openR && openD) || (openL && openU);
+  }
+
   /* point every camera down its longest clear line, so none of them stare at a wall */
   for (const e of emitters) {
     if (!e.cam) continue;
@@ -971,6 +987,11 @@ function ptSeg(px, py, l) {
   t = clamp(t, 0, 1);
   return Math.hypot(px - (l.x1 + dx * t), py - (l.y1 + dy * t));
 }
+/* lit by your torch, directly or by way of a mirror */
+const beamLit = (x, y) =>
+  inFan(x, y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS) ||
+  (!!mirrorBeam && inFan(x, y, mirrorBeam.x, mirrorBeam.y, mirrorBeam.ang, T.FL_HALF, mirrorBeam.range, mirrorBeam.hits, T.FL_RAYS));
+
 const bodyBlocked = (wx, wy) => {
   if (isWall(wx, wy)) return true;
   const gx = wx / T.TILE | 0, gy = wy / T.TILE | 0;
@@ -1116,6 +1137,37 @@ function update(dt) {
 
   /* flashlight hits + memory */
   castCone(flHits, player.x, player.y, player.aim, T.FL_HALF, T.FL_RAYS, flRange());
+  /* does the beam land on a mirror? nearest one wins, and it bounces once */
+  mirrorBeam = null;
+  if (beamOn && mirrors.length) {
+    const range = flRange();
+    let best = null, bd = 1e9;
+    for (const m of mirrors) {
+      const dx = m.x - player.x, dy = m.y - player.y, d = Math.hypot(dx, dy);
+      if (d > range || d < 1) continue;
+      if (Math.abs(angDiff(Math.atan2(dy, dx), player.aim)) > T.FL_HALF) continue;
+      /* stop just short of the pane, since the pane itself is solid */
+      const bx = player.x + dx / d * (d - T.TILE * 0.5), by = player.y + dy / d * (d - T.TILE * 0.5);
+      if (!losClear(player.x, player.y, bx, by)) continue;
+      if (d < bd) { bd = d; best = m; }
+    }
+    if (best) {
+      const ix = Math.cos(player.aim), iy = Math.sin(player.aim);
+      /* 45 degree pane: '/' sends (dx,dy) to (-dy,-dx), '\\' sends it to (dy,dx) */
+      const rx = best.slash ? -iy : iy, ry = best.slash ? -ix : ix;
+      const left = Math.max(0, range - bd) * T.MIRROR_LOSS;
+      if (left > 20) {
+        const ang = Math.atan2(ry, rx);
+        /* the pane itself is a wall cell, so casting from its centre kills every
+           ray at once. Start the reflection just clear of the glass. */
+        const ox = best.x + rx * T.TILE * 0.6, oy = best.y + ry * T.TILE * 0.6;
+        if (!isWall(ox, oy)) {
+          castCone(mirrorHits, ox, oy, ang, T.FL_HALF, T.FL_RAYS, left);
+          mirrorBeam = { x: ox, y: oy, ang, range: left, hits: mirrorHits, m: best };
+        }
+      }
+    }
+  }
   stampMemory();
 
   /* coins */
@@ -1773,6 +1825,7 @@ function stampMemory() {
   memCtx.fillRect(0, 0, memCv.width, memCv.height);
   memCtx.restore();
   fanPath(memCtx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, flRange(), player.aim);
+  if (mirrorBeam) { memCtx.moveTo(mirrorBeam.x, mirrorBeam.y); fanPath(memCtx, mirrorBeam.x, mirrorBeam.y, mirrorBeam.hits, T.FL_RAYS, T.FL_HALF, mirrorBeam.range, mirrorBeam.ang); }
   memCtx.globalCompositeOperation = 'source-over';
   memCtx.fillStyle = 'rgba(255,238,200,' + T.AFTERGLOW_STAMP + ')';
   memCtx.fill();
@@ -1826,6 +1879,7 @@ function render() {
     const gr = darkCtx.createRadialGradient(player.x, player.y, 10, player.x, player.y, flRange());
     gr.addColorStop(0, 'rgba(0,0,0,0.82)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
     fanPath(darkCtx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, flRange(), player.aim);
+    if (mirrorBeam) fanPath(darkCtx, mirrorBeam.x, mirrorBeam.y, mirrorBeam.hits, T.FL_RAYS, T.FL_HALF, mirrorBeam.range, mirrorBeam.ang);
     darkCtx.fillStyle = gr; darkCtx.fill();
     /* bubble */
     const gb = darkCtx.createRadialGradient(player.x, player.y, 2, player.x, player.y, T.FL_BUBBLE);
@@ -1864,7 +1918,7 @@ function render() {
      ride ABOVE the darkness: only the hunters hide in it */
   ctx.globalCompositeOperation = 'lighter';
   for (const m of motes) {
-    if (inFan(m.x, m.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS)) {
+    if (beamLit(m.x, m.y)) {
       ctx.fillStyle = 'rgba(255,240,210,0.35)';
       ctx.fillRect(m.x - 0.8, m.y - 0.8, 1.6, 1.6);
     }
@@ -1892,6 +1946,7 @@ function render() {
   for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) drawVent(i);
   for (let i = 0; i < waterAt.length; i++) if (waterAt[i]) drawWater(i);
   for (const pl of plates) drawPlate(pl);
+  for (const m of mirrors) drawMirror(m);
   for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
   for (const d of doors) drawDoor(d);
   for (const k of keycards) if (!k.got) drawKeycard(k);
@@ -1942,6 +1997,7 @@ function render() {
     const gr = ctx.createRadialGradient(player.x, player.y, 8, player.x, player.y, flRange());
     gr.addColorStop(0, 'rgba(255,236,190,0.11)'); gr.addColorStop(1, 'rgba(255,236,190,0)');
     fanPath(ctx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, flRange(), player.aim);
+    if (mirrorBeam) fanPath(ctx, mirrorBeam.x, mirrorBeam.y, mirrorBeam.hits, T.FL_RAYS, T.FL_HALF, mirrorBeam.range, mirrorBeam.ang);
     ctx.fillStyle = gr; ctx.fill();
   }
   ctx.globalCompositeOperation = 'source-over';
@@ -1980,7 +2036,7 @@ function render() {
 }
 
 function revealed(b) {
-  return inFan(b.x, b.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS);
+  return beamLit(b.x, b.y);
 }
 
 function drawCamHousing(e) {
@@ -2120,7 +2176,7 @@ function drawBotCone(b) {
    one it stays pinned as a faint mark, so sweeping a room is how you map it. */
 function coinLight(c) {
   if (mode === 'menu') return 'lit';
-  if (inFan(c.x, c.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS)) { c.seen = true; return 'lit'; }
+  if (beamLit(c.x, c.y)) { c.seen = true; return 'lit'; }
   for (const e of emitters) {
     if (e.kind === 'search' || e.kind === 'exit' || e.dead) continue;
     if (blackout > 0 && e.kind !== 'flare') continue;
@@ -2133,11 +2189,33 @@ function coinLight(c) {
   return 'dark';
 }
 
+function drawMirror(m) {
+  const S = T.TILE, px = m.gx * S, py = m.gy * S;
+  const hot = !!(mirrorBeam && mirrorBeam.m === m);
+  ctx.save();
+  /* the frame */
+  ctx.fillStyle = '#15141f';
+  ctx.fillRect(px + 2, py + 2, S - 4, S - 4);
+  /* the pane, drawn along its diagonal */
+  ctx.strokeStyle = hot ? '#fff3d0' : 'rgba(196,214,238,.55)';
+  ctx.lineWidth = hot ? 3 : 2.4;
+  ctx.beginPath();
+  if (m.slash) { ctx.moveTo(px + 5, py + S - 5); ctx.lineTo(px + S - 5, py + 5); }
+  else { ctx.moveTo(px + 5, py + 5); ctx.lineTo(px + S - 5, py + S - 5); }
+  ctx.stroke();
+  if (hot) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.4 + 0.2 * Math.sin(time * 8);
+    ctx.drawImage(glowWhiteS, m.x - 20, m.y - 20, 40, 40);
+  }
+  ctx.restore();
+}
+
 function drawPlate(pl) {
   const S = T.TILE, px = pl.gx * S, py = pl.gy * S;
   /* faintly there in the dark, plainly there in your beam - you get a hint
      without light, and certainty with it */
-  const lit = mode !== 'menu' && inFan(pl.x, pl.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS);
+  const lit = mode !== 'menu' && beamLit(pl.x, pl.y);
   ctx.save();
   const base = pl.fired ? 0.16 : (lit ? 0.62 : 0.17);
   ctx.globalAlpha = base + (pl.flash > 0 ? pl.flash * 0.5 : 0);
@@ -3171,6 +3249,10 @@ window.__fp = {
   get ventsN() { return ventAt.reduce((a, v) => a + v, 0); },
   get glassN() { return glassAt.reduce((a, v) => a + v, 0); },
   get waterN() { return waterAt.reduce((a, v) => a + v, 0); },
+  get mirrorsN() { return mirrors.length; },
+  mirrorPoints() { return mirrors.map(m => ({ x: m.x, y: m.y, gx: m.gx, gy: m.gy, slash: m.slash })); },
+  get mirrorBeam() { return mirrorBeam ? { x: mirrorBeam.x, y: mirrorBeam.y, ang: +mirrorBeam.ang.toFixed(3), range: Math.round(mirrorBeam.range) } : null; },
+  beamLitAt(x, y) { return beamLit(x, y); },
   get platesN() { return plates.length; },
   get platesFired() { return plates.filter(q => q.fired).length; },
   platePoints() { return plates.map(q => ({ x: q.x, y: q.y, fired: q.fired })); },

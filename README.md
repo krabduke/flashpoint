@@ -90,6 +90,10 @@ either. They see what their light sees, and nothing else.
   screams your position to everything nearby. You can make out the outline in the
   dark, but only your beam tells you exactly where its edges are, which is one
   more thing the torch is for.
+- **Mirrors let you look before you go** — angled panes in corners on four
+  floors. Put your beam on one and it turns ninety degrees and lights the
+  corridor round the corner, a little dimmer for the trip. You get to see what is
+  waiting without walking into its line of sight.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,
