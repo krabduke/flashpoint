@@ -374,6 +374,71 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- predictive intercept: they cut, they do not tail ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const lead = await evl(`(() => {
+  mode = 'playing'; invuln = 999; loop = 0; mapIdx = 0; loadMap(0); hud();
+  /* standing still: the lead point must be exactly where you are */
+  player.vx = 0; player.vy = 0;
+  const still = __fp.leadPoint();
+  const atRest = Math.hypot(still.x - player.x, still.y - player.y) < 1;
+  /* moving through open floor: it must be ahead of you */
+  let openX = player.x, openY = player.y;
+  for (let d = 40; d < 300; d += 20) {
+    if (!isWall(player.x + d, player.y)) { openX = player.x; openY = player.y; } else break;
+  }
+  player.vx = T.WALK; player.vy = 0;
+  const moving = __fp.leadPoint();
+  const ahead = moving.x - player.x;
+  player.vx = 0;
+  return JSON.stringify({ atRest, ahead: Math.round(ahead), walk: T.WALK, leadT: T.LEAD_T });
+})()`);
+const ld = JSON.parse(lead);
+ok('standing still, they aim at you', ld.atRest === true, lead);
+ok('moving, they aim ahead of you', ld.ahead > 10, lead);
+ok('the lead stays short of a full second of travel', ld.ahead < ld.walk, lead);
+
+ok('a lead point is never inside a wall', await evl(`(() => {
+  for (let i = 0; i < 40; i++) {
+    const a = i / 40 * Math.PI * 2;
+    player.vx = Math.cos(a) * T.SPRINT; player.vy = Math.sin(a) * T.SPRINT;
+    const q = __fp.leadPoint();
+    if (isWall(q.x, q.y)) return false;
+  }
+  player.vx = 0; player.vy = 0;
+  return true;
+})()`));
+
+ok('they still close the distance while chasing', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const b = bots[0];
+  player.x = spawnPt.x; player.y = spawnPt.y;
+  b.x = player.x + 200; b.y = player.y;
+  b.face = Math.atan2(player.y - b.y, player.x - b.x);
+  b.state = 'chase'; b.chaseT = 3; b.repathT = 0;
+  const from = Math.hypot(b.x - player.x, b.y - player.y);
+  for (let i = 0; i < 90; i++) update(0.016);
+  return Math.hypot(bots[0].x - player.x, bots[0].y - player.y) < from;
+})()`));
+
+ok('they do not re-path on every frame', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const b = bots[0];
+  player.x = spawnPt.x; player.y = spawnPt.y; player.vx = 0; player.vy = 0;
+  b.x = player.x + 90; b.y = player.y;
+  b.face = Math.atan2(player.y - b.y, player.x - b.x);
+  b.state = 'chase'; b.repathT = 0;
+  if (!botSees(b)) return false;
+  update(0.016);
+  const justSet = __fp.repathT[0];
+  update(0.016);
+  const stillCounting = __fp.repathT[0];
+  return justSet > 0 && stillCounting < justSet && stillCounting > 0;
+})()`));
+
 /* ---- corner peeking: a pause where a corridor turns ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
@@ -432,8 +497,9 @@ ok('a peek does not stall a chase', await evl(`(() => {
   b.face = Math.atan2(player.y - b.y, player.x - b.x);
   b.state = 'patrol'; b.peekT = T.PEEK_T; b.peekCool = 0;
   const from = Math.hypot(b.x - player.x, b.y - player.y);
-  for (let i = 0; i < 60; i++) update(0.016);
-  return bots[0].state === 'chase' && Math.hypot(bots[0].x - player.x, bots[0].y - player.y) < from;
+  let chased = false;
+  for (let i = 0; i < 60; i++) { update(0.016); if (bots[0].state === 'chase') chased = true; }
+  return chased && Math.hypot(bots[0].x - player.x, bots[0].y - player.y) < from - 20;
 })()`));
 
 /* ---- spiral search: losing them means outrunning a search ---- */

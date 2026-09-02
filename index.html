@@ -460,6 +460,8 @@ const T = {
   FLANK_R: 2.6,   /* tiles out from you that a radioed drone aims for */
   SEARCH_PTS: 5, SEARCH_R0: 1.6, SEARCH_RSTEP: 1.3, SEARCH_T: 9,
   PEEK_T: 1.25, PEEK_COOL: 5.5, PEEK_ARC: 1.15,
+  /* short enough to cut a corner, not long enough to feel psychic */
+  LEAD_T: 0.55, REPATH: 0.22,
   PLATE_R: 17, PLATE_NOISE: 660,
   CRATE_R: 36, CRATE_T: 0.9, CRATE_NOISE: 540,
   MIRROR_LOSS: 0.82,
@@ -1667,7 +1669,13 @@ function updateBots(dt) {
       b.chaseT += dt;
       b.lastX = player.x; b.lastY = player.y;
       if (b.eyeGlint <= 0 && b.alerted !== true) { b.alerted = true; sfx.alert(); }
-      retarget(b, player.x, player.y);
+      /* aim at where you are heading, and do not re-path every single frame */
+      b.repathT = (b.repathT || 0) - dt;
+      if (fresh || b.repathT <= 0 || !b.path.length) {
+        b.repathT = T.REPATH;
+        const q = leadPoint();
+        retarget(b, q.x, q.y);
+      }
       speed = chaseSpeed(b, sm);
       /* deeper floors run a radio net: one drone seeing you sends the others */
       if (fresh && (mapIdx >= T.RADIO_FLOOR || loop > 0)) radio(b);
@@ -1770,6 +1778,14 @@ function isJunction(wx, wy) {
   const open = R + L + D + U;
   if (open >= 3) return true;
   return open === 2 && ((R || L) && (D || U));   /* a turn, not a straight run */
+}
+
+/* Where you will be shortly, if the way there is clear. Falls back to where you
+   actually are, so a drone never commits to a spot inside a wall. */
+function leadPoint() {
+  const lx = player.x + player.vx * T.LEAD_T, ly = player.y + player.vy * T.LEAD_T;
+  if (isWall(lx, ly) || !losClear(player.x, player.y, lx, ly)) return { x: player.x, y: player.y };
+  return { x: lx, y: ly };
 }
 
 function searchSpiral(cx, cy, fromAng) {
@@ -3758,6 +3774,8 @@ window.__fp = {
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
   get botPeek() { return bots.map(b => +b.peekT.toFixed(2)); },
+  leadPoint() { const q = leadPoint(); return { x: Math.round(q.x), y: Math.round(q.y) }; },
+  get repathT() { return bots.map(b => +(b.repathT || 0).toFixed(3)); },
   isJunctionAt(x, y) { return isJunction(x, y); },
   botSearchLeft() { return bots.map(b => (b.searchPts || []).length); },
   searchSpiralAt(x, y) { return searchSpiral(x, y, 0).map(q => ({ x: Math.round(q.x), y: Math.round(q.y) })); },

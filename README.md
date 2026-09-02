@@ -123,6 +123,11 @@ either. They see what their light sees, and nothing else.
   or branches, sweeps its cone out and back, then carries on. It makes a patrol
   slower and much harder to time, because the pause happens exactly where you
   would want to slip past behind it.
+- **They cut, they do not follow** — a chasing drone paths to where you will be
+  in half a second rather than where you are, so it takes the corner you were
+  about to take. The lead is short and it collapses back to your actual position
+  the moment the shortcut runs into a wall, which keeps it a hunt rather than an
+  aimbot.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

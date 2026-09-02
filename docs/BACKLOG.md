@@ -59,7 +59,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] E1 Flanking — each radioed drone gets its own approach bearing and claims it, so they surround rather than queue
 - [x] E2 Spiral search — golden-angle spiral out from last known, walkable points only, 9s cap
 - [x] E3 Corner peeking — pause and sweep where a corridor turns or branches, with a cooldown
-- [ ] E4 Predictive intercept — chase where you are going, not where you were
+- [x] E4 Predictive intercept — 0.55s lead, falls back to your actual position when the lead is blocked
 - [ ] E5 Realistic give-up — drift back to patrol via the last noise, not instantly
 - [ ] E6 Radio cooldown — stop every drone re-broadcasting the same sighting
 - [ ] E7 Hearing acuity per floor — deeper drones hear further
@@ -136,3 +136,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · E1 · flankPoint() with claim avoidance; 3 drones, 3 distinct points, 3 bearings, 6 assertions
 - 2026-09-03 · E2 · drones search 4-5 points outward before giving up; also closed a state leak my own laser de-flake introduced, 8 assertions
 - 2026-09-03 · E3 · drones stop and look at junctions; 156 peek frames measured, all stationary, 5 assertions
+- 2026-09-03 · E4 · drones cut corners rather than tail; A* throttled to 4.5Hz per drone, 6 assertions
