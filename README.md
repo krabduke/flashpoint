@@ -128,6 +128,11 @@ either. They see what their light sees, and nothing else.
   about to take. The lead is short and it collapses back to your actual position
   the moment the shortcut runs into a wall, which keeps it a hunt rather than an
   aimbot.
+- **They do not forget straight away** — a drone that gives up rejoins its patrol
+  at the nearest point rather than marching back to wherever it had got to before
+  you distracted it, and for the next few seconds it sweeps wider and sees a
+  little further. The safest moment to move is not the one right after it turns
+  away.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

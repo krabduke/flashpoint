@@ -374,6 +374,62 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- giving up: rejoin the route nearby, and stay jumpy ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const giveup = await evl(`(() => {
+  mode = 'playing'; invuln = 999; loop = 0; mapIdx = 1; loadMap(1); hud();
+  const b = bots[0];
+  if (__fp.botRouteLen(0) < 3) return JSON.stringify({ skip: true });
+  /* park it far from the waypoint it currently holds, as a long chase would */
+  const far = b.route.reduce((acc, wp, i) => {
+    const d = Math.hypot((wp[0] + .5) * T.TILE - b.x, (wp[1] + .5) * T.TILE - b.y);
+    return d > acc.d ? { d, i } : acc;
+  }, { d: -1, i: 0 });
+  b.wp = far.i;
+  const beforeDist = __fp.botWpDist(0);
+  const beforeWp = b.wp;
+  b.state = 'invest';
+  const wp = __fp.giveUpBot(0);
+  return JSON.stringify({
+    beforeWp, afterWp: wp, beforeDist, afterDist: __fp.botWpDist(0),
+    wary: __fp.botWary[0], state: bots[0].state
+  });
+})()`);
+const gu = JSON.parse(giveup);
+ok('giving up returns the drone to patrol', gu.skip || gu.state === 'patrol', giveup);
+ok('it rejoins its route at the nearest point', gu.skip || gu.afterDist < gu.beforeDist, giveup);
+ok('which is usually a different waypoint', gu.skip || gu.afterWp !== gu.beforeWp, giveup);
+ok('and it stays wary for a while', gu.skip || gu.wary > 0, giveup);
+
+ok('a wary drone sees a little further', await evl(`(() => {
+  const b = bots[0];
+  b.wary = 0;
+  const calm = botRange(b);
+  b.wary = T.WARY_T;
+  const jumpy = botRange(b);
+  b.wary = 0;
+  return jumpy > calm;
+})()`));
+
+ok('and the wariness wears off', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const b = bots[0];
+  b.wary = 0.3;
+  for (let i = 0; i < 40; i++) update(0.016);
+  return __fp.botWary[0] === 0;
+})()`));
+
+ok('an exhausted search ends in a give-up, not a snap', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 1; loadMap(1); hud();
+  const b = bots[0];
+  player.x = -9999; player.y = -9999;
+  b.state = 'invest'; b.stateT = 0; b.searchPts = []; b.path = []; b.wary = 0;
+  for (let i = 0; i < 40; i++) update(0.016);
+  return bots[0].state === 'patrol' && __fp.botWary[0] > 0;
+})()`));
+
 /* ---- predictive intercept: they cut, they do not tail ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

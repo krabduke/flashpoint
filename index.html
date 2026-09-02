@@ -462,6 +462,7 @@ const T = {
   PEEK_T: 1.25, PEEK_COOL: 5.5, PEEK_ARC: 1.15,
   /* short enough to cut a corner, not long enough to feel psychic */
   LEAD_T: 0.55, REPATH: 0.22,
+  WARY_T: 7, WARY_SWEEP: 2.1, WARY_RANGE: 1.12,
   PLATE_R: 17, PLATE_NOISE: 660,
   CRATE_R: 36, CRATE_T: 0.9, CRATE_NOISE: 540,
   MIRROR_LOSS: 0.82,
@@ -1139,7 +1140,7 @@ function spawnBots() {
       face: rand(0, TAU), route: rotatedRoute, wp: 1 % route.length, path: [], pathT: 0,
       state: 'patrol', tgt: null, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
-      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: []
+      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [], wary: 0
     });
   }
 }
@@ -1193,7 +1194,7 @@ const cellOf = (x, y) => {
 function isWallCell(gx, gy) { return gx < 0 || gy < 0 || gx >= T.COLS || gy >= T.ROWS || grid[gy * T.COLS + gx] === 1; }
 function isWall(wx, wy) { return isWallCell(wx / T.TILE | 0, wy / T.TILE | 0); }
 const flRange = () => beamOn ? T.FL_RANGE * flScale * (puLens > 0 ? T.PU_LENS_MULT : 1) * (inSmoke(player.x, player.y) ? T.SMOKE_BEAM : 1) : 0;
-const botRange = b => b.range * (blackout > 0 ? 0.6 : 1) * (sirenT > 0 ? 1.3 : 1);
+const botRange = b => b.range * (blackout > 0 ? 0.6 : 1) * (sirenT > 0 ? 1.3 : 1) * (b.wary > 0 ? T.WARY_RANGE : 1);
 function ptSeg(px, py, l) {
   const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len2 = dx * dx + dy * dy;
   let t = len2 ? ((px - l.x1) * dx + (py - l.y1) * dy) / len2 : 0;
@@ -1709,7 +1710,7 @@ function updateBots(dt) {
           retarget(b, q.x, q.y);
         }
         const done = (!b.searchPts || !b.searchPts.length) && !b.path.length;
-        if (done || b.stateT > T.SEARCH_T) { b.state = 'patrol'; b.path = []; b.stateT = 0; b.searchPts = []; }
+        if (done || b.stateT > T.SEARCH_T) giveUp(b);
         speed = T.BOT_INVEST * sm * 0.9;
       } else if (b.state === 'patrol') {
         speed = T.BOT_PATROL * sm;
@@ -1751,7 +1752,9 @@ function updateBots(dt) {
     }
 
     /* idle sweep while stationary or searching */
-    if (!b.path.length && b.state !== 'chase') b.face += Math.sin(time * 1.7 + b.sweepP) * T.BOT_SWEEP * dt * 6;
+    if (b.wary > 0) b.wary -= dt;
+    const sweepK = b.wary > 0 ? T.WARY_SWEEP : 1;
+    if (!b.path.length && b.state !== 'chase') b.face += Math.sin(time * 1.7 + b.sweepP) * T.BOT_SWEEP * sweepK * dt * 6;
 
     /* cone rays (shared for draw + detection) */
     castCone(b.rays, b.x, b.y, b.face, b.half, T.BOT_RAYS, botRange(b));
@@ -1843,6 +1846,26 @@ function radio(src) {
   });
   return heard.length;
 }
+/* Giving up used to resume at whatever waypoint index the drone held before it
+   was distracted, which could be across the floor - so it would abandon a search
+   and then walk somewhere absurd. It now rejoins its route at the nearest point,
+   and stays jumpy for a while afterwards. */
+function giveUp(b) {
+  b.state = 'patrol';
+  b.path = [];
+  b.stateT = 0;
+  b.searchPts = [];
+  b.wary = T.WARY_T;
+  if (b.route && b.route.length) {
+    let best = 0, bd = 1e9;
+    b.route.forEach((wp, i) => {
+      const d = Math.hypot((wp[0] + .5) * T.TILE - b.x, (wp[1] + .5) * T.TILE - b.y);
+      if (d < bd) { bd = d; best = i; }
+    });
+    b.wp = best;
+  }
+}
+
 function advanceWp(b) { if (b.route.length) b.wp = (b.wp + 1) % b.route.length; }
 function retarget(b, x, y) { b.path = pathFind(b.x, b.y, x, y); }
 function faceToward(b, x, y, dt) {
@@ -3774,6 +3797,11 @@ window.__fp = {
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
   get botPeek() { return bots.map(b => +b.peekT.toFixed(2)); },
+  get botWary() { return bots.map(b => +(b.wary || 0).toFixed(2)); },
+  get botWp() { return bots.map(b => b.wp); },
+  giveUpBot(i) { giveUp(bots[i]); return bots[i].wp; },
+  botRouteLen(i) { return (bots[i].route || []).length; },
+  botWpDist(i) { const b = bots[i], wp = b.route[b.wp]; return Math.round(Math.hypot((wp[0] + .5) * T.TILE - b.x, (wp[1] + .5) * T.TILE - b.y)); },
   leadPoint() { const q = leadPoint(); return { x: Math.round(q.x), y: Math.round(q.y) }; },
   get repathT() { return bots.map(b => +(b.repathT || 0).toFixed(3)); },
   isJunctionAt(x, y) { return isJunction(x, y); },
