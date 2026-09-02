@@ -31,7 +31,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] B2 `V` vent — player passes, drones cannot path through; carved from wall tiles so nothing can be disconnected
 - [x] B3 `G` glass — blocks movement, not sight; done **without** touching losClear by making glass not-a-wall and stopping bodies instead
 - [x] B4 `D` locked door + `K` key — done with A8; a lockpick with nothing to pick is half a feature
-- [ ] B5 `~` water — footsteps carry further
+- [x] B5 `~` water — footsteps carry further, and soft shoes cannot silence a splash
 - [ ] B6 `p` pressure plate — steps on it raise the alarm
 - [ ] B7 `M` mirror — reflects your beam around a corner
 - [ ] B8 Destructible crates — break for a coin, loudly
@@ -120,3 +120,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-02 · B1 · 6 cameras on 4 secured floors, wall-mounted, auto-aimed, 6 assertions
 - 2026-09-02 · B2 · 8 vents on 4 floors; drone detour measured at 18 cells vs your 2, 6 assertions
 - 2026-09-02 · B3 · 5 panes on Bank Vault + CORE; raycast untouched, 8 assertions
+- 2026-09-02 · B5 · 16 water tiles on the Ward and Docks; walking wet is heard, soft shoes do not help, 6 assertions

@@ -358,6 +358,52 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- water: you cannot cross a puddle quietly ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('mapIdx = 7; loadMap(7); hud();');
+await sleep(300);
+ok('the docks are flooded', (await evl('__fp.waterN')) > 0, `n=${await evl('__fp.waterN')}`);
+ok('water is walkable', await evl(`(() => { const w = __fp.waterPoints()[0]; return !isWall(w.x, w.y); })()`));
+
+/* walking is silent on dry floor and loud in water */
+const wade = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const run = (inWater) => {
+    const w = __fp.waterPoints()[0];
+    if (inWater) { player.x = w.x; player.y = w.y; }
+    else { player.x = spawnPt.x; player.y = spawnPt.y; }
+    noise.length = 0; stepT = 0;
+    keys.left = keys.right = keys.up = keys.down = keys.sprint = false;
+    keys.right = true;
+    let heard = 0;
+    for (let i = 0; i < 40; i++) { update(0.016); if (noise.length) heard++; if (inWater) { player.x = w.x; player.y = w.y; } }
+    keys.right = false;
+    return heard;
+  };
+  return JSON.stringify({ dry: run(false), wet: run(true) });
+})()`);
+const wd = JSON.parse(wade);
+ok('walking on dry floor stays silent', wd.dry === 0, wade);
+ok('walking through water is heard', wd.wet > 0, wade);
+
+/* and soft shoes do not save you */
+const shod = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const w = __fp.waterPoints()[0];
+  player.x = w.x; player.y = w.y;
+  puShoe = T.PU_SHOE_T;
+  noise.length = 0; stepT = 0;
+  keys.right = true; keys.sprint = true;
+  let heard = 0;
+  for (let i = 0; i < 40; i++) { update(0.016); if (noise.length) heard++; player.x = w.x; player.y = w.y; }
+  keys.right = false; keys.sprint = false; puShoe = 0;
+  return heard;
+})()`);
+ok('soft shoes do not silence a splash', shod > 0, `heard=${shod}`);
+
+ok('water never strands a coin', await evl("validateMaps() === 'ok'"));
+
 /* ---- glass: stops bodies, not sight ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

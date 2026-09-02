@@ -81,6 +81,10 @@ either. They see what their light sees, and nothing else.
   CORE stop bodies and not sight. You can watch a room full of gold you have to
   walk around, and a drone on the far side can watch you right back through cover
   you thought you had.
+- **Standing water gives you away** — pools on the Ward and the Docks. Walking on
+  dry floor is silent; walking through a puddle is not, and it carries further
+  than a sprint does. Soft shoes will not save you either, which is the point:
+  the best movement tool in the game has one place it does not work.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
 - **Memory** — what your beam recently lit stays faintly burned into your view,

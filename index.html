@@ -412,6 +412,8 @@ const T = {
   /* doors: a keycard is the fast way through, picking is the exposed way */
   PICK_T: 1.5, DOOR_R: 40, KEY_R: 22, DOOR_NOISE: 250,
   /* the kit you start a run with, and the most you can carry of each */
+  /* water: you cannot cross a puddle quietly, not even in soft shoes */
+  WATER_MULT: 1.4, WATER_STEP: 0.34,
   KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0 },
   CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2 },
   ITEM_R: 22,
@@ -501,8 +503,8 @@ const MAPS = [
   { name: 'THE ABANDONED', depth: 'WARD', theme: 'ward', coins: 8, bots: 2, rows: [
     '############################',
     '#.P...x..#.....N#...x...c..#',
-    '#.K......#..x...#..........#',
-    '#..####..#......#...####...#',
+    '#.K......#..x...#.~~.......#',
+    '#..####..#......#.~.####...#',
     '#..#..c..#.e..x.#.I.#..L..x#',
     '#..#.....#......#...#......#',
     '#..####..##V#D###...#..#####',
@@ -514,8 +516,8 @@ const MAPS = [
     '#.c...#...#.#...x.#......x.#',
     '#...f.#...V.#...#.#####.####',
     '#.....#####.#.Ec#....c.....#',
-    '#..x........#...#.###..x...#',
-    '#....L...c..#...#..........#',
+    '#..x........#...#.###..x.~~#',
+    '#....L...c..#...#........~.#',
     '############################'
   ], routes: [[[3,1],[24,1],[24,7],[13,7],[13,10],[3,11],[3,7],[3,1]],[[22,9],[16,9],[15,13],[15,16],[22,16],[25,9],[25,16],[19,16],[15,16],[15,13],[20,12],[25,12],[25,9]]] },
   { name: 'THE MUSEUM', depth: 'MUSEUM', theme: 'museum', coins: 9, bots: 2, spd: 1.0, rows: [
@@ -590,9 +592,9 @@ const MAPS = [
     '#.####..####..####..#####..#',
     '#.####.c####..####.c#####.c#',
     '#.####........####.........#',
-    '#........I...c.............#',
-    '#..f......####........####.#',
-    '#...####..####..####..####.#',
+    '#......~~I...c.....~~~.....#',
+    '#..f...~..####.....~~.####.#',
+    '#.~~####..####..####..####.#',
     '#...####..####..####..####.#',
     '#...####..####..####..####.#',
     '#.............m...........c#',
@@ -645,6 +647,7 @@ let magT = 0, magCharges = 1;
 let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
+let waterAt = new Uint8Array(T.COLS * T.ROWS);
 
 /* Lifetime record, this device only - same promise as the leaderboard. */
 const STAT0 = { runs: 0, wins: 0, caught: 0, floors: 0, coins: 0, bestTime: 0, bestScore: 0 };
@@ -758,6 +761,7 @@ const sfx = {
   beat() { tone(58, 42, 0.1, 0.25); },
   flare() { noiseBurst(0.22, 0.22, 900); tone(420, 900, 0.3, 0.14); },
   smoke() { noiseBurst(0.5, 0.12, 260); },
+  splash() { noiseBurst(0.12, 0.09, 1400); tone(300, 180, 0.1, 0.05); },
   emp() { tone(900, 60, 0.45, 0.22, 'square'); noiseBurst(0.3, 0.16, 140); },
   decoy() { tone(1180, 1180, 0.05, 0.07, 'square'); },
   ui() { tone(700, 900, 0.06, 0.08); }
@@ -810,6 +814,7 @@ function loadMap(idx) {
   doors = []; keycards = [];
   ventAt = new Uint8Array(T.COLS * T.ROWS);
   glassAt = new Uint8Array(T.COLS * T.ROWS);
+  waterAt = new Uint8Array(T.COLS * T.ROWS);
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
     const ch = rows[y][x] || '#';
     const cx = (x + 0.5) * T.TILE, cy = (y + 0.5) * T.TILE;
@@ -829,6 +834,7 @@ function loadMap(idx) {
        through it for free - losClear and both cones read the grid, so they need
        no changes at all. Only bodies are stopped, and only where bodies move. */
     if (ch === 'G') glassAt[y * T.COLS + x] = 1;
+    if (ch === '~') waterAt[y * T.COLS + x] = 1;
     if (ch === 'V') ventAt[y * T.COLS + x] = 1;
     if (ch === 'D') { grid[y * T.COLS + x] = 1; doors.push({ gx: x, gy: y, x: cx, y: cy, open: false }); }
     if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
@@ -1087,7 +1093,19 @@ function update(dt) {
   }
 
   /* sprint noise + footsteps */
-  if (sprinting && spd > 0) {
+  const wading = spd > 0 && !!waterAt[cellOf(player.x, player.y).i];
+  if (wading) {
+    /* a puddle gives you away however carefully you move, and soft shoes are
+       no help at all - that is what water is for */
+    stepT -= dt;
+    if (stepT <= 0) {
+      stepT = T.WATER_STEP;
+      makeNoise(player.x, player.y, T.STEP_R * T.WATER_MULT * (sprinting ? 1.25 : 1));
+      sfx.splash();
+      for (let i = 0; i < 3; i++) parts.push({ x: player.x + rand(-6, 6), y: player.y + rand(-4, 4),
+        vx: rand(-30, 30), vy: rand(-46, -14), life: rand(0.2, 0.4), max: 0.4, col: glowWhiteS, size: rand(1, 2) });
+    }
+  } else if (sprinting && spd > 0) {
     stepT -= dt;
     if (stepT <= 0) { stepT = T.NOISE_SPRINT; if (puShoe <= 0) makeNoise(player.x, player.y, T.STEP_R); sfx.step(); }
   } else stepT = 0;
@@ -1869,6 +1887,7 @@ function render() {
   for (const m of emps) drawEmp(m);
   for (const d of decoys) drawDecoy(d);
   for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) drawVent(i);
+  for (let i = 0; i < waterAt.length; i++) if (waterAt[i]) drawWater(i);
   for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
   for (const d of doors) drawDoor(d);
   for (const k of keycards) if (!k.got) drawKeycard(k);
@@ -2108,6 +2127,27 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+function drawWater(i) {
+  const gx = i % T.COLS, gy = (i - gx) / T.COLS, S = T.TILE;
+  const px = gx * S, py = gy * S;
+  ctx.save();
+  ctx.fillStyle = 'rgba(14,26,38,.62)';
+  ctx.fillRect(px, py, S, S);
+  /* ripples, offset per tile so a pool does not pulse in lockstep */
+  ctx.globalCompositeOperation = 'lighter';
+  const ph = gx * 1.7 + gy * 2.3;
+  for (let k = 0; k < 2; k++) {
+    const t = (time * 0.5 + k * 0.5 + ph * 0.08) % 1;
+    ctx.globalAlpha = (1 - t) * 0.10;
+    ctx.strokeStyle = '#9fd0ff'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px + S / 2, py + S / 2, 3 + t * (S * 0.45), 0, TAU); ctx.stroke();
+  }
+  ctx.globalAlpha = 0.06 + 0.03 * Math.sin(time * 1.3 + ph);
+  ctx.fillStyle = '#bfe2ff';
+  ctx.fillRect(px + 3, py + 3, S - 6, 2);
+  ctx.restore();
 }
 
 function drawGlass(i) {
@@ -3077,6 +3117,8 @@ window.__fp = {
   camPoints() { return emitters.filter(e => e.cam).map(e => ({ x: e.x, y: e.y, ang: +e.ang.toFixed(3), spin: e.spin, r: e.r })); },
   get ventsN() { return ventAt.reduce((a, v) => a + v, 0); },
   get glassN() { return glassAt.reduce((a, v) => a + v, 0); },
+  get waterN() { return waterAt.reduce((a, v) => a + v, 0); },
+  waterPoints() { const out = []; for (let i = 0; i < waterAt.length; i++) if (waterAt[i]) { const gx = i % T.COLS; out.push({ gx, gy: (i - gx) / T.COLS, x: (gx + .5) * T.TILE, y: ((i - gx) / T.COLS + .5) * T.TILE }); } return out; },
   glassPoints() { const out = []; for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) { const gx = i % T.COLS; out.push({ gx, gy: (i - gx) / T.COLS, x: (gx + .5) * T.TILE, y: ((i - gx) / T.COLS + .5) * T.TILE }); } return out; },
   ventPoints() { const out = []; for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) { const gx = i % T.COLS; out.push({ gx, gy: (i - gx) / T.COLS, x: (gx + .5) * T.TILE, y: ((i - gx) / T.COLS + .5) * T.TILE }); } return out; },
   botPathHits(x1, y1, x2, y2) { return pathFind(x1, y1, x2, y2).map(p => cellOf(p.x, p.y).i); },
