@@ -433,6 +433,7 @@ const T = {
   /* every time they pin you down, the whole building gets a little faster - and
      it stays that way for the rest of the run */
   ALERT_MAX: 4, ALERT_STEP: 0.08, ALERT_COOL: 6,
+  GHOST_STEP: 0.16, GHOST_MAX: 420,
   ALARM_AT: 0.62, COIN_NEAR: 150,
   /* power-ups: each one buys time against a different pressure */
   PU_LENS_MULT: 1.6, PU_LENS_T: 14,
@@ -804,6 +805,23 @@ function pickMod() {
   hud();
 }
 
+/* Your own best route through each floor, kept as quantised pairs so a whole
+   campaign of them is a few kilobytes rather than a problem. */
+let trail = [], trailT = 0, floorT = 0, ghostPath = null;
+let ghosts = (() => { try { return JSON.parse(localStorage.getItem('flashpoint.ghosts') || '{}') || {}; } catch (e) { return {}; } })();
+
+function loadGhost() {
+  const g = ghosts[mapIdx];
+  ghostPath = (g && g.p && g.p.length >= 4) ? g.p : null;
+}
+function saveGhost() {
+  if (endless || trail.length < 4) return;
+  const prev = ghosts[mapIdx];
+  if (prev && prev.t <= floorT) return;      /* only a faster route replaces one */
+  ghosts[mapIdx] = { t: +floorT.toFixed(2), p: trail.slice(0, T.GHOST_MAX * 2) };
+  try { localStorage.setItem('flashpoint.ghosts', JSON.stringify(ghosts)); } catch (e) {}
+}
+
 let alertLvl = 0, alertCool = 0;
 /* Twelve, each one about a system this game actually has rather than a
    participation prize. Per-floor flags are what make the negative ones
@@ -1083,6 +1101,7 @@ function loadMap(idx) {
   puLens = 0; puShoe = 0; puGhost = 0;
   batt = T.BATT_MAX; beamOn = true; battDead = false;
   fSeen = false; fSprint = false; fNoticed = false; fEmp = false;
+  trail = []; trailT = 0; floorT = 0; loadGhost();
   /* live objects clear with the floor; what you are carrying does not */
   smokes = []; emps = []; decoys = []; magT = 0;
   hasKey = false; pickT = 0; pickOn = null;
@@ -1409,6 +1428,14 @@ function update(dt) {
     }
   }
 
+  /* record where you went, for the ghost of this floor */
+  floorT += dt;
+  trailT -= dt;
+  if (trailT <= 0 && trail.length < T.GHOST_MAX * 2) {
+    trailT = T.GHOST_STEP;
+    trail.push(Math.round(player.x), Math.round(player.y));
+  }
+
   /* pressure plates */
   for (const pl of plates) {
     if (pl.flash > 0) pl.flash -= dt;
@@ -1521,7 +1548,7 @@ function update(dt) {
   /* laser grids pulse; touching one hurts and screams */
   for (const l of lasers) {
     l.on = !l.dead && Math.sin(time * 1.15 + l.ph) > -0.18;
-    if (l.on && !l.zapped && ptSeg(player.x, player.y, l) < player.r + 4) {
+    if (l.on && !l.zapped && invuln <= 0 && ptSeg(player.x, player.y, l) < player.r + 4) {
       l.zapped = true;
       meter = Math.min(1, meter + 0.45);
       makeNoise(player.x, player.y, 520);
@@ -1821,6 +1848,7 @@ function nextMap() {
   const last = mapIdx >= MAPS.length - 1;
   score += T.CLEAR_BONUS;
   sfx.door();
+  saveGhost();
   unlock('first');
   if (!fSeen) unlock('clean');
   if (!fSprint) unlock('quiet');
@@ -2215,6 +2243,7 @@ function render() {
   for (const m of emps) drawEmp(m);
   for (const d of decoys) drawDecoy(d);
   for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) drawVent(i);
+  if (ghostPath && mode === 'playing') drawGhost();
   for (let i = 0; i < waterAt.length; i++) if (waterAt[i]) drawWater(i);
   for (const pl of plates) drawPlate(pl);
   for (const cr of crates) if (!cr.broken) drawCrate(cr);
@@ -2541,6 +2570,25 @@ function drawPlate(pl) {
     ctx.globalAlpha = pl.flash * 0.4;
     ctx.drawImage(glowRedS, pl.x - 26, pl.y - 26, 52, 52);
   }
+  ctx.restore();
+}
+
+function drawGhost() {
+  ctx.save();
+  ctx.globalAlpha = 0.16 + 0.05 * Math.sin(time * 1.6);
+  ctx.strokeStyle = '#9fd0ff';
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([3, 8]);
+  ctx.lineDashOffset = -time * 14;
+  ctx.beginPath();
+  ctx.moveTo(ghostPath[0], ghostPath[1]);
+  for (let i = 2; i < ghostPath.length; i += 2) ctx.lineTo(ghostPath[i], ghostPath[i + 1]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  /* where the run you are chasing started */
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = '#9fd0ff';
+  ctx.beginPath(); ctx.arc(ghostPath[0], ghostPath[1], 2.4, 0, TAU); ctx.fill();
   ctx.restore();
 }
 
@@ -3627,6 +3675,13 @@ window.__fp = {
   resetAchs() { achs = {}; try { localStorage.setItem('flashpoint.achs', '{}'); } catch (e) {} renderAchs(); },
   unlock(id) { unlock(id); return !!achs[id]; },
   get floorFlags() { return { seen: fSeen, sprint: fSprint, noticed: fNoticed, emp: fEmp }; },
+  get trailLen() { return trail.length / 2; },
+  get floorT() { return +floorT.toFixed(2); },
+  get ghostLen() { return ghostPath ? ghostPath.length / 2 : 0; },
+  get ghostBest() { const g = ghosts[mapIdx]; return g ? g.t : null; },
+  resetGhosts() { ghosts = {}; ghostPath = null; try { localStorage.setItem('flashpoint.ghosts', '{}'); } catch (e) {} },
+  saveGhost() { saveGhost(); return __fp.ghostBest; },
+  setFloorT(v) { floorT = v; },
   get loopMod() { return modIdx >= 0 ? MODS[modIdx].id : null; },
   get loopModName() { return modIdx >= 0 ? MODS[modIdx].name : null; },
   get modsTotal() { return MODS.length; },

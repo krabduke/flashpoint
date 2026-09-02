@@ -217,6 +217,13 @@ It also asserts pixels where a predicate is not enough: that a lit coin is
 actually brighter than the floor beside it, that a remembered one stays findable,
 and that a filling meter really does turn the screen edge red.
 
+## The ghost of your best run
+
+Clear a floor and the route you took is kept. Play it again and that route is
+drawn faintly behind you, so you are racing the last version of yourself rather
+than a stranger. Only a faster clear replaces one, and endless runs never
+overwrite a campaign ghost.
+
 ## Endless has rules
 
 Every loop past the campaign draws one of eight, printed beside the floor name:

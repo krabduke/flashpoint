@@ -209,6 +209,12 @@ await eq('core blackouts', '__fp.blackout > 0', true);
 await evl('mapIdx = 1; loadMap(1);');
 
 /* full campaign -> win -> endless */
+await evl(`(() => {
+  mode = 'playing'; paused = false;
+  meter = 0; invuln = 2.5; alertLvl = 0; alertCool = 0;
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  smokes.length = 0; emps.length = 0; decoys.length = 0;
+})()`);
 await eq('campaign has 12 floors', 'MAPS.length', 12);
 const nMaps = await evl('MAPS.length');
 for (let i = 0; i < nMaps; i++) {
@@ -365,6 +371,64 @@ ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
+
+/* ---- ghost replay: your own best route through a floor ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+await evl('__fp.resetGhosts()');
+ok('a fresh device has no ghost', (await evl('__fp.ghostLen')) === 0);
+
+const ghostRun = await evl(`(() => {
+  mode = 'playing'; invuln = 999; endless = false;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  keys.left = keys.right = keys.up = keys.down = false;
+  keys.right = true;
+  for (let i = 0; i < 120; i++) update(0.016);
+  keys.right = false;
+  const walked = __fp.trailLen, t1 = __fp.floorT;
+  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+  for (let i = 0; i < 5; i++) update(0.016);
+  /* back to floor 1 and the ghost of that walk should be waiting */
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  return JSON.stringify({ walked, t1: +t1.toFixed(2), ghost: __fp.ghostLen, best: __fp.ghostBest });
+})()`);
+const gh = JSON.parse(ghostRun);
+ok('walking records a trail', gh.walked > 4, ghostRun);
+ok('clearing the floor stores it', gh.best !== null, ghostRun);
+ok('and it is waiting next time you play that floor', gh.ghost > 4, ghostRun);
+
+ok('only a faster route replaces a ghost', await evl(`(() => {
+  const best = __fp.ghostBest;
+  /* a slower clear must not overwrite it */
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  __fp.setFloorT(best + 30);
+  for (let i = 0; i < 20; i++) update(0.016);
+  __fp.saveGhost();
+  const afterSlow = __fp.ghostBest;
+  /* a faster one must */
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  for (let i = 0; i < 20; i++) update(0.016);
+  __fp.setFloorT(0.5);
+  __fp.saveGhost();
+  return afterSlow === best && __fp.ghostBest === 0.5;
+})()`));
+
+ok('endless runs do not overwrite campaign ghosts', await evl(`(() => {
+  const before = __fp.ghostBest;
+  endless = true;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  for (let i = 0; i < 20; i++) update(0.016);
+  __fp.setFloorT(0.01);
+  __fp.saveGhost();
+  const after = __fp.ghostBest;
+  endless = false;
+  return after === before;
+})()`));
+
+ok('a ghost stays small enough to store', await evl(`(() => {
+  const raw = localStorage.getItem('flashpoint.ghosts') || '';
+  return raw.length > 0 && raw.length < 40000;
+})()`));
 
 /* ---- endless loop modifiers ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
