@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Taught one thing at a time** — the first floor walks you through moving,
+  then sweeping for gold, then taking it. The gold lesson ends when your beam
+  actually lands on a coin, not when a timer runs out.
 - **Messages stack** — a plate going off while a crate is still being announced
   no longer erases it. Three at a time, newest on top, each on its own clock.
 - **A board worth reading** — top runs ranked, with the floor you reached, the

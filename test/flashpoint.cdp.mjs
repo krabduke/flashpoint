@@ -3363,6 +3363,63 @@ ok('and clearing takes them out of the page, not just the list',
   tst.cleared.model.length === 0 && tst.cleared.dom.length === 0, JSON.stringify(tst.cleared));
 
 
+/* ---- the tutorial teaches one thing at a time ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const tut = JSON.parse(await evl(`(() => {
+  const o = {};
+  /* completedLevels lives in localStorage and every earlier block has been
+     clearing floors, so the tutorial would be switched off before we started */
+  completedLevels = []; endless = false;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  /* the tutorial arms in startGame(), which is the right place - a new run is
+     when it should reset. Calling loadMap directly walks past that door and
+     inherits whatever the last run left behind. */
+  startGame();
+  bots.length = 0; invuln = 9e9; meter = 0; clearToast();
+  const step = n => { for (let i = 0; i < n; i++) update(1 / 60); };
+  step(30);
+  o.start = __fp.tutorState();
+  o.startToast = __fp.toastList()[0] || null;
+  o.onlyOne = __fp.toastList().length;
+  /* three seconds of standing still must not advance anything */
+  step(180);
+  o.stuck = __fp.tutorState().step;
+  for (let i = 0; i < 160; i++) { keys.right = true; update(1 / 60); }
+  keys.right = false; step(100);
+  o.moved = __fp.tutorState();
+  o.sweepToast = __fp.toastList()[0] || null;
+  /* the lesson that matters ends by doing it, not by waiting */
+  const c = coinList.find(x => !x.got);
+  player.x = c.x - 60; player.y = c.y; __fp.aimAt(c.x, c.y);
+  step(120);
+  o.lit = __fp.tutorState();
+  o.msgs = __fp.tutorState().steps;
+  completedLevels = [0]; o.offAfterClear = __fp.tutorState().on;
+  completedLevels = []; endless = true; o.offInEndless = __fp.tutorState().on;
+  endless = false; mapIdx = 4; o.offLaterFloor = __fp.tutorState().on;
+  mapIdx = 0;
+  return JSON.stringify(o);
+})()`));
+/* it used to be one nine second toast carrying four lessons at once, fired half
+   a second in, before the player had done anything at all */
+ok('it opens with one lesson, not four',
+  tut.start.step === 0 && tut.onlyOne === 1 && tut.startToast === tut.start.msg,
+  `${tut.onlyOne} message(s): ${tut.startToast}`);
+ok('and waits rather than running on a timer', tut.stuck === 0, `step=${tut.stuck}`);
+ok('moving is what teaches the moving lesson',
+  tut.moved.step === 1 && tut.moved.moved === true && tut.sweepToast === tut.moved.msg,
+  `step=${tut.moved.step} msg=${tut.sweepToast}`);
+/* the whole game rests on this one, so it is cleared by doing it */
+ok('putting the beam on gold is what clears the gold lesson',
+  tut.lit.step === 2 && tut.lit.litGold === true, JSON.stringify(tut.lit));
+ok('there are four lessons in the sequence', tut.msgs === 4, `steps=${tut.msgs}`);
+ok('it is done with you once you have cleared a floor', tut.offAfterClear === false);
+ok('and never appears in endless or on a later floor',
+  tut.offInEndless === false && tut.offLaterFloor === false,
+  `endless=${tut.offInEndless} floor5=${tut.offLaterFloor}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

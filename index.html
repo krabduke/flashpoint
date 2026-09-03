@@ -2435,6 +2435,43 @@ function botSees(b) {
   return true;
 }
 
+/* It was one nine second toast at half a second in, carrying four separate
+   lessons in a single line of capitals: move, sweep, avoid the cones, watch the
+   meter. Nobody reads that, and it fired before the player had done anything.
+
+   One lesson at a time now, each held back until the moment it applies, and the
+   important one clears by DOING it rather than by a timer: the sweep step ends
+   when your beam actually lands on gold. */
+const TUTOR = [
+  { msg: 'WASD TO MOVE · THE MOUSE AIMS YOUR BEAM', secs: 7,
+    ready: () => true, clear: () => tutorMoved },
+  { msg: 'GOLD IS INVISIBLE UNLIT — SWEEP THE BEAM ACROSS THE ROOM', secs: 9,
+    ready: () => true, clear: () => tutorLitGold },
+  { msg: 'THAT IS GOLD — WALK ONTO IT', secs: 7,
+    ready: () => tutorLitGold, clear: () => coins > 0 },
+  { msg: 'RED CONES ARE THEIR EYES · STAY OUT OF THE LIGHT', secs: 7,
+    ready: () => tutorSawDrone, clear: () => false },
+];
+let tutorStep = -1, tutorShown = false, tutorT = 0;
+let tutorMoved = false, tutorLitGold = false, tutorSawDrone = false, tutorHome = null;
+const tutorOn = () => mapIdx === 0 && !endless && completedLevels.length === 0;
+function updateTutor(dt) {
+  if (tutorStep < 0 || mode !== 'playing') return;
+  if (!tutorMoved) {
+    if (!tutorHome) tutorHome = { x: player.x, y: player.y };
+    if (Math.hypot(player.x - tutorHome.x, player.y - tutorHome.y) > 70) tutorMoved = true;
+  }
+  if (!tutorLitGold) for (const c of coinList) if (!c.got && beamLit(c.x, c.y)) { tutorLitGold = true; break; }
+  if (!tutorSawDrone) for (const b of bots) if (beamLit(b.x, b.y)) { tutorSawDrone = true; break; }
+  const step = TUTOR[tutorStep];
+  if (!step) { tutorStep = -1; return; }
+  if (!step.ready()) return;
+  if (!tutorShown) { toast(step.msg, step.secs); tutorShown = true; tutorT = 0; }
+  tutorT += dt;
+  /* a step that is already satisfied when it appears still gets read */
+  if (tutorT > 1.4 && step.clear()) { tutorStep++; tutorShown = false; tutorT = 0; }
+}
+
 function updateMeter(dt) {
   let anySees = false, searchOnly = false;
   if (invuln <= 0) {
@@ -2468,6 +2505,7 @@ function updateMeter(dt) {
   if (meter > 0.28) { beatT -= dt; if (beatT <= 0) { sfx.beat(); beatN++; beatT = lerp(0.9, 0.32, meter); } }
   else beatT = 0;
   updateSting(dt);
+  updateTutor(dt);
   vibrateFor(meter);
 }
 /* The heartbeat was the only thing that answered the meter. This is the swell
@@ -4572,12 +4610,10 @@ function startGame() {
   mouseWX = player.x; mouseWY = player.y - 100; aimMode = 'mouse';
   hud();
   
-  /* tutorial hint for first map */
-  if (mapIdx === 0 && completedLevels.length === 0) {
-    setTimeout(() => {
-      toast('SWEEP your beam to FIND the coins — unlit gold is invisible · WASD moves · AVOID the red cones · when the meter fills you\'re CAUGHT', 9);
-    }, 500);
-  }
+  /* one lesson at a time, each waiting on the moment it matters */
+  tutorStep = tutorOn() ? 0 : -1;
+  tutorShown = false; tutorT = 0;
+  tutorMoved = false; tutorLitGold = false; tutorSawDrone = false; tutorHome = null;
 }
 
 function floorUnlocked(i) {
@@ -4931,6 +4967,13 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  tutorState() {
+    return { on: tutorOn(), step: tutorStep, shown: tutorShown,
+             msg: tutorStep >= 0 && TUTOR[tutorStep] ? TUTOR[tutorStep].msg : null,
+             moved: tutorMoved, litGold: tutorLitGold, sawDrone: tutorSawDrone,
+             steps: TUTOR.length };
+  },
+  tutorSkipTo(i) { tutorStep = i; tutorShown = false; tutorT = 0; },
   toastList() { return toasts.map(t => t.msg); },
   toastShown() { return [...$('toast').querySelectorAll('.tmsg')].map(e => e.textContent); },
   toastVisible() { return [...$('toast').querySelectorAll('.tmsg.show')].length; },
