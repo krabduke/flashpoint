@@ -126,7 +126,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] H5 Toast queue — a capped stack rather than a queue, since a queue would report events four seconds late; repeats refresh one line instead of stacking copies
 - [x] H6 Tutorial pass — four staged lessons instead of one nine-second wall of capitals; the gold lesson clears by putting your beam on a coin, not by a timer
 - [x] H7 Colourblind mode — blue cones AND hatching, because hue is the one channel that fails; its settings row lands here now that it does something
-- [ ] H8 Mobile controls — bigger dead zones, better sprint threshold
+- [x] H8 Mobile controls — the dead zone was a cliff that handed you the raw value on crossing, and sprint had no hysteresis, so a resting thumb flickered you in and out of making noise
 
 ---
 
@@ -194,3 +194,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · H5 · three toasts at once, newest on top, own clocks, repeats coalesce, 6 assertions
 - 2026-09-03 · H6 · staged tutorial, the gold lesson cleared by doing it, 7 assertions; test had to be routed through startGame rather than loadMap
 - 2026-09-03 · H7 · colourblind cones by hue and hatching, red dominance +14 to +1, luminance edges 1093 to 1213, 6 assertions
+- 2026-09-03 · H8 · rescaled dead zone, sprint hysteresis 0.85/0.62, stick rings derived from the real thresholds, 8 assertions — **section H complete, backlog empty**
