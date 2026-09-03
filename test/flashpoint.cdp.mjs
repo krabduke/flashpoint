@@ -2557,6 +2557,79 @@ ok('a new floor is not remembered from the last one',
   `lit=${glw.live.survey} after=${JSON.stringify(glw.afterLoad)}`);
 
 
+/* ---- screen shake: one per event, not one for everything ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const shk = JSON.parse(await evl(`(() => {
+  const o = {};
+  const zc = tr => { let n = 0; for (let i = 1; i < tr.length; i++) if ((tr[i][1] >= 0) !== (tr[i-1][1] >= 0)) n++; return n; };
+  const env = (k, t) => +(SHAKE[k].amp * Math.exp(-SHAKE[k].decay * t)).toFixed(3);
+  const kinds = ['crate', 'laser', 'plate', 'caught'];
+  o.cross = {}; o.at0 = {}; o.at3 = {};
+  for (const k of kinds) { o.cross[k] = zc(__fp.shakeTrace(k, [0, 1], 300, 1/600)); o.at0[k] = env(k, 0); o.at3[k] = env(k, 0.3); }
+  /* direction: sum the absolute throw on each axis over the first frames */
+  const axis = (sx, sy) => { __fp.shakeClear(); __fp.shakePush('plate', sx, sy);
+    let x = 0, y = 0;
+    for (let i = 0; i < 40; i++) { shakes[0].t = i / 600; const q = __fp.shakeOff(); x += Math.abs(q.x); y += Math.abs(q.y); }
+    return { x: Math.round(x), y: Math.round(y) }; };
+  o.fromLeft = axis(player.x - 200, player.y);
+  o.fromAbove = axis(player.x, player.y - 200);
+  /* the same elapsed time reached two ways must land on the same offset */
+  __fp.shakeClear(); __fp.shakePush('caught', player.x - 200, player.y);
+  for (let i = 0; i < 24; i++) shakes[0].t += 1/240;
+  const slow = __fp.shakeOff();
+  __fp.shakeClear(); __fp.shakePush('caught', player.x - 200, player.y);
+  for (let i = 0; i < 6; i++) shakes[0].t += 1/60;
+  o.rate = [slow, __fp.shakeOff()];
+  /* it has to actually move what gets drawn */
+  __fp.shakeClear(); render();
+  const px = () => { const d = ctx.getImageData(0, 0, W * DPR, H * DPR).data; let h = 0;
+    for (let i = 0; i < d.length; i += 997) h = (h * 31 + d[i]) | 0; return h; };
+  const still = px();
+  __fp.shakePush('caught', player.x - 200, player.y); render();
+  o.moved = px() !== still;
+  /* reduced motion */
+  o.full = __fp.shakeMag;
+  __fp.shakeSetScale(0.25); o.quiet = __fp.shakeMag; __fp.shakeSetScale(1);
+  /* several at once stay inside the cap */
+  __fp.shakeClear();
+  for (let i = 0; i < 6; i++) __fp.shakePush('caught', player.x - 100, player.y);
+  o.capped = { n: __fp.shakeN, mag: __fp.shakeMag, cap: T.SHAKE_CAP };
+  /* and the one that used to never stop */
+  __fp.shakeClear(); caught();
+  o.onCaught = __fp.shakeN;
+  const seen = [];
+  for (let i = 0; i < 300; i++) { update(1/60); if (i === 59 || i === 299) seen.push(__fp.shakeMag); }
+  o.caughtDecay = seen; o.mode = mode;
+  __fp.shakeClear();
+  return JSON.stringify(o);
+})()`));
+/* the decay used to sit after update()'s `mode !== 'playing'` return, so the
+   biggest shake in the game was the only one that never settled */
+ok('being caught still shakes the screen', shk.onCaught === 1, `n=${shk.onCaught}`);
+ok('and that shake settles instead of running forever',
+  shk.mode === 'caught' && shk.caughtDecay[0] < 1 && shk.caughtDecay[1] === 0,
+  `mode=${shk.mode} 1s=${shk.caughtDecay[0]} 5s=${shk.caughtDecay[1]}`);
+ok('four events, four different frequencies',
+  shk.cross.laser > shk.cross.crate && shk.cross.crate > shk.cross.plate && shk.cross.plate > shk.cross.caught,
+  JSON.stringify(shk.cross));
+ok('and four different envelopes, not just four amplitudes',
+  shk.at3.caught / shk.at0.caught > 0.4 && shk.at3.laser / shk.at0.laser < 0.05,
+  `caught keeps ${(shk.at3.caught / shk.at0.caught).toFixed(2)}, laser keeps ${(shk.at3.laser / shk.at0.laser).toFixed(3)}`);
+ok('a hit from the side throws the screen sideways',
+  shk.fromLeft.x > shk.fromLeft.y * 2, JSON.stringify(shk.fromLeft));
+ok('a hit from above throws it up the screen',
+  shk.fromAbove.y > shk.fromAbove.x * 2, JSON.stringify(shk.fromAbove));
+ok('shake follows elapsed time, not frame count',
+  Math.abs(shk.rate[0].x - shk.rate[1].x) < 0.01 && Math.abs(shk.rate[0].y - shk.rate[1].y) < 0.01,
+  JSON.stringify(shk.rate));
+ok('the shake moves what is actually drawn', shk.moved === true);
+ok('reduced motion quietens it without killing it',
+  shk.quiet > 0 && Math.abs(shk.quiet - shk.full * 0.25) < 0.01, `${shk.full} -> ${shk.quiet}`);
+ok('several hits at once stay inside the cap',
+  shk.capped.n === 4 && shk.capped.mag <= shk.capped.cap + 0.01, JSON.stringify(shk.capped));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

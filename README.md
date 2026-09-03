@@ -156,6 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Impacts have a direction** — a laser snaps the screen perpendicular to its
+  beam, a plate thuds straight down under your feet, and a drone catching you is
+  a slow heavy lurch away from wherever it came from. Set your system to reduced
+  motion and all of it quietens to a quarter.
 - **Memory** — two of them. A bright warm trail shows where the beam has just
   been and is gone in a couple of seconds; underneath it a faint amber survey
   builds slowly and lasts most of a floor, so sweeping is mapping and the room
