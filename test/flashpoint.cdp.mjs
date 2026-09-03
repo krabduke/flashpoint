@@ -375,6 +375,40 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- the win screen says how you did it ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const winCard = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999;
+  __fp.resetKit(); __fp.resetAchs();
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  totalRunCoins = 40; coins = 3; score = 1234; runT = 250; alertLvl = 0;
+  unlock('clean');
+  win();
+  return JSON.stringify({
+    summary: document.getElementById('escSummary').textContent,
+    chips: [...document.querySelectorAll('#escAchs span')].map(x => x.textContent),
+    timeShown: document.getElementById('eTime').textContent,
+    timeVisible: document.getElementById('eTime').offsetParent !== null,
+    coinsStart: document.getElementById('eCoins').textContent
+  });
+})()`);
+const wc = JSON.parse(winCard);
+ok('the win screen says how you played', /STANDARD/i.test(wc.summary), winCard);
+ok('and whether they ever had you', /never detected/i.test(wc.summary), winCard);
+ok('and how long it took', wc.summary.includes('4:10') && wc.timeShown === '4:10', winCard);
+ok('the time stat is still on the card', wc.timeVisible === true, winCard);
+ok('it lists what the run earned', wc.chips.length >= 1, winCard);
+
+await sleep(1400);
+const wc2 = await evl(`(() => JSON.stringify({
+  coins: document.getElementById('eCoins').textContent,
+  score: document.getElementById('eScore').textContent
+}))()`);
+const wcFinal = JSON.parse(wc2);
+ok('the totals count up and settle on the real numbers',
+  wcFinal.coins === '43' && Number(wcFinal.score) > 1234, wc2 + ' start=' + wc.coinsStart);
+
 /* ---- being caught holds for a beat before the card ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

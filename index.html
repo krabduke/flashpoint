@@ -266,6 +266,20 @@
   #achCount{font-family:'Orbitron',monospace;font-size:8.5px;letter-spacing:.24em;
     color:#5e5679;text-align:center;margin-top:6px}
   #achCount:empty{display:none}
+  #escSummary{
+    font-family:'Orbitron',monospace;font-size:9.5px;letter-spacing:.2em;
+    text-transform:uppercase;color:#8d84b3;margin:10px 0 2px;text-align:center;
+  }
+  #escSummary b{color:#ffe9a8;font-weight:700}
+  #escSummary:empty{display:none}
+  #escAchs{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:8px 0 2px}
+  #escAchs:empty{display:none}
+  #escAchs span{
+    font-family:'Orbitron',monospace;font-size:8.5px;font-weight:700;letter-spacing:.14em;
+    padding:4px 9px;border-radius:999px;
+    border:1px solid rgba(255,209,102,.55);color:#ffe9a8;
+    background:linear-gradient(180deg,rgba(58,42,16,.6),rgba(24,16,42,.6));
+  }
   .floor-caption{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.26em;text-transform:uppercase;
     color:#8d84b3;text-align:center;margin-top:10px;min-height:12px}
   @media (max-width:430px){#floorGrid{gap:4px}.floor{font-size:11px;border-radius:6px}}
@@ -391,6 +405,8 @@
         <div class="stat"><b id="eHighScore">0</b><span>HIGH SCORE</span></div>
         <div class="stat"><b id="eTime">0:00</b><span>TIME</span></div>
       </div>
+      <p id="escSummary"></p>
+      <div id="escAchs"></div>
       <div class="records" id="recEsc"></div>
       <div class="namerow" style="margin-top:6px">
         <input class="namefield" id="nameInput3" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false" style="width:150px;padding:11px 12px;font-size:12px">
@@ -856,9 +872,11 @@ const ACHS = [
 ];
 let achs = (() => { try { return JSON.parse(localStorage.getItem('flashpoint.achs') || '{}') || {}; } catch (e) { return {}; } })();
 let fSeen = false, fSprint = false, fNoticed = false, fEmp = false;
+let runUnlocks = [];
 
 function unlock(id) {
   if (achs[id]) return;
+  runUnlocks.push(id);
   achs[id] = 1;
   try { localStorage.setItem('flashpoint.achs', JSON.stringify(achs)); } catch (e) {}
   const a = ACHS.find(z => z[0] === id);
@@ -2051,17 +2069,45 @@ function nextMap() {
   hud();
 }
 
+/* A total that lands all at once reads as a receipt. One that arrives reads as a
+   result, which is what finishing twelve floors deserves. */
+function countUp(el, to, dur) {
+  if (!el) return;
+  const from = 0, t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / (dur * 1000));
+    const eased = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(from + (to - from) * eased);
+    if (k < 1) requestAnimationFrame(step);
+    else el.textContent = to;
+  };
+  requestAnimationFrame(step);
+}
+
 function win() {
   mode = 'won';
   score += T.WIN_BONUS;
   totalRunCoins += coins;
   addRecord();
   $('escSub').textContent = 'ALL ' + MAPS.length + ' FLOORS CLEARED';
-  $('eCoins').textContent = totalRunCoins;
-  $('eScore').textContent = score;
+  countUp($('eCoins'), totalRunCoins, 0.7);
+  countUp($('eScore'), score, 1.1);
   $('eTime').textContent = fmtTime(runT);
   /* display high score */
   $('eHighScore').textContent = localStorage.getItem('flashpoint.highScore') || '0';
+  /* how you did it, not just what you got */
+  const bits = [];
+  bits.push('<b>' + D().name + '</b>');
+  if (dailyOn) bits.push('<b>DAILY ' + todaySeed() + '</b>');
+  bits.push(alertLvl === 0 ? 'never <b>detected</b>' : 'alert level <b>' + alertLvl + '</b>');
+  bits.push('in <b>' + fmtTime(runT) + '</b>');
+  const sm2 = $('escSummary');
+  if (sm2) sm2.innerHTML = bits.join(' · ');
+  const ea = $('escAchs');
+  if (ea) ea.innerHTML = runUnlocks
+    .map(id => (ACHS.find(a => a[0] === id) || [null, null])[1])
+    .filter(Boolean).map(n => '<span>' + n + '</span>').join('');
+
   renderRecords($('recEsc'));
   $('escaped').classList.remove('hidden');
   setRain(false);
@@ -3486,6 +3532,7 @@ function bumpAlert() {
 
 function resetKit() {
   alertLvl = 0; alertCool = 0;
+  runUnlocks = [];
   const k = D().kit;
   if (dailyOn) seedDaily();   /* same day, same building, every time */
   const kv = (n) => Math.max(0, n + k);
@@ -4075,6 +4122,7 @@ window.__fp = {
   get haulNoise() { return +haulNoise().toFixed(3); },
   get alertLvl() { return alertLvl; },
   get caughtHold() { return +caughtHold.toFixed(3); },
+  get runUnlocks() { return runUnlocks.slice(); },
   get achs() { return JSON.parse(JSON.stringify(achs)); },
   get achCount() { return ACHS.filter(a => achs[a[0]]).length; },
   get achTotal() { return ACHS.length; },

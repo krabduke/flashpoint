@@ -192,7 +192,9 @@ either. They see what their light sees, and nothing else.
 | 11 | The Cold Store | dock amber, standing water | 3 bots + fog + flooded aisles + crates |
 | 12 | The Penthouse | city neon, open plan | 4 bots + sirens + blackouts + glass + cameras |
 
-Clear all twelve → **YOU ESCAPED** → endless mode: the rotation repeats, loops
+Clear all twelve → **YOU ESCAPED**, with the totals counting up, a line saying
+how you did it — difficulty, whether they ever had you, how long it took — and the
+achievements that run earned → endless mode: the rotation repeats, loops
 add bots and speed, and your best depth per device is kept.
 
 ## Controls
