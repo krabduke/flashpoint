@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **You can walk out early** — the door opens at two thirds of the floor's gold.
+  Leave with what you have and keep it, or stay for the rest and earn the clear
+  bonus. The counter turns amber the moment it becomes your call.
 - **The blind one points** — when a listener has you it puts your position out
   to every drone in range, so breaking away before the meter fills no longer
   means you are clear. Standing still keeps you off the air as well as out of

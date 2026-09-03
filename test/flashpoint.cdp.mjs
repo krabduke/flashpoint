@@ -3894,6 +3894,62 @@ ok('and holding the lock does not put it on the air every frame',
 ok('the block measured a running game', cal.mode === 'playing', cal.mode);
 
 
+/* ---- the door opens early, and the bonus is what leaving costs ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const early = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  /* a choice has to exist on every floor, not just the roomy ones */
+  o.thresholds = [];
+  for (let i = 0; i < MAPS.length; i++) { mapIdx = i; loadMap(i);
+    o.thresholds.push({ total: coinsTotal, need: __fp.exitNeed() }); }
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0; clearToast();
+  o.total = coinsTotal; o.need = __fp.exitNeed();
+  const real = coinList.filter(c => !c.bonus);
+  const take = n => { for (let i = 0; i < n; i++) { const c = real.find(x => !x.got);
+    player.x = c.x; player.y = c.y; for (let k = 0; k < 3; k++) update(1 / 60); } };
+  o.atStart = { open: __fp.exitOpen, full: __fp.exitFull };
+  take(o.need - 1);
+  o.justBelow = { got: __fp.realCoins, open: __fp.exitOpen };
+  take(1);
+  o.atThreshold = { got: __fp.realCoins, open: __fp.exitOpen, full: __fp.exitFull,
+                    tint: $('coins').classList.contains('canleave') };
+  togglePause(); o.pauseEarly = $('pGoldLabel').textContent; togglePause();
+  const b1 = score; nextMap(); o.earlyGain = score - b1;
+  /* and the same floor taken clean */
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9;
+  __fp.clearCoins(); hud();
+  o.cleared = { open: __fp.exitOpen, full: __fp.exitFull, tint: $('coins').classList.contains('canleave') };
+  togglePause(); o.pauseFull = $('pGoldLabel').textContent; togglePause();
+  const b2 = score; nextMap(); o.fullGain = score - b2;
+  o.bonus = T.CLEAR_BONUS;
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+ok('every floor leaves something on the table to walk away from',
+  early.thresholds.every(t => t.need < t.total && t.need >= 1),
+  JSON.stringify(early.thresholds.map(t => `${t.need}/${t.total}`)));
+ok('the door is shut to begin with and still shut one coin short',
+  early.atStart.open === false && early.justBelow.open === false,
+  `${early.justBelow.got} of ${early.total}`);
+ok('it opens at the threshold without the floor being clear',
+  early.atThreshold.open === true && early.atThreshold.full === false
+  && early.atThreshold.got === early.need, JSON.stringify(early.atThreshold));
+/* the door may be nowhere near you, so the counter has to say it too */
+ok('and the coin counter says walking out is now a choice',
+  early.atThreshold.tint === true && early.cleared.tint === false,
+  `open=${early.atThreshold.tint} cleared=${early.cleared.tint}`);
+ok('the pause card names which of the three you are in',
+  early.pauseEarly === 'CAN LEAVE NOW' && early.pauseFull === 'FLOOR CLEARED',
+  `${early.pauseEarly} / ${early.pauseFull}`);
+/* the whole point: you escaped either way, the bonus is what you gave up */
+ok('leaving early pays no clear bonus', early.earlyGain === 0, `gained=${early.earlyGain}`);
+ok('and taking the floor clean pays it', early.fullGain === early.bonus,
+  `gained=${early.fullGain} of ${early.bonus}`);
+ok('the block measured a running game', early.mode === 'playing', early.mode);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

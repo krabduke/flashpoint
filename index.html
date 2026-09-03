@@ -43,7 +43,8 @@
   }
   .hud-block{display:flex;flex-direction:column;gap:4px}
   .hud-label{font-size:9px;letter-spacing:.3em;color:#6a5f7e;font-weight:500}
-  #coins{font-size:22px;font-weight:700;color:#ffe9a8;line-height:1;text-shadow:0 0 14px rgba(255,215,120,.5);font-variant-numeric:tabular-nums}
+  #coins{font-size:22px;font-weight:700;color:#ffe9a8;line-height:1;text-shadow:0 0 14px rgba(255,215,120,.5);font-variant-numeric:tabular-nums;transition:color .3s ease}
+  #coins.canleave{color:#ffc46e;text-shadow:0 0 16px rgba(255,180,90,.75)}
   #who{font-size:9px;letter-spacing:.22em;color:#6a5f7e;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hud-block.mid{align-items:center;flex:1}
   #mapName{font-size:13px;color:#cfd0f2;font-weight:500;letter-spacing:.14em;text-shadow:0 0 10px rgba(140,120,255,.3);font-variant-numeric:tabular-nums;text-align:center}
@@ -562,7 +563,7 @@
       <p class="tag" id="pWhere"></p>
       <div class="stats">
         <div class="stat"><b id="pFloor">-</b><span>FLOOR</span></div>
-        <div class="stat"><b id="pGold">-</b><span>GOLD HERE</span></div>
+        <div class="stat"><b id="pGold">-</b><span id="pGoldLabel">GOLD HERE</span></div>
         <div class="stat"><b id="pScore">-</b><span>SCORE</span></div>
         <div class="stat"><b id="pTime">-</b><span>ELAPSED</span></div>
       </div>
@@ -657,6 +658,10 @@ const T = {
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
+  /* The door used to want every last coin, so the floor made one demand and you
+     either met it or died trying. It opens at two thirds now, and the bonus is
+     what you give up by walking out early. */
+  EXIT_EARLY: 0.66,
   /* memory: a fast bright trail over a slow faint survey. IN/OUT are per second,
      DRAW is the peak alpha each field contributes on screen. */
   GLOW_TRAIL_IN: 5.2, GLOW_TRAIL_OUT: 0.41, GLOW_TRAIL_DRAW: 0.30,
@@ -962,7 +967,7 @@ let bots = [], noise = [], stepLog = [], panLog = [], listenLock = false, listen
 let lasers = [], sirenT = 0, nextSiren = 1e9, fogT = 0, nextFog = 1e9, flScale = 1, botSpd = 1, blackoutMap = false;
 let rusty = [], cats = [], belts = [], surging = null, nextSurge = 1e9;
 let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
-let exitOpen = false, blackout = 0, nextBlackout = 999;
+let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
 let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
 let powerups = [], puLens = 0, puShoe = 0, puGhost = 0;
@@ -1476,7 +1481,7 @@ function loadMap(idx) {
 
   coinsTotal = coinList.length; coins = 0; realCoins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
-  meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
+  meter = 0; seenTimer = 0; exitOpen = false; exitFull = false; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
   /* a wipe left over from the previous floor would darken the new one */
   if (mode !== 'playing') wipeT = 0;
@@ -1929,7 +1934,15 @@ function update(dt) {
       sfx.pickup(c, coinRatio());
       burst(c.x, c.y, glowGoldS, 12, 150);
       makeNoise(c.x, c.y, T.NOISE_PICKUP);
-      if (realCoins >= coinsTotal) { exitOpen = true; unlockFlash = 1; sfx.unlock(); }
+      const need = Math.max(1, Math.ceil(coinsTotal * T.EXIT_EARLY));
+      if (!exitOpen && realCoins >= need) {
+        exitOpen = true; unlockFlash = 1; sfx.unlock();
+        toast('THE DOOR IS OPEN — THE REST IS YOUR CALL', 2.6);
+      }
+      if (!exitFull && realCoins >= coinsTotal) {
+        exitFull = true; unlockFlash = 1; sfx.unlock();
+        toast('EVERY COIN — THE CLEAR IS WORTH ' + T.CLEAR_BONUS, 2.6);
+      }
       hud();
     }
   }
@@ -2709,7 +2722,8 @@ function caught() {
 
 function nextMap() {
   const last = mapIdx >= MAPS.length - 1;
-  score += T.CLEAR_BONUS;
+  /* you escaped either way; the bonus is what leaving early costs you */
+  if (exitFull) score += T.CLEAR_BONUS;
   sfx.door();
   saveGhost();
   unlock('first');
@@ -3124,7 +3138,7 @@ function drawMinimap() {
   /* the way out, but only once you have actually laid eyes on it */
   const ei = ((exitPt.y / GC) | 0) * GW + ((exitPt.x / GC) | 0);
   if (surveyG[ei] >= MINI_SEEN) {
-    g.fillStyle = exitOpen ? '#4dffb8' : 'rgba(77,255,184,.4)';
+    g.fillStyle = exitOpen ? (exitFull ? '#4dffb8' : '#ffc46e') : 'rgba(77,255,184,.4)';
     g.fillRect(exitPt.x * sx - 2, exitPt.y * sy - 2, 4, 4);
   }
   g.fillStyle = '#fff6da';
@@ -4228,7 +4242,8 @@ function drawExit() {
       ctx.stroke();
     }
     /* the leading edge catches the light behind it */
-    ctx.strokeStyle = exitOpen ? 'rgba(120,255,200,.85)' : 'rgba(255,150,120,.5)';
+    /* amber while there is gold still out there, green once the floor is clean */
+    ctx.strokeStyle = exitOpen ? (exitFull ? 'rgba(120,255,200,.85)' : 'rgba(255,196,110,.85)') : 'rgba(255,150,120,.5)';
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(dir > 0 ? 1.5 : -1.5, -S / 2 + 3);
@@ -4241,7 +4256,7 @@ function drawExit() {
   /* frame */
   ctx.strokeStyle = '#0b0d14'; ctx.lineWidth = 2.4;
   ctx.strokeRect(-S / 2 + 2, -S / 2 + 1, S - 4, S - 2);
-  ctx.strokeStyle = exitOpen ? 'rgba(77,255,184,.7)' : 'rgba(150,140,190,.35)';
+  ctx.strokeStyle = exitOpen ? (exitFull ? 'rgba(77,255,184,.7)' : 'rgba(255,190,90,.7)') : 'rgba(150,140,190,.35)';
   ctx.lineWidth = 1.2;
   ctx.strokeRect(-S / 2 + 4, -S / 2 + 3, S - 8, S - 6);
 
@@ -4779,7 +4794,8 @@ function tossCoin() {
   coinList.push({ x: tx, y: ty, ph: rand(0, TAU), got: false, seen: true });
   makeNoise(tx, ty, T.TOSS_NOISE);
   sfx.pickup(); burst(tx, ty, glowGoldS, 10, 130);
-  exitOpen = realCoins >= coinsTotal;
+  exitOpen = realCoins >= Math.max(1, Math.ceil(coinsTotal * T.EXIT_EARLY));
+  exitFull = realCoins >= coinsTotal;
   hud();
   return true;
 }
@@ -4990,6 +5006,8 @@ function renderPause() {
   $('pWhere').textContent = (loop ? 'LOOP ' + (loop + 1) + ' \u00b7 ' : '') + M.name;
   $('pFloor').textContent = (mapIdx + 1) + '/' + MAPS.length;
   $('pGold').textContent = coins + '/' + coinsTotal;
+  $('pGoldLabel').textContent = exitFull ? 'FLOOR CLEARED'
+    : exitOpen ? 'CAN LEAVE NOW' : 'DOOR AT ' + Math.max(1, Math.ceil(coinsTotal * T.EXIT_EARLY));
   $('pScore').textContent = score;
   $('pTime').textContent = fmtTime(runT);
   const pct = Math.max(0, Math.min(100, batt));
@@ -5037,6 +5055,9 @@ function togglePause() {
 }
 function hud() {
   coinsEl.textContent = coins + '/' + coinsTotal;
+  /* amber the moment walking out becomes a choice, so you know without having
+     to be able to see the door */
+  coinsEl.classList.toggle('canleave', exitOpen && !exitFull);
   $('score').textContent = score;
   mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name
     + (modIdx >= 0 && endless ? ' · ' + MODS[modIdx].name : '');
@@ -5441,7 +5462,8 @@ window.__fp = {
   glowFalloff(t) { return +falloffAt(t).toFixed(4); },
   get mode() { return mode; }, get mapIdx() { return mapIdx; }, get loop() { return loop; },
   get coins() { return coins; }, get coinsTotal() { return coinsTotal; }, get meter() { return meter; },
-  get exitOpen() { return exitOpen; }, get blackout() { return blackout; }, get score() { return score; },
+  get exitOpen() { return exitOpen; }, get exitFull() { return exitFull; },
+  exitNeed() { return Math.max(1, Math.ceil(coinsTotal * T.EXIT_EARLY)); }, get blackout() { return blackout; }, get score() { return score; },
   get aim() { return player.aim; }, get pos() { return { x: player.x, y: player.y }; },
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
@@ -5548,7 +5570,7 @@ window.__fp = {
   forceSiren() { sirenT = 5; nextSiren = 1e9; },
   forceFog() { fogT = 6; nextFog = 1e9; },
   aimStick(dx, dy) { if (sticks.R) { sticks.R.dx = dx; sticks.R.dy = dy; } },
-  clearCoins() { for (const c of coinList) if (!c.got) { c.got = true; coins++; if (!c.bonus) realCoins++; } if (realCoins >= coinsTotal) { exitOpen = true; } hud(); },
+  clearCoins() { for (const c of coinList) if (!c.got) { c.got = true; coins++; if (!c.bonus) realCoins++; } if (realCoins >= coinsTotal) { exitOpen = true; exitFull = true; } hud(); },
   /* light-gated coins */
   get coinsLit() { return coinList.filter(c => !c.got && coinLight(c) === 'lit').length; },
   get coinsDark() { return coinList.filter(c => !c.got && coinLight(c) === 'dark').length; },
