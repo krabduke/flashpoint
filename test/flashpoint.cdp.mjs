@@ -431,16 +431,18 @@ const fogVis = await evl(`(() => {
   for (let i = 0; i < 90; i++) update(0.016);
   const thickDens = __fp.fogDensity;
   /* the banks should be moving */
-  const p0 = { x: fogBanks[0].x, y: fogBanks[0].y };
+  /* vx is rand(-DRIFT, DRIFT), so any single bank can draw a near-standstill.
+     Watching one of them made this assertion a coin flip on the RNG sequence. */
+  const p0 = fogBanks.map(f => ({ x: f.x, y: f.y }));
   for (let i = 0; i < 40; i++) update(0.016);
-  const moved = Math.hypot(fogBanks[0].x - p0.x, fogBanks[0].y - p0.y);
+  const moved = fogBanks.reduce((a, f, i) => a + Math.hypot(f.x - p0[i].x, f.y - p0[i].y), 0);
   return JSON.stringify({ dry, wet, clearDens, thickDens, moved: +moved.toFixed(1) });
 })()`);
 const fv = JSON.parse(fogVis);
 ok('dry floors carry no fog', fv.dry === 0, fogVis);
 ok('the docks do', fv.wet > 0, fogVis);
 ok('fog thickens as the beam chokes', fv.thickDens > fv.clearDens + 0.5, fogVis);
-ok('and the banks drift', fv.moved > 1, fogVis);
+ok('and the banks drift', fv.moved > 8, fogVis);   /* summed over all of them */
 
 /* it actually reaches the screen */
 const fogPix = await evl(`(() => {
@@ -1309,7 +1311,8 @@ const negs = await evl(`(() => {
   mode = 'playing'; invuln = 999;
   loop = 0; mapIdx = 0; loadMap(0); hud();
   /* sprint, get seen, get noticed - none of the clean awards should land */
-  keys.sprint = true; keys.right = true;
+  /* Shift now buys quiet, so loud movement means holding nothing */
+  keys.sprint = false; keys.right = true;
   for (let i = 0; i < 40; i++) update(0.016);
   keys.sprint = false; keys.right = false;
   __fp.bumpAlert();
@@ -1737,11 +1740,12 @@ const wade = await evl(`(() => {
     if (inWater) { player.x = w.x; player.y = w.y; }
     else { player.x = spawnPt.x; player.y = spawnPt.y; }
     noise.length = 0; stepT = 0;
-    keys.left = keys.right = keys.up = keys.down = keys.sprint = false;
-    keys.right = true;
+    keys.left = keys.right = keys.up = keys.down = false;
+    /* Shift is the quiet key now, and this is a test about walking quietly */
+    keys.sprint = true; keys.right = true;
     let heard = 0;
     for (let i = 0; i < 40; i++) { update(0.016); if (noise.length) heard++; if (inWater) { player.x = w.x; player.y = w.y; } }
-    keys.right = false;
+    keys.right = false; keys.sprint = false;
     return heard;
   };
   return JSON.stringify({ dry: run(false), wet: run(true) });
@@ -1757,7 +1761,8 @@ const shod = await evl(`(() => {
   player.x = w.x; player.y = w.y;
   puShoe = T.PU_SHOE_T;
   noise.length = 0; stepT = 0;
-  keys.right = true; keys.sprint = true;
+  /* Shift now buys quiet, so loud movement means holding nothing */
+  keys.right = true; keys.sprint = false;
   let heard = 0;
   for (let i = 0; i < 40; i++) { update(0.016); if (noise.length) heard++; player.x = w.x; player.y = w.y; }
   keys.right = false; keys.sprint = false; puShoe = 0;
@@ -1973,7 +1978,7 @@ ok('you cannot carry more than the cap', JSON.parse(capped).flares === JSON.pars
 /* ---- item bar: every gadget reachable without a keyboard ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('the item bar has every gadget', (await evl("document.querySelectorAll('#itemBar .item').length")) === 10,
+ok('the item bar has every gadget', (await evl("document.querySelectorAll('#itemBar .item').length")) === 9,
   `n=${await evl("document.querySelectorAll('#itemBar .item').length")}`);
 ok('it is reachable by a finger', await evl(`(() => {
   const b = document.getElementById('itFlare');
@@ -2425,7 +2430,8 @@ const quiet = await evl(`(() => {
   const run = () => { let peak = 0; noise.length = 0; stepT = 0;
     for (let i = 0; i < 90; i++) { update(0.016); if (noise.length > peak) peak = noise.length; }
     return peak; };
-  keys.right = true; keys.sprint = true;
+  /* Shift now buys quiet, so loud movement means holding nothing */
+  keys.right = true; keys.sprint = false;
   const withShoes = run();
   puShoe = 0;
   const without = run();
@@ -2694,7 +2700,7 @@ ok('and claims nothing on a floor that is quiet', pau.hazHouse.length === 0, JSO
 /* the agreement is the point; the row count just has to keep up with the game
    growing a gadget, which is what caught the tripwire missing from here */
 ok('the control list agrees with the item bar',
-  pau.keysAgree === true && pau.rows === 15, `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows}`);
+  pau.keysAgree === true && pau.rows === 14, `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows}`);
 ok('pausing again re-reads the run instead of replaying the last look',
   pau.refreshed.score === '9999' && pau.refreshed.gold === '7/12', JSON.stringify(pau.refreshed));
 ok('resume puts you back in', pau.closed.paused === false && pau.closed.hidden === true, JSON.stringify(pau.closed));
@@ -2935,7 +2941,8 @@ const ftm = JSON.parse(await evl(`(() => {
   const move = (n, sprint) => {
     __fp.stepClear(); noise = [];
     let heard = 0;
-    for (let i = 0; i < n; i++) { keys.right = true; keys.sprint = !!sprint; update(1/60); heard = Math.max(heard, noise.length); }
+    /* Shift is the quiet key now, so walking is the one that holds it */
+    for (let i = 0; i < n; i++) { keys.right = true; keys.sprint = !sprint; update(1/60); heard = Math.max(heard, noise.length); }
     keys.right = false; keys.sprint = false;
     return { steps: __fp.stepLog.length, heard, mat: __fp.stepLog[0] && __fp.stepLog[0].mat, v: __fp.stepLog[0] && __fp.stepLog[0].v };
   };
@@ -3975,7 +3982,10 @@ const saf = JSON.parse(await evl(`(() => {
   o.loudWhileWorking = heard > 0;
   /* a flinch inside the radius slips it; walking off resets it */
   const was = __fp.safeT;
-  for (let i = 0; i < 6; i++) { keys.left = true; update(1 / 60); }
+  /* a careful step, not a bolt: at the new default speed six frames carries you
+     clean out of the radius, which is a reset rather than a slip */
+  for (let i = 0; i < 6; i++) { keys.left = true; keys.sprint = true; update(1 / 60); }
+  keys.sprint = false;
   const slipped = __fp.safeT;
   for (let i = 0; i < 40; i++) { keys.left = true; update(1 / 60); }
   keys.left = false;
@@ -4072,72 +4082,6 @@ ok('and a floor you were seen, heard and noticed on pays neither',
 ok('the block measured a running game', cln.mode === 'playing', cln.mode);
 
 
-/* ---- the tripwire: the one gadget that acts on what you know ---- */
-await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
-await sleep(2400);
-const wir = JSON.parse(await evl(`(() => {
-  const o = {};
-  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
-  mapIdx = 0; loop = 0; loadMap(0); invuln = 9e9; meter = 0; clearToast();
-  /* park every unit off the map: floor one has drones of its own and they will
-     walk into a wire laid at the spawn */
-  const park = () => { for (const b of bots) { b.x = -900; b.y = -900; b.path = []; b.state = 'patrol'; } };
-  park();
-  o.startCharges = __fp.wireCharges;
-  o.placed = __fp.dropWireNow();
-  o.afterPlace = { charges: __fp.wireCharges, wires: __fp.wireCount() };
-  /* it arms after a beat, so setting one down does not trip it on yourself */
-  o.armedAtOnce = __fp.wireState()[0].armed;
-  for (let i = 0; i < 50; i++) { park(); update(1 / 60); }
-  o.armedLater = __fp.wireState()[0].armed;
-  o.quietWhileWaiting = { fired: __fp.wireState()[0].fired, noise: (noise = [], noise.length) };
-  /* something walks through it */
-  const w = __fp.wireState()[0], b = bots[0];
-  noise = [];
-  for (let i = 0; i < 4; i++) { b.x = w.x + 20; b.y = w.y; update(1 / 60); }
-  o.crossed = { fired: __fp.wireState()[0] ? __fp.wireState()[0].fired : 0,
-                noise: noise.length, told: __fp.toastList().includes('WIRE TRIPPED — SOMETHING CAME THROUGH') };
-  /* and it is spent */
-  for (let i = 0; i < 100; i++) { park(); update(1 / 60); }
-  o.spent = { wires: __fp.wireCount(), charges: __fp.wireCharges };
-  /* a sentry cannot walk anywhere, so it is not what a wire is for */
-  /* charges are run-long, not per-floor, and the run above spent the only one */
-  mapIdx = 6; loadMap(6); invuln = 9e9; clearToast();
-  startGame(); mapIdx = 6; loadMap(6); invuln = 9e9;
-  const S = bots.find(x => x.kind === 'sentry');
-  for (const bb of bots) if (bb.kind !== 'sentry') { bb.x = -900; bb.y = -900; bb.path = []; }
-  player.x = S.x + 20; player.y = S.y;
-  __fp.dropWireNow();
-  for (let i = 0; i < 90; i++) {
-    for (const bb of bots) if (bb.kind !== 'sentry') { bb.x = -900; bb.y = -900; }
-    update(1 / 60);
-  }
-  o.sentry = { stillThere: __fp.wireCount(), fired: __fp.wireState()[0] ? __fp.wireState()[0].fired : null };
-  o.mode = mode;
-  return JSON.stringify(o);
-})()`));
-ok('you carry one and setting it spends it',
-  wir.startCharges >= 1 && wir.placed === true
-  && wir.afterPlace.charges === wir.startCharges - 1 && wir.afterPlace.wires === 1,
-  JSON.stringify(wir.afterPlace));
-ok('it arms after a beat rather than under your own feet',
-  wir.armedAtOnce === false && wir.armedLater === true,
-  `${wir.armedAtOnce} -> ${wir.armedLater}`);
-ok('and it sits there quietly until something crosses it',
-  wir.quietWhileWaiting.fired === 0, JSON.stringify(wir.quietWhileWaiting));
-/* every other gadget in the game acts on them; this one acts on what you know */
-ok('something walking through it tells you',
-  wir.crossed.fired > 0 && wir.crossed.told === true, JSON.stringify(wir.crossed));
-ok('and tells them nothing at all', wir.crossed.noise === 0,
-  `noise raised=${wir.crossed.noise}`);
-ok('it is spent once it has spoken',
-  wir.spent.wires === 0 && wir.spent.charges === 0, JSON.stringify(wir.spent));
-/* a sentry is bolted down, so it can never be the thing that came through */
-ok('a sentry sitting on one never trips it',
-  wir.sentry.stillThere === 1 && wir.sentry.fired === 0, JSON.stringify(wir.sentry));
-ok('the block measured a running game', wir.mode === 'playing', wir.mode);
-
-
 /* ---- the muffle: buying back what a full haul costs you ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
@@ -4145,7 +4089,7 @@ const hsh = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
   /* N1 made the kit a choice, so a block about the muffle has to pack one */
-  __fp.setLoadout(['hush', 'flare', 'wire']);
+  __fp.setLoadout(['hush', 'flare', 'smoke']);
   startGame(); mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; clearToast();
   o.charges = __fp.hushCharges;
   coins = 0; o.empty = __fp.haulNoiseNow();
@@ -4155,7 +4099,8 @@ const hsh = JSON.parse(await evl(`(() => {
   o.usedTwice = __fp.useHushNow();
   /* what a drone or a listener actually hears, rather than the multiplier */
   const sprintR = () => { noise = [];
-    for (let i = 0; i < 40; i++) { keys.right = true; keys.sprint = true; update(1 / 60); }
+    /* Shift now buys quiet, so loud movement means holding nothing */
+  for (let i = 0; i < 40; i++) { keys.right = true; keys.sprint = false; update(1 / 60); }
     keys.right = false; keys.sprint = false;
     return noise.length ? Math.round(Math.max(...noise.map(n => n.r))) : 0; };
   hushOn = false; const loud = sprintR();
@@ -4170,7 +4115,7 @@ const hsh = JSON.parse(await evl(`(() => {
   togglePause();
   o.inControls = [...$('pKeys').querySelectorAll('.key')].map(e => e.textContent.trim()).includes('B');
   togglePause();
-  __fp.setLoadout(['flare', 'smoke', 'wire']);
+  __fp.setLoadout(['flare', 'smoke', 'hush']);
   o.mode = mode;
   return JSON.stringify(o);
 })()`));
@@ -4304,7 +4249,7 @@ const kit = JSON.parse(await evl(`(() => {
   o.lit = __fp.kitShown().filter(x => x.on).map(x => x.id);
   startGame();
   o.gotChosen = __fp.charges();
-  toMenu(); __fp.setLoadout(['flare', 'smoke', 'wire']); startGame();
+  toMenu(); __fp.setLoadout(['flare', 'smoke', 'hush']); startGame();
   o.gotDefault = __fp.charges();
   /* a fourth pick pushes the oldest out rather than refusing */
   toMenu(); __fp.setLoadout(['flare']);
@@ -4316,11 +4261,11 @@ const kit = JSON.parse(await evl(`(() => {
   /* the choice survives a reload */
   __fp.setLoadout(['emp', 'hush']);
   o.stored = JSON.parse(localStorage.getItem('flashpoint.loadout') || '[]');
-  __fp.setLoadout(['flare', 'smoke', 'wire']);
+  __fp.setLoadout(['flare', 'smoke', 'hush']);
   return JSON.stringify(o);
 })()`));
 const only = (c, ids) => Object.entries(c).every(([k, v]) => ids.includes(k) ? v === 1 : v === 0);
-ok('all eight gadgets are described in one place', kit.gadgets.length === 8 && kit.max === 3,
+ok('every gadget is described in one place', kit.gadgets.length === 7 && kit.max === 3,
   `${kit.gadgets.length} gadgets, pick ${kit.max}`);
 /* GADGETS, T.KIT, the item bar and the pause reference all describe this kit */
 ok('and the other three lists agree with it',
@@ -4331,13 +4276,69 @@ ok('and the other three lists agree with it',
 ok('you set out with exactly what you picked',
   only(kit.gotChosen, ['jam', 'decoy', 'mag']), JSON.stringify(kit.gotChosen));
 ok('and a different pick gives a different run',
-  only(kit.gotDefault, ['flare', 'smoke', 'wire']), JSON.stringify(kit.gotDefault));
+  only(kit.gotDefault, ['flare', 'smoke', 'hush']), JSON.stringify(kit.gotDefault));
 ok('the grid is lit to match', kit.lit.sort().join(',') === 'decoy,jam,mag', JSON.stringify(kit.lit));
 ok('a fourth choice pushes the oldest out instead of refusing',
   kit.pushedOut.length === 3 && !kit.pushedOut.includes('flare'), JSON.stringify(kit.pushedOut));
 ok('but you can never walk in carrying nothing',
   kit.lastOne.removed === false && kit.lastOne.loadout.length === 1, JSON.stringify(kit.lastOne));
 ok('and the choice is remembered', kit.stored.join(',') === 'emp,hush', JSON.stringify(kit.stored));
+
+
+/* ---- you do not start the floor inside a patrol ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const spw = JSON.parse(await evl(`(() => {
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  /* a siren left running by an earlier block stretches every cone by 30% */
+  sirenT = 0; nextSiren = 1e9; blackout = 0;
+  const rows = [];
+  for (let L = 0; L < 3; L++) for (let i = 0; i < MAPS.length; i++) {
+    mapIdx = i; loop = L; loadMap(i); sirenT = 0; blackout = 0;
+    rows.push({ floor: i + 1, loop: L, ...__fp.spawnGap(), seen: __fp.seenAtSpawn() });
+  }
+  rows.sort((a, b) => a.nearest - b.nearest);
+  return JSON.stringify({ want: rows[0].want, closest: rows.slice(0, 3),
+    under150: rows.filter(r => r.nearest < 150).length,
+    seenAnywhere: rows.filter(r => r.seen > 0).length, total: rows.length });
+})()`));
+/* measured before the fix: 33 of 36 had one inside 120px, several at zero */
+ok('nothing starts on your doorstep on any floor of any loop',
+  spw.under150 === 0, `${spw.under150} of ${spw.total}; closest ${spw.closest[0].nearest}px (${spw.closest[0].kind})`);
+ok('and nothing can see the tile you appear on',
+  spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
+
+/* ---- moving fast is the default; the key buys quiet ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const mvp = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0;
+  const run = (holdShift) => { fSprint = false; noise = []; let heard = 0, sp = 0;
+    for (let i = 0; i < 40; i++) { keys.right = true; keys.sprint = !!holdShift; update(1 / 60);
+      heard = Math.max(heard, noise.length); sp = Math.max(sp, Math.hypot(player.vx, player.vy)); }
+    keys.right = false; keys.sprint = false;
+    return { speed: Math.round(sp), heard, loud: fSprint }; };
+  o.free = run(false);
+  o.shift = run(true);
+  o.want = { walk: T.WALK, sprint: T.SPRINT };
+  fSprint = false; noise = [];
+  for (let i = 0; i < 30; i++) update(1 / 60);
+  o.idle = { speed: Math.round(Math.hypot(player.vx, player.vy)), loud: fSprint, heard: noise.length };
+  return JSON.stringify(o);
+})()`));
+ok('you move at full speed without holding anything',
+  mvp.free.speed === mvp.want.sprint, `${mvp.free.speed} of ${mvp.want.sprint}`);
+/* fast is still the loud option: D2's heavy pockets, L2's muffle and every
+   listener on the floor are built on that, and a silent default takes them all */
+ok('and that speed is still the one they can hear',
+  mvp.free.loud === true && mvp.free.heard > 0, JSON.stringify(mvp.free));
+ok('holding shift slows you to a walk and silences it',
+  mvp.shift.speed === mvp.want.walk && mvp.shift.loud === false && mvp.shift.heard === 0,
+  JSON.stringify(mvp.shift));
+ok('standing still is still standing still',
+  mvp.idle.speed === 0 && mvp.idle.loud === false && mvp.idle.heard === 0, JSON.stringify(mvp.idle));
 
 
 const clean = problems.length === 0;
