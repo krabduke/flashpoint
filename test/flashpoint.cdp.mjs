@@ -374,6 +374,60 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- each building keeps its money as something different ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const loot = await evl(`(() => {
+  const kinds = __fp.lootKinds();
+  return JSON.stringify({ kinds, uniq: [...new Set(kinds)].length, n: kinds.length });
+})()`);
+const lootRes = JSON.parse(loot);
+ok('every floor resolves a loot shape', lootRes.n === 12 && lootRes.kinds.every(k => !!k), loot);
+ok('and there is real variety across the campaign', lootRes.uniq >= 5, loot);
+
+/* the shape changes but nothing about picking it up does */
+ok('loot is the same size and value whatever shape it is', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const vals = [];
+  for (const i of [0, 4, 6, 7]) {
+    loop = 0; mapIdx = i; loadMap(i); hud();
+    const c = coinList.find(z => !z.got);
+    player.x = c.x; player.y = c.y;
+    const before = __fp.coins;
+    update(0.016);
+    vals.push({ kind: __fp.lootKind(), picked: __fp.coins - before });
+  }
+  return vals.every(v => v.picked === 1);
+})()`));
+
+/* it is drawn, whatever the shape - sampled next to the player where the camera
+   is guaranteed to be looking */
+const lootPix = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  const bright = [];
+  for (const i of [0, 2, 4, 5, 6, 7, 8]) {
+    loop = 0; mapIdx = i; loadMap(i); hud(); __fp.forgetCoins();
+    const c = coinList.find(z => !z.got);
+    player.x = c.x - 60; player.y = c.y;
+    mouseWX = c.x; mouseWY = c.y;
+    for (let k = 0; k < 30; k++) update(0.016);
+    paused = true; render();
+    const sx = (c.x - camNow.cx) * Z, sy = (c.y - camNow.cy) * Z;
+    if (sx < 10 || sy < 10 || sx > W - 10 || sy > H - 10) { paused = false; continue; }
+    const d = ctx.getImageData((sx - 7) * DPR, (sy - 7) * DPR, 14 * DPR, 14 * DPR).data;
+    let max = 0;
+    for (let q = 0; q < d.length; q += 4) { const v = d[q] + d[q+1] + d[q+2]; if (v > max) max = v; }
+    paused = false;
+    bright.push({ floor: i + 1, kind: __fp.lootKind(), max, lit: __fp.coinsLit });
+  }
+  return JSON.stringify(bright);
+})()`);
+const lootDraw = JSON.parse(lootPix || '[]');
+const lootLit = lootDraw.filter(b => b.lit > 0);
+ok('most floors light their loot for the test', lootLit.length >= 5, lootPix);
+ok('every lit loot shape draws brightly', lootLit.length > 0 && lootLit.every(b => b.max > 400), lootPix);
+ok('and that covers several different shapes', new Set(lootLit.map(b => b.kind)).size >= 4, lootPix);
+
 /* ---- the exit is a door ---- */
 /* Deliberately not a pixel assertion. The exit sits at the map edge on several
    floors and the camera clamps there, so the door lands off-canvas and every

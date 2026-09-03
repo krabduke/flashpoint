@@ -3055,13 +3055,9 @@ function drawCoin(c) {
   const tw = 0.5 + 0.5 * Math.sin(time * 2.4 + c.ph);
   ctx.save(); ctx.translate(c.x, c.y);
   ctx.rotate(Math.sin(time * 1.2 + c.ph) * 0.35);
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(1.6, 2.4, 6, 6.6, 0, 0, TAU); ctx.fill();
-  const gr = ctx.createLinearGradient(0, -7, 0, 7);
-  gr.addColorStop(0, '#ffedbb'); gr.addColorStop(0.5, '#ffd166'); gr.addColorStop(1, '#c8862a');
-  ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(0, 0, 5.8, 6.6 * (0.8 + 0.2 * tw), 0, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(120,70,10,0.8)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.ellipse(0, 0, 3.6, 4.4, 0, 0, TAU); ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + 0.5 * tw) + ')'; ctx.beginPath(); ctx.arc(-1.6, -2, 1.3, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath(); ctx.ellipse(1.6, 2.6, 6.2, 3, 0, 0, TAU); ctx.fill();
+  drawLootShape(LOOT[MAPS[mapIdx].theme] || 'disc', tw);
   /* the glint only happens because something is lighting it */
   ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.2;
   ctx.beginPath();
@@ -3070,6 +3066,78 @@ function drawCoin(c) {
   ctx.stroke();
   ctx.restore();
 }
+
+/* What a building keeps its money as. Same gold, same size, same pickup radius -
+   only the silhouette changes, so a floor reads as its own place. */
+const LOOT = {
+  house: 'disc', warehouse: 'disc', city: 'chip', ward: 'vial',
+  museum: 'gem', server: 'card', bank: 'ingot', docks: 'ring', core: 'gem'
+};
+
+function drawLootShape(kind, tw) {
+  const gold = ctx.createLinearGradient(0, -7, 0, 7);
+  gold.addColorStop(0, '#ffedbb'); gold.addColorStop(0.5, '#ffd166'); gold.addColorStop(1, '#c8862a');
+  ctx.fillStyle = gold;
+  ctx.strokeStyle = 'rgba(120,70,10,0.85)';
+  ctx.lineWidth = 1;
+
+  if (kind === 'ingot') {
+    /* a little bar, seen from above */
+    ctx.beginPath();
+    ctx.moveTo(-6.5, -3.6); ctx.lineTo(6.5, -3.6); ctx.lineTo(5.2, 3.8); ctx.lineTo(-5.2, 3.8);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.4)';
+    ctx.beginPath(); ctx.moveTo(-5.4, -1.4); ctx.lineTo(5.4, -1.4); ctx.stroke();
+  } else if (kind === 'gem') {
+    ctx.beginPath();
+    ctx.moveTo(0, -7.2); ctx.lineTo(5.4, -1.4); ctx.lineTo(3.2, 6.4);
+    ctx.lineTo(-3.2, 6.4); ctx.lineTo(-5.4, -1.4);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.45)';
+    ctx.beginPath(); ctx.moveTo(-5.4, -1.4); ctx.lineTo(0, 1); ctx.lineTo(5.4, -1.4);
+    ctx.moveTo(0, 1); ctx.lineTo(0, 6.4); ctx.stroke();
+  } else if (kind === 'card') {
+    ctx.beginPath(); rr(ctx, -6.4, -4.4, 12.8, 8.8, 1.6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(90,50,8,.7)';
+    ctx.fillRect(-4.4, -2.4, 4.2, 4.8);
+    ctx.strokeStyle = 'rgba(255,255,255,.4)';
+    ctx.beginPath(); ctx.moveTo(1.2, -2.2); ctx.lineTo(4.8, -2.2);
+    ctx.moveTo(1.2, 0.2); ctx.lineTo(4.8, 0.2); ctx.stroke();
+  } else if (kind === 'chip') {
+    /* a casino token: disc with a notched rim */
+    ctx.beginPath(); ctx.arc(0, 0, 6.4, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(90,50,8,.65)'; ctx.lineWidth = 2.2;
+    for (let i = 0; i < 6; i++) {
+      const a = i * TAU / 6 + 0.3;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 4.6, Math.sin(a) * 4.6);
+      ctx.lineTo(Math.cos(a) * 6.4, Math.sin(a) * 6.4);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,.5)';
+    ctx.beginPath(); ctx.arc(0, 0, 3.1, 0, TAU); ctx.stroke();
+  } else if (kind === 'vial') {
+    ctx.beginPath(); rr(ctx, -3.2, -6.6, 6.4, 12, 2.6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(90,50,8,.75)';
+    ctx.fillRect(-2.4, -7.4, 4.8, 2.2);
+    ctx.strokeStyle = 'rgba(255,255,255,.45)';
+    ctx.beginPath(); ctx.moveTo(-1.4, -3.4); ctx.lineTo(-1.4, 3.6); ctx.stroke();
+  } else if (kind === 'ring') {
+    ctx.lineWidth = 3.2; ctx.strokeStyle = gold;
+    ctx.beginPath(); ctx.arc(0, 0, 4.6, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(120,70,10,0.85)';
+    ctx.beginPath(); ctx.arc(0, 0, 6.2, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 3.0, 0, TAU); ctx.stroke();
+  } else {
+    /* the plain coin everything else defaults to */
+    ctx.beginPath(); ctx.ellipse(0, 0, 5.8, 6.6 * (0.8 + 0.2 * tw), 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 0, 3.6, 4.4, 0, 0, TAU); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + 0.5 * tw) + ')';
+  ctx.beginPath(); ctx.arc(-1.6, -2, 1.3, 0, TAU); ctx.fill();
+}
+
 
 function drawExit() {
   const x = exitPt.x, y = exitPt.y, S = T.TILE;
@@ -4028,6 +4096,8 @@ window.__fp = {
   cratePoints() { return crates.map(c => ({ x: c.x, y: c.y, gx: c.gx, gy: c.gy, broken: c.broken })); },
   get crateT() { return +crateT.toFixed(2); },
   get bonusCoins() { return coinList.filter(c => c.bonus).length; },
+  lootKind() { return LOOT[MAPS[mapIdx].theme] || 'disc'; },
+  lootKinds() { return MAPS.map(m => LOOT[m.theme] || 'disc'); },
   get mirrorsN() { return mirrors.length; },
   mirrorPoints() { return mirrors.map(m => ({ x: m.x, y: m.y, gx: m.gx, gy: m.gy, slash: m.slash })); },
   get mirrorBeam() { return mirrorBeam ? { x: mirrorBeam.x, y: mirrorBeam.y, ang: +mirrorBeam.ang.toFixed(3), range: Math.round(mirrorBeam.range) } : null; },
