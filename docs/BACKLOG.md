@@ -49,7 +49,11 @@ behaviour is assertable. Visual work gets a screenshot check instead.
    `safes = []` sat with the other resets further down `loadMap` and wiped every
    safe the tiles had just created — which reads exactly like the feature not
    working. Check where a new array's reset lands relative to line ~1426.
-10. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+10. An assertion that measures a TOTAL and names one contributor is only true
+    until something else starts contributing. K3 paying at `nextMap` broke two
+    of K1's, correctly. Isolate the thing you name — zero the other contributors
+    in setup — rather than widening the expected number.
+11. Web Audio does not settle where you think. `setTargetAtTime` approaches its
    target exponentially and never reaches it, so assert an inaudible floor
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
@@ -184,7 +188,7 @@ only to attract something that hunts by sight.
       clear bonus is what you forfeit by walking out. Asserted that every floor
       leaves something on the table, since ceil(n*0.66)==n for tiny floors.
 - [x] K2 `$` safe — 900 for 4.6s of standing still while it broadcasts your position every half second; optional, and asserted not to change what the floor asks
-- [ ] K3 Clean-floor bonus — unseen, unheard, every coin: say so and pay for it
+- [x] K3 Clean-floor bonus — UNSEEN/UNHEARD/UNLIT lit in the HUD while you hold them, 200 each on the way out and 400 more for all three with every coin; one CLEAN definition drives both the display and the payout
 
 ## L · More to carry
 
@@ -274,3 +278,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · J5 · listeners call drones in on a 6.5s cooldown without raising the building, 8 assertions — **section J complete**
 - 2026-09-03 · K1 · door at two thirds, clear bonus forfeited by leaving early, amber counter and pause label as tells, 8 assertions
 - 2026-09-03 · K2 · safes on four floors, loud throughout, flinch slips and leaving resets, 9 assertions; placement now runs validateMaps' own flood fill before accepting a tile
+- 2026-09-03 · K3 · three clean marks live in the HUD, 200 each and 400 for the set, 6 assertions; K1's two assertions corrected to isolate the clear bonus — **section K complete**
