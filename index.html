@@ -464,6 +464,7 @@ const T = {
   LEAD_T: 0.55, REPATH: 0.22,
   WARY_T: 7, WARY_SWEEP: 2.1, WARY_RANGE: 1.12,
   RADIO_COOL: 4.5,
+  CAUGHT_HOLD: 0.72,   /* the beat between being taken and being told */
   /* how much of HEAR_R a drone adds to a noise's own radius */
   HEAR_BASE: 0.35, HEAR_FLOOR: 0.02, HEAR_LOOP: 0.05, WARY_HEAR: 1.2,
   /* per-drone quirks, so a patrol is not four copies of one clock */
@@ -834,6 +835,7 @@ function saveGhost() {
 }
 
 let exitVertical = true;
+let caughtHold = 0;
 let alertLvl = 0, alertCool = 0;
 /* Twelve, each one about a system this game actually has rather than a
    participation prize. Per-floor flags are what make the negative ones
@@ -1119,6 +1121,7 @@ function loadMap(idx) {
   coinsTotal = coinList.length; coins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
+  caughtHold = 0;
   puLens = 0; puShoe = 0; puGhost = 0;
   batt = T.BATT_MAX; beamOn = true; battDead = false;
   fSeen = false; fSprint = false; fNoticed = false; fEmp = false;
@@ -1314,6 +1317,10 @@ function makeNoise(x, y, r) { noise.push({ x, y, r, t: 0.3 }); }
 
 function update(dt) {
   time += dt;
+  if (mode === 'caught' && caughtHold > 0) {
+    caughtHold = Math.max(0, caughtHold - dt);
+    if (caughtHold === 0) $('caught').classList.remove('hidden');
+  }
   if (mode !== 'playing' || paused) return;
   runT += dt;
   invuln = Math.max(0, invuln - dt);
@@ -2013,7 +2020,8 @@ function caught() {
   $('cScore').textContent = score;
   $('cFloor').textContent = 'LOOP ' + (loop + 1) + ' · ' + (mapIdx + 1) + '/' + MAPS.length;
   renderRecords($('recCaught'));
-  $('caught').classList.remove('hidden');
+  /* hold on the moment before the card lands */
+  caughtHold = T.CAUGHT_HOLD;
   endRun(false, totalRunCoins + coins);
 }
 
@@ -2513,6 +2521,7 @@ function render() {
 
   /* screen HUD canvas bits: detection vignette + film grain + exit arrow + sticks */
   drawVignette();
+  drawCaughtHold();
   ctx.globalAlpha = 0.05; ctx.globalCompositeOperation = 'overlay';
   const go = (time * 733) % 64; ctx.drawImage(grainS, -go, -go, W + 150, H + 150);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
@@ -3344,6 +3353,28 @@ function drawPlayer() {
 }
 
 
+function drawCaughtHold() {
+  if (mode !== 'caught' || caughtHold <= 0) return;
+  const k = 1 - caughtHold / T.CAUGHT_HOLD;      /* 0 at the instant, 1 as the card lands */
+  ctx.save();
+  /* their light flooding over you */
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.32 * (1 - k) + 0.12;
+  const fl = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * (0.2 + k * 0.5));
+  fl.addColorStop(0, 'rgba(255,120,100,0.5)');
+  fl.addColorStop(1, 'rgba(255,40,50,0)');
+  ctx.fillStyle = fl; ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'source-over';
+  /* and the room closing down around it */
+  ctx.globalAlpha = 1;
+  const shut = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * (0.42 - k * 0.3),
+    W / 2, H / 2, Math.max(W, H) * (0.8 - k * 0.35));
+  shut.addColorStop(0, 'rgba(0,0,0,0)');
+  shut.addColorStop(1, 'rgba(6,3,10,' + (0.55 + k * 0.42) + ')');
+  ctx.fillStyle = shut; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
 function drawVignette() {
   const m = mode === 'playing' ? meter : 0;
   const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34, W / 2, H / 2, Math.max(W, H) * 0.75);
@@ -4043,6 +4074,7 @@ window.__fp = {
   botPathEnds() { return bots.map(b => b.path && b.path.length ? { x: Math.round(b.path[b.path.length - 1].x), y: Math.round(b.path[b.path.length - 1].y) } : null); },
   get haulNoise() { return +haulNoise().toFixed(3); },
   get alertLvl() { return alertLvl; },
+  get caughtHold() { return +caughtHold.toFixed(3); },
   get achs() { return JSON.parse(JSON.stringify(achs)); },
   get achCount() { return ACHS.filter(a => achs[a[0]]).length; },
   get achTotal() { return ACHS.length; },

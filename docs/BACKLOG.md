@@ -70,7 +70,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] F1 Drone sprite pass — the real fault was state-blindness, not detail; patrol/invest/chase now read at a glance
 - [x] F2 Exit door — shutter door with ribs, frame, status lamp and light spilling through when it opens
 - [x] F3 Coin sprite — 7 silhouettes across 12 floors: disc, chip, vial, gem, card, ingot, ring
-- [ ] F4 Caught sequence — a held beat before the card
+- [x] F4 Caught sequence — 0.72s hold: their light floods in and the room closes down before the card lands
 - [ ] F5 Win screen — a proper payoff, currently plain
 - [ ] F6 Floor transitions — a wipe rather than a hard cut
 - [ ] F7 Lighting falloff — softer, less linear
@@ -144,3 +144,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F1 · drone redrawn with per-state lens ramp, vent, rotors and rim; pixel-asserted as three distinct states
 - 2026-09-03 · F2 · exit redrawn as a two-leaf shutter, orientation from the open axis; verified by screenshot (camera clamps at map edges, so pixel sampling tests the harness not the game), 3 geometry assertions
 - 2026-09-03 · F3 · per-theme loot shapes, same size and value; brightness asserted on lit samples, 5 assertions
+- 2026-09-03 · F4 · caughtHold ticks before update's early return; 5 assertions, plus the pre-existing card check now waits for the beat

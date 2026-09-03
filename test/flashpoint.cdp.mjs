@@ -121,7 +121,8 @@ const midMeter = await evl('__fp.meter');
 ok('exposed to cone -> meter fills', midMeter > 0.25, 'meter=' + midMeter?.toFixed?.(2));
 await sleep(900);
 await eq('full meter -> caught', '__fp.mode', 'caught');
-await ok('caught card visible', await evl("!document.getElementById('caught').classList.contains('hidden')"));
+await sleep(900);   /* the held beat before the card */
+await ok('caught card visible after the beat', await evl("!document.getElementById('caught').classList.contains('hidden')"));
 await shot('caught');
 
 /* hide behind wall: meter drains to 0 */
@@ -373,6 +374,32 @@ ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
+
+/* ---- being caught holds for a beat before the card ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const caughtBeat = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  document.getElementById('caught').classList.add('hidden');
+  caught();
+  const rightAfter = {
+    mode, hold: __fp.caughtHold,
+    cardHidden: document.getElementById('caught').classList.contains('hidden')
+  };
+  /* the hold ticks in update(), which still runs its first lines when caught */
+  for (let i = 0; i < 8; i++) update(0.016);
+  const midway = { hold: __fp.caughtHold, cardHidden: document.getElementById('caught').classList.contains('hidden') };
+  for (let i = 0; i < 60; i++) update(0.016);
+  const after = { hold: __fp.caughtHold, cardHidden: document.getElementById('caught').classList.contains('hidden') };
+  return JSON.stringify({ rightAfter, midway, after, len: T.CAUGHT_HOLD });
+})()`);
+const cb = JSON.parse(caughtBeat);
+ok('being caught takes effect immediately', cb.rightAfter.mode === 'caught', caughtBeat);
+ok('but the card is held back at first', cb.rightAfter.cardHidden === true && cb.rightAfter.hold > 0, caughtBeat);
+ok('the beat is still running a moment later', cb.midway.cardHidden === true && cb.midway.hold > 0, caughtBeat);
+ok('and then the card lands', cb.after.cardHidden === false && cb.after.hold === 0, caughtBeat);
+ok('the beat is short enough not to annoy', cb.len <= 1, caughtBeat);
 
 /* ---- each building keeps its money as something different ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

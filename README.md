@@ -167,6 +167,10 @@ either. They see what their light sees, and nothing else.
   beam by 60% for 14s, which is how you clear a big room fast now that gold needs
   lighting. **Soft shoes** make you 32% quicker *and* silence your sprint for 11s
   — the only time running is free. **Ghost** freezes the detection meter for 8s.
+- **Being caught takes a moment** — the world stops, their light floods over you
+  and the room closes down around it before the card arrives. Three quarters of a
+  second, long enough to register what happened and short enough not to be in the
+  way of starting again.
 - **Caught = run over.** One meter-fill and it's done. Twelve floors to clear,
   then endless loops. Your name rides on a device-local leaderboard (no login,
   no accounts, nothing leaves the browser).
