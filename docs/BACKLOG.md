@@ -116,7 +116,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] H2 Minimap of swept area — draws F10's survey grid and strictly nothing else; asserted that drones in the dark leave no mark on it
 - [x] H3 Exit compass — the arrow existed but was gated on exitOpen, so it arrived only after every coin was collected; permanent now and graded to what you know
 - [x] H4 Leaderboard screen — two tiers per run with rank, floor, gold and the time that had been recorded and never shown; the new-record highlight matched on name+score and lit up ties
-- [ ] H5 Toast queue — messages currently overwrite each other
+- [x] H5 Toast queue — a capped stack rather than a queue, since a queue would report events four seconds late; repeats refresh one line instead of stacking copies
 - [ ] H6 Tutorial pass — teach light-gated gold properly
 - [ ] H7 Colourblind mode — red cones are the whole game; add its row to the settings panel built in H1 as part of this
 - [ ] H8 Mobile controls — bigger dead zones, better sprint threshold
@@ -184,3 +184,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · H2 · minimap off the survey grid, walls only where swept, exit only once seen, off-switchable, 6 assertions
 - 2026-09-03 · H3 · exit compass permanent, three states by what you have seen, genuinely edge-anchored, 6 assertions
 - 2026-09-03 · H4 · ranked two-tier board, time finally displayed, record identity by id so ties cannot false-match, 9 assertions
+- 2026-09-03 · H5 · three toasts at once, newest on top, own clocks, repeats coalesce, 6 assertions
