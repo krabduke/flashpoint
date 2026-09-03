@@ -108,7 +108,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] G3 Chase stinger — a root climbing a fifth, a tritone held back until you are cornered, and the room bed ducking to make space; the bed got its own node so the duck and the theme cannot clobber each other
 - [x] G4 Footstep material — seven materials off existing tiles and themes, no new tile needed; walking is audible to you and still silent to them
 - [x] G5 Spatial panning — positional sounds pan by x offset from you, not from the screen; pan and distance stayed separate but the distance curve is now shared
-- [ ] G6 Coin pitch ladder — rising pitch as a floor empties
+- [x] G6 Coin pitch ladder — pentatonic, normalised so every floor's last coin lands on the octave; found and fixed a crate coin opening the exit early
 
 ## H · Interface
 
@@ -179,3 +179,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · G3 · chase swell over the heartbeat, tritone late, bed ducks to 45%, 9 assertions; the heartbeat itself is finally tested too
 - 2026-09-03 · G4 · material per theme plus water and vent grating, walking finally makes a sound without making noise, 8 assertions
 - 2026-09-03 · G5 · stereo panning for the sounds that are in the room, centred for the ones that are not, servoVol generalised to distVol, 9 assertions
+- 2026-09-03 · G6 · pentatonic coin ladder, and split coins from realCoins after finding a bonus coin could open the exit with gold still on the floor, 9 assertions — **section G complete**
