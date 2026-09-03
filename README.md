@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Every floor sounds like itself** — a server farm hums high and busy with the
+  air wide open, a vault sits low and sealed with almost nothing moving in it.
+  The bed glides across when you take the stairs rather than cutting.
 - **You can hear a drone lose you** — every drone chirps when its interest
   changes: rising as it warms up, falling as it cools, quieter the further away
   it is. Giving up used to be completely silent, so the only way to know you had

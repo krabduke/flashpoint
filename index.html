@@ -1001,17 +1001,27 @@ try { records = JSON.parse(localStorage.getItem('flashpoint.records') || '[]'); 
 let mapCv, mapCtx, darkCv, darkCtx, losGrid;
 
 /* ---------- audio ---------- */
-let AC = null, master = null, droneO = null, droneG = null, rainN = null, muted = false;
+let AC = null, master = null, droneO = null, droneO2 = null, droneG = null, rainN = null, airN = null, airF = null, airG = null, muted = false;
+let roomTone = null;
 try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
 function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
   AC = new C();
   master = AC.createGain(); master.gain.value = muted ? 0 : 0.55; master.connect(AC.destination);
-  droneG = AC.createGain(); droneG.gain.value = 0.035; droneG.connect(master);
-  droneO = AC.createOscillator(); droneO.type = 'sine'; droneO.frequency.value = 43;
-  const o2 = AC.createOscillator(); o2.type = 'sine'; o2.frequency.value = 45.4;
-  droneO.connect(droneG); o2.connect(droneG); droneO.start(); o2.start();
+  const R = roomTone || ROOM.house;
+  droneG = AC.createGain(); droneG.gain.value = R.humV; droneG.connect(master);
+  droneO = AC.createOscillator(); droneO.type = 'sine'; droneO.frequency.value = R.hum;
+  droneO2 = AC.createOscillator(); droneO2.type = 'sine'; droneO2.frequency.value = R.hum + R.beat;
+  droneO.connect(droneG); droneO2.connect(droneG); droneO.start(); droneO2.start();
+  /* the air in the room: shaped noise, quiet, always there */
+  const n = AC.sampleRate * 2, buf = AC.createBuffer(1, n, AC.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
+  airN = AC.createBufferSource(); airN.buffer = buf; airN.loop = true;
+  airF = AC.createBiquadFilter(); airF.type = 'lowpass';
+  airF.frequency.value = R.air; airF.Q.value = 0.7;
+  airG = AC.createGain(); airG.gain.value = R.airV;
+  airN.connect(airF); airF.connect(airG); airG.connect(master); airN.start();
 }
 function tone(f1, f2, dur, vol, type, when) {
   if (!AC || muted) return;
@@ -1074,6 +1084,37 @@ const sfx = {
   ui() { tone(700, 900, 0.06, 0.08); }
 };
 function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
+
+/* ---------- room tone ----------
+   One bed per theme, because every floor sounded identical: two sines at 43 and
+   45.4Hz, forever, everywhere. Two sines still carry the body, but their pitch
+   says how big and heavy the room is and the gap between them sets the beat you
+   hear wobbling underneath. Over the top sits a filtered noise bed - the thing
+   that actually separates a concrete warehouse from a server room, and which
+   the game had none of outside rain. */
+const ROOM = {
+  house:     { hum: 58, beat: 1.2, air: 400,  airV: 0.006, humV: 0.030 },  /* small, domestic */
+  warehouse: { hum: 38, beat: 1.8, air: 260,  airV: 0.012, humV: 0.038 },  /* big empty concrete */
+  city:      { hum: 46, beat: 3.6, air: 900,  airV: 0.010, humV: 0.032 },  /* neon, traffic below */
+  ward:      { hum: 72, beat: 0.7, air: 1500, airV: 0.008, humV: 0.026 },  /* clinical, thin */
+  museum:    { hum: 44, beat: 0.9, air: 320,  airV: 0.005, humV: 0.028 },  /* hushed and still */
+  server:    { hum: 96, beat: 7.5, air: 2600, airV: 0.018, humV: 0.030 },  /* fans, electrical */
+  bank:      { hum: 34, beat: 1.1, air: 180,  airV: 0.007, humV: 0.034 },  /* sealed and dead */
+  docks:     { hum: 41, beat: 2.6, air: 700,  airV: 0.014, humV: 0.036 },  /* wide, wet, cold */
+  core:      { hum: 30, beat: 5.2, air: 220,  airV: 0.020, humV: 0.042 },  /* hot and wrong */
+};
+/* ramp rather than jump: changing a running oscillator's frequency outright
+   clicks, and a floor change should feel like the 0.6s wipe looks */
+function setRoomTone(theme) {
+  roomTone = ROOM[theme] || ROOM.house;
+  if (!AC) return;
+  const t = AC.currentTime, R = roomTone, ramp = 0.8;
+  droneO.frequency.linearRampToValueAtTime(R.hum, t + ramp);
+  droneO2.frequency.linearRampToValueAtTime(R.hum + R.beat, t + ramp);
+  droneG.gain.linearRampToValueAtTime(R.humV, t + ramp);
+  if (airF) airF.frequency.linearRampToValueAtTime(R.air, t + ramp);
+  if (airG) airG.gain.linearRampToValueAtTime(R.airV, t + ramp);
+}
 
 /* ---------- themes ---------- */
 const THEMES = {
@@ -1243,6 +1284,7 @@ function loadMap(idx) {
     }
   }
   setRain(!!TH.rain);
+  setRoomTone(MAPS[idx].theme);
 }
 
 function spawnBots() {
@@ -4488,6 +4530,15 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  get roomTone() { return roomTone ? { ...roomTone } : null; },
+  roomToneFor(theme) { return ROOM[theme] ? { ...ROOM[theme] } : null; },
+  roomThemes() { return Object.keys(ROOM); },
+  roomLive() {
+    if (!AC || !droneO) return null;
+    return { hum: +droneO.frequency.value.toFixed(2), hum2: +droneO2.frequency.value.toFixed(2),
+             humV: +droneG.gain.value.toFixed(4), air: +airF.frequency.value.toFixed(1),
+             airV: +airG.gain.value.toFixed(4) };
+  },
   get servoLog() { return servoLog.map(e => ({ ...e })); },
   servoClear() { servoLog = []; },
   botHeats() { return bots.map(b => botHeat(b)); },

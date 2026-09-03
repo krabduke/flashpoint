@@ -2793,6 +2793,63 @@ ok('a flicker that lands back where it was announced adds nothing',
   srv.undone.log === 1 && srv.undone.heat === 1, JSON.stringify(srv.undone));
 
 
+/* ---- room tone: one bed per theme ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const rmA = JSON.parse(await evl(`(() => {
+  const o = {};
+  o.acLive = !!AC;
+  o.missing = Object.keys(THEMES).filter(t => !__fp.roomToneFor(t));
+  o.orphan = __fp.roomThemes().filter(t => !THEMES[t]);
+  const sig = __fp.roomThemes().map(t => JSON.stringify(__fp.roomToneFor(t)));
+  o.beds = sig.length; o.distinct = new Set(sig).size;
+  o.server = __fp.roomToneFor('server'); o.bank = __fp.roomToneFor('bank');
+  mapIdx = 0; loadMap(0);
+  o.house = { want: __fp.roomTone, live: __fp.roomLive() };
+  /* floor 6 is the server farm: the brightest, busiest bed there is */
+  mapIdx = 5; loadMap(5);
+  o.swap = { theme: MAPS[5].theme, want: __fp.roomTone, liveNow: __fp.roomLive() };
+  o.rainWet = (() => { mapIdx = 2; loadMap(2); return rainN ? +rainN._g.gain.value.toFixed(3) : null; })();
+  o.rainDry = (() => { mapIdx = 0; loadMap(0); return rainN ? +rainN._g.gain.value.toFixed(3) : null; })();
+  mapIdx = 5; loadMap(5);
+  return JSON.stringify(o);
+})()`));
+/* the ramp runs on the audio clock, so this has to be real elapsed time */
+await sleep(1100);
+const rmB = JSON.parse(await evl('JSON.stringify({ live: __fp.roomLive(), want: __fp.roomTone })'));
+const rmMute = JSON.parse(await evl(`(() => {
+  const was = muted; toggleMute();
+  const off = master.gain.value;
+  if (muted !== was) toggleMute();
+  return JSON.stringify({ off, restored: master.gain.value > 0, muted });
+})()`));
+ok('the audio graph is actually running under test', rmA.acLive === true);
+ok('every theme has a bed and no bed is an orphan',
+  rmA.missing.length === 0 && rmA.orphan.length === 0,
+  `missing=${JSON.stringify(rmA.missing)} orphan=${JSON.stringify(rmA.orphan)}`);
+ok('all nine beds are different from each other',
+  rmA.beds === 9 && rmA.distinct === 9, `beds=${rmA.beds} distinct=${rmA.distinct}`);
+ok('a server room is bright and busy where a vault is low and dead',
+  rmA.server.hum > rmA.bank.hum * 2 && rmA.server.air > rmA.bank.air * 5
+  && rmA.server.beat > rmA.bank.beat * 3,
+  `server=${JSON.stringify(rmA.server)} bank=${JSON.stringify(rmA.bank)}`);
+ok('loading a floor picks up that floor’s bed',
+  rmA.swap.theme === 'server' && rmA.swap.want.hum === 96 && rmA.swap.want.air === 2600,
+  JSON.stringify(rmA.swap.want));
+/* changing a running oscillator's frequency outright clicks */
+ok('the bed glides to the new floor instead of jumping',
+  rmA.swap.liveNow.hum === rmA.house.live.hum && rmA.swap.liveNow.air === rmA.house.live.air,
+  `still=${JSON.stringify(rmA.swap.liveNow)}`);
+ok('and it gets there',
+  Math.abs(rmB.live.hum - rmB.want.hum) < 0.5 && Math.abs(rmB.live.air - rmB.want.air) < 1
+  && Math.abs(rmB.live.hum2 - (rmB.want.hum + rmB.want.beat)) < 0.5,
+  `live=${JSON.stringify(rmB.live)} want=${JSON.stringify(rmB.want)}`);
+ok('rain still only falls where it rains',
+  rmA.rainWet > 0 && rmA.rainDry === 0, `wet=${rmA.rainWet} dry=${rmA.rainDry}`);
+ok('mute silences the bed and unmute brings it back',
+  rmMute.off === 0 && rmMute.restored === true && rmMute.muted === false, JSON.stringify(rmMute));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);
