@@ -3745,6 +3745,99 @@ ok('an alarm is never handed to something bolted to the floor',
 ok('and the block measured a running game', snt.mode === 'playing', snt.mode);
 
 
+/* ---- three kinds of hunter, spread across the campaign ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const mix = JSON.parse(await evl(`(() => {
+  const o = { valid: __fp.mapCheck, floors: [] };
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  for (let i = 0; i < MAPS.length; i++) {
+    mapIdx = i; loop = 0; loadMap(i);
+    const k = __fp.botKinds();
+    o.floors.push({ drone: k.filter(x => x === 'drone').length,
+                    listen: k.filter(x => x === 'listen').length,
+                    sentry: k.filter(x => x === 'sentry').length });
+  }
+  o.wake = { early: __fp.sentryWakeFor(0, 0), mid: __fp.sentryWakeFor(6, 0), deep: __fp.sentryWakeFor(11, 3) };
+  /* A listener has no eyes, so it must not wear the red eye-glint every other
+     bot gets when it is near and unlit - that cue is exactly what its design
+     takes away from you. Same tile for both, so only the unit differs. */
+  mapIdx = 8; loop = 0; loadMap(8); invuln = 9e9; meter = 0;
+  const L = bots.find(b => b.kind === 'listen'), D = bots.find(b => b.kind === 'drone');
+  const spot = { x: player.x + 150, y: player.y + 40 };
+  const park = () => { for (const b of bots) { b.x = -900; b.y = -900; b.path = []; b.state = 'patrol'; } };
+  __fp.aimAt(player.x - 400, player.y);       /* beam pointed away, so nothing is lit */
+  /* Tight box, and the peak across a full period of the glint's own sine. The
+     alpha is 0.16 + 0.1*sin(time*5), so one sample lands anywhere in a 0.06-0.26
+     range; and a wider box just collects flickering lamps and afterglow instead
+     - measured, a 26px box put the baseline above the signal. */
+  const redPeak = () => { let best = -99, h = 12;
+    for (let f = 0; f < 90; f++) {
+      update(1 / 60); render();
+      const sx = (spot.x - camNow.cx) * Z, sy = (spot.y - camNow.cy) * Z;
+      const d = ctx.getImageData((sx - h) * DPR, (sy - h) * DPR, h * 2 * DPR, h * 2 * DPR).data;
+      let r = 0, b2 = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; b2 += d[i + 2]; n++; }
+      best = Math.max(best, (r - b2) / n);
+    }
+    return +best.toFixed(2); };
+  park(); o.glintNone = redPeak();
+  park(); D.x = spot.x; D.y = spot.y; o.glintDrone = redPeak();
+  park(); L.x = spot.x; L.y = spot.y; o.glintListen = redPeak();
+  /* and the cone lesson must not fire on a thing with no cone */
+  completedLevels = []; startGame(); bots.length = 0; invuln = 9e9; meter = 0;
+  /* a real unit always carries a route; an empty one is not a state the game
+     produces, so the fixture should not invent it */
+  const fake = k => ({ kind: k, x: player.x + 60, y: player.y, r: 13, face: 0, blink: 0,
+    state: 'patrol', route: [[2, 2]], wp: 0, path: [], rays: new Array(T.BOT_RAYS + 1),
+    range: k === 'drone' ? T.BOT_RANGE : 0, half: k === 'drone' ? T.BOT_HALF : 0,
+    sweepP: 0, eyeGlint: 0, chaseT: 0, glow: 0, chirpT: 0, saidHeat: 0, peekT: 0,
+    peekCool: 0, peekTo: 0, searchPts: [], wary: 0, radioT: 0, heard: 0, awake: 0, open: 0,
+    sweepK: 1, paceK: 1, peekK: 1, dwellK: 1, dwellT: 0, lastX: 0, lastY: 0 });
+  __fp.aimAt(player.x + 400, player.y);
+  bots.push(fake('listen'));
+  for (let i = 0; i < 30; i++) update(1 / 60);
+  o.afterListener = __fp.tutorState().sawDrone;
+  bots.push(fake('drone'));
+  for (let i = 0; i < 30; i++) update(1 / 60);
+  o.afterDrone = __fp.tutorState().sawDrone;
+  /* and a malformed one must not kill the frame */
+  o.emptyRoute = (() => { try {
+    const bad = fake('drone'); bad.route = []; bots.push(bad);
+    for (let i = 0; i < 10; i++) update(1 / 60);
+    return 'survived';
+  } catch (e) { return 'threw: ' + e.message; } })();
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+const tot = k => mix.floors.reduce((a, f) => a + f[k], 0);
+ok('every map still validates with both new tiles', mix.valid === 'ok', mix.valid);
+/* the base game gets taught on its own before anything else turns up */
+ok('the first three floors are drones and nothing else',
+  mix.floors.slice(0, 3).every(f => f.listen === 0 && f.sentry === 0 && f.drone > 0),
+  JSON.stringify(mix.floors.slice(0, 3)));
+ok('both new kinds appear, and on more than one floor each',
+  mix.floors.filter(f => f.listen > 0).length >= 2 && mix.floors.filter(f => f.sentry > 0).length >= 3,
+  `listener floors=${mix.floors.filter(f => f.listen > 0).length} sentry floors=${mix.floors.filter(f => f.sentry > 0).length}`);
+ok('and at least one floor fields all three at once',
+  mix.floors.some(f => f.drone > 0 && f.listen > 0 && f.sentry > 0),
+  JSON.stringify(mix.floors.map((f, i) => `${i + 1}:${f.drone}/${f.listen}/${f.sentry}`)));
+ok('every floor still has drones on it', mix.floors.every(f => f.drone > 0), `total drones=${tot('drone')}`);
+/* it cannot bring friends the way a drone can, so depth buys it time instead */
+ok('a sentry stays open longer the deeper you are',
+  mix.wake.mid > mix.wake.early && mix.wake.deep > mix.wake.mid * 1.5,
+  `${mix.wake.early}s -> ${mix.wake.mid}s -> ${mix.wake.deep}s`);
+/* J3 warned a third place would assume every bot is a drone, and this was it */
+ok('an unlit drone glints, and a listener does not',
+  mix.glintDrone > mix.glintNone + 1 && mix.glintListen < mix.glintNone + 0.6,
+  `none=${mix.glintNone} drone=${mix.glintDrone} listener=${mix.glintListen}`);
+ok('a unit with no route does not take the frame loop down with it',
+  mix.emptyRoute === 'survived', mix.emptyRoute);
+ok('and the cone lesson waits for something that has a cone',
+  mix.afterListener === false && mix.afterDrone === true && mix.mode === 'playing',
+  `listener=${mix.afterListener} drone=${mix.afterDrone}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

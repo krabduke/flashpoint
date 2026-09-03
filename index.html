@@ -810,7 +810,7 @@ const MAPS = [
   { name: 'THE SERVER FARM', depth: 'SERVER', theme: 'server', coins: 10, bots: 2, spd: 1.05,
     lasers: [[9,1,9,3],[14,5,14,7],[20,9,20,11],[10,13,10,15]], rows: [
     '############################',
-    '#.P....#...c#....#..c.#...c#',
+    '#.P....#...c#....#..cY#...c#',
     '#......#....#.IK.#....#....#',
     '#......#..e.#....#....#....#',
     '#...........D..............#',
@@ -870,7 +870,7 @@ const MAPS = [
   ], routes: [[[1,1],[26,1],[26,5],[1,5],[1,1]],[[1,10],[26,10],[26,16],[1,16],[1,10]],[[7,5],[19,5],[19,10],[7,10],[7,5]]] },
   { name: 'THE CORE', depth: 'CORE', theme: 'core', coins: 12, bots: 3, spd: 1.25, siren: true, blackout: true, rows: [
     '############################',
-    '#.P....!......c.......c....#',
+    '#.P....!......c......Hc....#',
     '#.K.####..f.......d.####...#',
     '#...####............####.s.#',
     '#...####....OS......###M...#',
@@ -881,7 +881,7 @@ const MAPS = [
     '#.#c..#.R..######....G...#.#',
     '#.##V##....######....###G#!#',
     '#..........######..I...c...#',
-    '#....C........c............#',
+    '#....C....Y...c............#',
     '#...####............###M...#',
     '#...####....O.......####...#',
     '#...####............####..c#',
@@ -910,7 +910,7 @@ const MAPS = [
   ], routes: [[[19,5],[20,5],[20,12],[11,9],[13,8]], [[4,3],[11,7],[13,13],[12,14],[5,10]], [[4,9],[5,9],[12,5],[25,12],[12,12]]] },
   { name: 'THE COLD STORE', depth: 'COLD', theme: 'docks', coins: 13, bots: 3, spd: 1.32, fog: true, rows: [
     '############################',
-    '###############......c######',
+    '###############...H..c######',
     '##########.....Lcc..~.######',
     '##########.G###....!..######',
     '########....######.#########',
@@ -933,7 +933,7 @@ const MAPS = [
     '#########........###########',
     '#P...L###...L....###########',
     '#...Lc###.c...cd.###########',
-    '#....f..c..........#########',
+    '#....f..c........Y.#########',
     '#.....####.##.####.#########',
     '#.....##.....C####B#########',
     '########......##...L.#######',
@@ -2099,7 +2099,7 @@ function update(dt) {
 
   /* siren sweeps wake every drone */
   if (sirenT > 0) sirenT -= dt;
-  else { nextSiren -= dt; if (nextSiren <= 0) { sirenT = 5; nextSiren = rand(13, 18); sfx.siren(); for (const b of bots) if (b.kind === 'sentry') b.awake = T.SENTRY_WAKE; toast('SIREN SWEEP — THEY ALL HEAR YOU', 2.5); } }
+  else { nextSiren -= dt; if (nextSiren <= 0) { sirenT = 5; nextSiren = rand(13, 18); sfx.siren(); for (const b of bots) if (b.kind === 'sentry') b.awake = sentryWake(); toast('SIREN SWEEP — THEY ALL HEAR YOU', 2.5); } }
 
   /* fog banks strangle the beam */
   if (fogT > 0) fogT -= dt;
@@ -2202,6 +2202,7 @@ function updateBots(dt) {
          looks at the one thing it has always looked at, and it goes back to
          sleep. */
       if (b.awake > 0) b.awake = Math.max(0, b.awake - dt);
+      /* it cannot bring friends, so deeper runs keep it open longer instead */
       b.open = clamp(b.open + (b.awake > 0 ? dt / T.SENTRY_OPEN : -dt / T.SENTRY_OPEN), 0, 1);
       b.state = b.awake > 0 ? (botSees(b) ? 'chase' : 'invest') : 'patrol';
       castCone(b.rays, b.x, b.y, b.face, b.half, T.BOT_RAYS, botRange(b) * b.open);
@@ -2285,8 +2286,11 @@ function updateBots(dt) {
     }
 
     /* steer along path */
-    if (!b.path.length && b.state === 'patrol') {
-      const wp = b.route[b.wp];
+    if (!b.path.length && b.state === 'patrol' && b.route && b.route.length) {
+      /* An empty route used to throw here, and a throw inside updateBots takes
+         the whole frame loop with it - which on this project is a black screen
+         on two live hosts. Cheap insurance for a thing that should not happen. */
+      const wp = b.route[b.wp % b.route.length];
       const tx = (wp[0] + .5) * T.TILE, ty = (wp[1] + .5) * T.TILE;
       b.path = pathFind(b.x, b.y, tx, ty);
       if (!b.path.length) advanceWp(b);
@@ -2355,6 +2359,7 @@ function updateBots(dt) {
 /* chase is hot, investigating or still wary is half, patrolling is cold. The
    sprite and the servo read the same number so they cannot drift apart. */
 function botHeat(b) { return b.state === 'chase' ? 1 : (b.state === 'invest' || b.wary > 0 ? 0.5 : 0); }
+const sentryWake = () => T.SENTRY_WAKE * (1 + mapIdx * 0.035 + loop * 0.22);
 /* inverse-square-ish: full beside you, half a floor away is half as loud.
    Shared by anything positional so there is one distance model, not several. */
 function distVol(d) { const k = d / T.SERVO_HALF; return 1 / (1 + k * k); }
@@ -2577,7 +2582,7 @@ function updateTutor(dt) {
     if (Math.hypot(player.x - tutorHome.x, player.y - tutorHome.y) > 70) tutorMoved = true;
   }
   if (!tutorLitGold) for (const c of coinList) if (!c.got && beamLit(c.x, c.y)) { tutorLitGold = true; break; }
-  if (!tutorSawDrone) for (const b of bots) if (beamLit(b.x, b.y)) { tutorSawDrone = true; break; }
+  if (!tutorSawDrone) for (const b of bots) if (b.kind === 'drone' && beamLit(b.x, b.y)) { tutorSawDrone = true; break; }
   const step = TUTOR[tutorStep];
   if (!step) { tutorStep = -1; return; }
   if (!step.ready()) return;
@@ -3268,6 +3273,11 @@ function render() {
   }
   /* bot eye glints when near & hidden */
   for (const b of bots) {
+    /* A listener has no eyes to glint, and giving it one would hand you the very
+       cue its design removes. A shut sentry is dormant hardware and should not
+       wink at you either. */
+    if (b.kind === 'listen') continue;
+    if (b.kind === 'sentry' && b.open <= 0.02) continue;
     const d = Math.hypot(b.x - player.x, b.y - player.y);
     if (d < 270 && !revealed(b)) {
       ctx.globalAlpha = 0.16 + 0.1 * Math.sin(time * 5 + b.sweepP);
@@ -4644,7 +4654,7 @@ function raiseAlarm(x, y, radius, msg) {
   /* Every sentry on the floor opens its eye. This is what makes an alarm cost
      something beyond the drone it sends: rooms you were about to walk through
      are now covered. */
-  for (const b of bots) if (b.kind === 'sentry') b.awake = T.SENTRY_WAKE;
+  for (const b of bots) if (b.kind === 'sentry') b.awake = sentryWake();
   /* and the one sent to look has to be something that can actually walk there */
   let near = null, nd = 1e9;
   for (const b of bots) {
@@ -5274,7 +5284,8 @@ window.__fp = {
     state: b.state, sees: botSees(b), x: Math.round(b.x), y: Math.round(b.y) })); },
   sentryCone() { const b = bots.find(x => x.kind === 'sentry');
     return b ? { half: +b.half.toFixed(4), range: b.range, droneHalf: +T.BOT_HALF.toFixed(4), droneRange: T.BOT_RANGE } : null; },
-  wakeSentries() { for (const b of bots) if (b.kind === 'sentry') b.awake = T.SENTRY_WAKE; },
+  wakeSentries() { for (const b of bots) if (b.kind === 'sentry') b.awake = sentryWake(); },
+  sentryWakeFor(f, l) { const mf = mapIdx, lf = loop; mapIdx = f; loop = l; const v = +sentryWake().toFixed(2); mapIdx = mf; loop = lf; return v; },
 
   listenHeard() { return bots.filter(b => b.kind === 'listen').map(b => +(b.heard || 0).toFixed(2)); },
   listenPing() { return bots.filter(b => b.kind === 'listen').map(b => ({ t: +(b.pingT || 0).toFixed(2), flash: +(b.pingFlash || 0).toFixed(2) })); },
