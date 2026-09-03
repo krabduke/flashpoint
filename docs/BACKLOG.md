@@ -57,7 +57,12 @@ behaviour is assertable. Visual work gets a screenshot check instead.
     markup, the gadget-count assertion, the pause screen's `CONTROLS` list, and
     that list's row count. F12's control-list check exists precisely to catch
     the third; do all four in the same edit.
-12. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+12. Assert on the CHANNEL a feature governs, not on emergent behaviour. "Did
+    anyone come to look" mixes sight and hearing; "how many times did the noise
+    reach an ear" measures the jammer. And run a control alongside, so a low
+    number means something — a jammed count ABOVE the unjammed one is what
+    exposed the field being thrown in the wrong place.
+13. Web Audio does not settle where you think. `setTargetAtTime` approaches its
    target exponentially and never reaches it, so assert an inaudible floor
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
@@ -198,7 +203,7 @@ only to attract something that hunts by sight.
 
 - [x] L1 Tripwire on `T` — the first gadget that acts on what you know rather than on them: silent, invisible to them, arms after 0.6s, and a bolted-down sentry can never be what came through
 - [x] L2 Muffle on `B` — cancels D2's haul penalty for one floor; sprint noise 806 down to 520, which is the difference between trackable and not against a listener's 337
-- [ ] L3 A gadget that uses the listener specifically, once J1 exists
+- [x] L3 Jammer on `J` — the EMP's opposite number: deafens them in a radius. Stops them answering a sound, not a listener feeling you through the floor. Cracking a safe inside one reached ears twice against 240 times without
 
 ## M · Blocked
 
@@ -285,3 +290,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · K3 · three clean marks live in the HUD, 200 each and 400 for the set, 6 assertions; K1's two assertions corrected to isolate the clear bonus — **section K complete**
 - 2026-09-03 · L1 · tripwire on T, silent to them and spent when it speaks, 8 assertions; F12's anti-drift check caught the pause reference missing it
 - 2026-09-03 · L2 · muffle cancels the weight penalty for a floor, 806 to 520 sprint radius, 9 assertions; all four gadget touchpoints done in one edit this time
+- 2026-09-03 · L3 · jammer deafens in a radius, pairs with the safe, 7 assertions — **section L complete**
