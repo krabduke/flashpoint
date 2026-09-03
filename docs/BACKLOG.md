@@ -30,7 +30,10 @@ behaviour is assertable. Visual work gets a screenshot check instead.
    `loadMap()` does not, so a block that calls loadMap directly inherits
    whatever the previous run left behind — which reads as the feature being
    broken rather than as the test skipping a step.
-6. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+6. A whole-canvas pixel average dilutes anything local into noise. Sample the
+   region the change is in, computing its screen position from the camera rather
+   than assuming the middle. This has cost three separate assertions now.
+7. Web Audio does not settle where you think. `setTargetAtTime` approaches its
    target exponentially and never reaches it, so assert an inaudible floor
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
@@ -122,7 +125,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] H4 Leaderboard screen — two tiers per run with rank, floor, gold and the time that had been recorded and never shown; the new-record highlight matched on name+score and lit up ties
 - [x] H5 Toast queue — a capped stack rather than a queue, since a queue would report events four seconds late; repeats refresh one line instead of stacking copies
 - [x] H6 Tutorial pass — four staged lessons instead of one nine-second wall of capitals; the gold lesson clears by putting your beam on a coin, not by a timer
-- [ ] H7 Colourblind mode — red cones are the whole game; add its row to the settings panel built in H1 as part of this
+- [x] H7 Colourblind mode — blue cones AND hatching, because hue is the one channel that fails; its settings row lands here now that it does something
 - [ ] H8 Mobile controls — bigger dead zones, better sprint threshold
 
 ---
@@ -190,3 +193,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · H4 · ranked two-tier board, time finally displayed, record identity by id so ties cannot false-match, 9 assertions
 - 2026-09-03 · H5 · three toasts at once, newest on top, own clocks, repeats coalesce, 6 assertions
 - 2026-09-03 · H6 · staged tutorial, the gold lesson cleared by doing it, 7 assertions; test had to be routed through startGame rather than loadMap
+- 2026-09-03 · H7 · colourblind cones by hue and hatching, red dominance +14 to +1, luminance edges 1093 to 1213, 6 assertions
