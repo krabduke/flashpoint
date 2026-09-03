@@ -26,7 +26,11 @@ behaviour is assertable. Visual work gets a screenshot check instead.
    identifier collision with one of the ~140 names already in the harness. Run
    `node --check test/flashpoint.cdp.mjs` before a three minute run, and grep
    the name first.
-5. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+5. Build state through the real entry point. `startGame()` arms things
+   `loadMap()` does not, so a block that calls loadMap directly inherits
+   whatever the previous run left behind — which reads as the feature being
+   broken rather than as the test skipping a step.
+6. Web Audio does not settle where you think. `setTargetAtTime` approaches its
    target exponentially and never reaches it, so assert an inaudible floor
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
@@ -117,7 +121,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] H3 Exit compass — the arrow existed but was gated on exitOpen, so it arrived only after every coin was collected; permanent now and graded to what you know
 - [x] H4 Leaderboard screen — two tiers per run with rank, floor, gold and the time that had been recorded and never shown; the new-record highlight matched on name+score and lit up ties
 - [x] H5 Toast queue — a capped stack rather than a queue, since a queue would report events four seconds late; repeats refresh one line instead of stacking copies
-- [ ] H6 Tutorial pass — teach light-gated gold properly
+- [x] H6 Tutorial pass — four staged lessons instead of one nine-second wall of capitals; the gold lesson clears by putting your beam on a coin, not by a timer
 - [ ] H7 Colourblind mode — red cones are the whole game; add its row to the settings panel built in H1 as part of this
 - [ ] H8 Mobile controls — bigger dead zones, better sprint threshold
 
@@ -185,3 +189,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · H3 · exit compass permanent, three states by what you have seen, genuinely edge-anchored, 6 assertions
 - 2026-09-03 · H4 · ranked two-tier board, time finally displayed, record identity by id so ties cannot false-match, 9 assertions
 - 2026-09-03 · H5 · three toasts at once, newest on top, own clocks, repeats coalesce, 6 assertions
+- 2026-09-03 · H6 · staged tutorial, the gold lesson cleared by doing it, 7 assertions; test had to be routed through startGame rather than loadMap
