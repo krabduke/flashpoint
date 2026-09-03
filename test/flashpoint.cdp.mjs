@@ -3081,6 +3081,88 @@ ok('the chime comes from the coin, not from your head',
   ldr.panned.length > 0 && ldr.panned.every(v => v < -0.5), JSON.stringify(ldr.panned));
 
 
+/* ---- settings, in one place instead of scattered across the menu ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const stn = JSON.parse(await evl(`(() => {
+  const o = {};
+  initAudio();
+  const seg = m => [...$('motionSeg').children].find(b => b.dataset.motion === m);
+  const vis = id => { const el = $(id); return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); };
+  o.shutAtBoot = $('settingsOv').classList.contains('hidden');
+  /* reachable from a run, not only from the menu */
+  paused = false; togglePause();
+  $('pauseSetBtn').click();
+  o.fromPause = { open: !$('settingsOv').classList.contains('hidden'), pauseStillUp: !$('pausedOv').classList.contains('hidden') };
+  $('setDoneBtn').click(); togglePause();
+  toMenu();
+  $('settingsBtn').click();
+  o.fromMenu = !$('settingsOv').classList.contains('hidden');
+  o.rowsSeen = ['volSlider', 'diffBtn', 'motionSeg'].every(vis);
+  /* volume reaches the audio graph, and mute does not eat your choice */
+  const sl = $('volSlider'); sl.value = 20; sl.dispatchEvent(new Event('input'));
+  o.vol = { setting: settings.vol, master: +master.gain.value.toFixed(3), read: $('volRead').textContent };
+  toggleMute(); o.muted = +master.gain.value.toFixed(3);
+  toggleMute(); o.unmuted = +master.gain.value.toFixed(3);
+  /* difficulty moved in here rather than being duplicated */
+  __fp.setDiff('casual'); renderSettings();
+  o.diffShown = $('diffBtn').textContent.trim();
+  o.diffNote = $('diffNote').textContent.length > 0;
+  __fp.setDiff('standard');
+  /* motion: three states, and the system preference is only the default */
+  seg('reduced').click(); o.reduced = { motion: settings.motion, shake: shakeScale, full: motionFull() };
+  seg('full').click(); o.full = { motion: settings.motion, shake: shakeScale, full: motionFull() };
+  o.marked = [...$('motionSeg').children].filter(b => b.classList.contains('on')).map(b => b.dataset.motion);
+  /* and it reaches more than the screen shake */
+  parts = []; burst(100, 100, null, 20, 100); const many = parts.length;
+  seg('reduced').click();
+  parts = []; burst(100, 100, null, 20, 100); const few = parts.length;
+  startGame(); mapIdx = 0; loadMap(0);
+  wipeT = 0; nextMap(); const wipeOff = wipeT;
+  seg('full').click(); mapIdx = 0; loadMap(0);
+  wipeT = 0; nextMap(); const wipeOn = +wipeT.toFixed(3);
+  o.motionReach = { many, few, wipeOn, wipeOff };
+  o.stored = JSON.parse(localStorage.getItem('flashpoint.settings') || '{}');
+  /* escape closes the panel without also pausing the game underneath */
+  $('settingsBtn').click();
+  const wasPaused = paused;
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  o.escape = { shut: $('settingsOv').classList.contains('hidden'), pausedUnchanged: paused === wasPaused };
+  /* leave the machine as we found it: these persist, and a quiet run would
+     disarm every audio assertion in this file */
+  sl.value = 55; sl.dispatchEvent(new Event('input'));
+  seg('auto').click();
+  o.restored = JSON.parse(localStorage.getItem('flashpoint.settings') || '{}');
+  return JSON.stringify(o);
+})()`));
+ok('settings start shut', stn.shutAtBoot === true);
+ok('and open from the menu and from a run alike',
+  stn.fromMenu === true && stn.fromPause.open === true && stn.fromPause.pauseStillUp === true,
+  JSON.stringify(stn.fromPause));
+ok('every control is actually on screen', stn.rowsSeen === true);
+ok('volume reaches the audio, not just the label',
+  stn.vol.setting === 0.2 && stn.vol.master === 0.2 && stn.vol.read === '20%', JSON.stringify(stn.vol));
+/* toggleMute used to hardcode 0.55, so a mute and unmute threw your choice away */
+ok('muting and unmuting gives back the volume you chose',
+  stn.muted === 0 && stn.unmuted === 0.2, `muted=${stn.muted} back=${stn.unmuted}`);
+ok('difficulty lives here now, and says what it does',
+  stn.diffShown === 'CASUAL' && stn.diffNote === true, `label=${stn.diffShown}`);
+ok('motion has three states and the marked one is the chosen one',
+  stn.reduced.full === false && stn.reduced.shake === 0.25
+  && stn.full.full === true && stn.full.shake === 1
+  && stn.marked.length === 1 && stn.marked[0] === 'full',
+  `${JSON.stringify(stn.reduced)} ${JSON.stringify(stn.full)} marked=${stn.marked}`);
+ok('reduced motion means more than a calmer shake',
+  stn.motionReach.few < stn.motionReach.many && stn.motionReach.wipeOff === 0
+  && stn.motionReach.wipeOn > 0.5, JSON.stringify(stn.motionReach));
+ok('escape closes the panel and leaves the game alone',
+  stn.escape.shut === true && stn.escape.pausedUnchanged === true, JSON.stringify(stn.escape));
+ok('choices survive a reload', stn.stored.motion === 'reduced' || stn.stored.motion === 'full',
+  JSON.stringify(stn.stored));
+ok('and this block puts the machine back as it found it',
+  stn.restored.vol === 0.55 && stn.restored.motion === 'auto', JSON.stringify(stn.restored));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

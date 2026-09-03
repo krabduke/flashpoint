@@ -156,6 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Settings in one place** — volume, difficulty and motion, reachable from the
+  menu or from a paused run. Motion has three states: auto follows your system,
+  the other two overrule it, and reduced means calmer shake, fewer particles and
+  no floor wipes.
 - **The gold climbs a scale** — each coin rings a rung higher than the last, and
   the final one on a floor lands on the octave whether that floor holds five or
   fourteen. A crate's bonus coin pays and weighs but does not count toward the

@@ -195,6 +195,42 @@
   .stat{display:flex;flex-direction:column;gap:5px;align-items:center}
   .stat b{font-family:'Orbitron',monospace;font-size:clamp(20px,5vw,26px);font-weight:900;color:#eef0ff;font-variant-numeric:tabular-nums}
   .stat span{font-size:9px;letter-spacing:.26em;color:#5e5679}
+  /* ---- settings ---- */
+  #settingsOv{z-index:8}
+  .setcard{gap:0;min-width:min(390px,86vw)}
+  .setcard h2{margin-bottom:14px}
+  .set-row{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    width:100%;padding:13px 0;border-top:1px solid rgba(120,100,180,.14)}
+  .set-row:first-of-type{border-top:none}
+  .set-label{text-align:left}
+  .set-label b{display:block;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;
+    letter-spacing:.2em;color:#cfc6ee}
+  .set-label span{display:block;font-size:10px;color:#6a6190;margin-top:3px;letter-spacing:.04em}
+  .seg{display:flex;gap:0;border:1px solid rgba(140,130,200,.34);border-radius:999px;overflow:hidden;flex-shrink:0}
+  .seg button{
+    -webkit-appearance:none;appearance:none;cursor:pointer;pointer-events:auto;
+    font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:.16em;
+    padding:8px 13px;border:none;background:transparent;color:#8d84b3;
+    transition:background .15s ease,color .15s ease;
+  }
+  .seg button:hover{color:#e6dffb}
+  .seg button.on{background:rgba(255,209,102,.16);color:#ffe9a8}
+  .seg button:focus-visible{outline:2px solid #ffd166;outline-offset:-2px}
+  input[type=range].vol{
+    -webkit-appearance:none;appearance:none;width:150px;height:4px;flex-shrink:0;
+    background:rgba(120,110,170,.28);border-radius:999px;outline:none;pointer-events:auto;cursor:pointer;
+  }
+  input[type=range].vol::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#ffd166;box-shadow:0 0 10px rgba(255,190,80,.5);cursor:pointer;
+  }
+  input[type=range].vol::-moz-range-thumb{
+    width:15px;height:15px;border:none;border-radius:50%;background:#ffd166;cursor:pointer;
+  }
+  input[type=range].vol:focus-visible{outline:2px solid #ffd166;outline-offset:4px}
+  #volRead{font-family:'Orbitron',monospace;font-size:10px;color:#8d84b3;
+    font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
+
   /* ---- pause: the one calm moment, so it can afford to be dense ---- */
   .pausecard{gap:3px}
   .pstrip{display:flex;gap:24px;align-items:center;justify-content:center;
@@ -397,7 +433,7 @@
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
     </div>
     <button class="btn" id="startBtn">BREAK IN</button>
-    <button class="btn ghost" id="diffBtn" type="button">DIFFICULTY — STANDARD</button>
+    <button class="btn ghost" id="settingsBtn" type="button">SETTINGS</button>
     <button class="btn ghost" id="dailyBtn" type="button">DAILY RUN — OFF</button>
     <p id="achCount"></p>
     <p id="dailySeed"></p>
@@ -445,6 +481,31 @@
     </div>
   </div>
 
+  <div id="settingsOv" class="overlay hidden">
+    <div class="card setcard">
+      <h2>SETTINGS</h2>
+      <div class="set-row">
+        <span class="set-label"><b>VOLUME</b><span>Everything except a muted run</span></span>
+        <input type="range" class="vol" id="volSlider" min="0" max="100" step="5" aria-label="Volume">
+        <span id="volRead">55%</span>
+      </div>
+      <div class="set-row">
+        <span class="set-label"><b>DIFFICULTY</b><span id="diffNote">Drone speed, meter fill, torch drain</span></span>
+        <button class="btn ghost" id="diffBtn" type="button" style="padding:9px 16px;font-size:10px">STANDARD</button>
+      </div>
+      <div class="set-row">
+        <span class="set-label"><b>MOTION</b><span>Screen shake, floor wipes, particle bursts</span></span>
+        <div class="seg" id="motionSeg" role="group" aria-label="Motion">
+          <button type="button" data-motion="auto">AUTO</button>
+          <button type="button" data-motion="full">FULL</button>
+          <button type="button" data-motion="reduced">REDUCED</button>
+        </div>
+      </div>
+      <button class="btn" id="setDoneBtn" style="margin-top:16px">DONE</button>
+      <p class="hint" style="margin-top:9px"><span class="key">ESC</span> also closes</p>
+    </div>
+  </div>
+
   <div id="pausedOv" class="overlay hidden">
     <div class="card pausecard">
       <h2>PAUSED</h2>
@@ -463,6 +524,7 @@
       <div class="pkeys" id="pKeys"></div>
       <p class="hint" id="pSticks" style="display:none">Left stick moves &middot; right stick aims &middot; tap an item to use it</p>
       <button class="btn" id="resumeBtn">RESUME</button>
+      <button class="btn ghost" id="pauseSetBtn" type="button">SETTINGS</button>
       <button class="btn ghost" id="quitBtn">ABANDON RUN</button>
       <p class="hint"><span class="key">P</span> or <span class="key">II</span> to resume</p>
     </div>
@@ -1007,11 +1069,27 @@ let AC = null, master = null, droneO = null, droneO2 = null, droneG = null, rain
 let roomTone = null, bedG = null, stingG = null, stingA = null, stingB = null, stingBG = null;
 let tension = 0, stingT = 0;
 try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
+/* Settings were scattered: difficulty was a button on the menu, volume did not
+   exist at all beyond mute, and reduced motion was read straight off the media
+   query with no way to disagree with it. */
+const SET0 = { vol: 0.55, motion: 'auto' };
+let settings = (() => {
+  try { return Object.assign({}, SET0, JSON.parse(localStorage.getItem('flashpoint.settings') || '{}')); }
+  catch (e) { return Object.assign({}, SET0); }
+})();
+function saveSettings() { try { localStorage.setItem('flashpoint.settings', JSON.stringify(settings)); } catch (e) {} }
+const prefersReduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+/* auto follows the system, the other two are you overruling it */
+const motionFull = () => settings.motion === 'auto' ? !prefersReduced() : settings.motion === 'full';
+function applySettings() {
+  shakeScale = motionFull() ? 1 : 0.25;
+  if (master) master.gain.value = muted ? 0 : settings.vol;
+}
 function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
   AC = new C();
-  master = AC.createGain(); master.gain.value = muted ? 0 : 0.55; master.connect(AC.destination);
+  master = AC.createGain(); master.gain.value = muted ? 0 : settings.vol; master.connect(AC.destination);
   const R = roomTone || ROOM.house;
   /* The bed feeds a duck node rather than master. setRoomTone owns the theme
      levels, the chase owns this multiplier, and neither writes the other's
@@ -1130,7 +1208,7 @@ const sfx = {
   },
   ui() { tone(700, 900, 0.06, 0.08); }
 };
-function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
+function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : settings.vol; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
 
 /* ---------- what you are standing on ----------
    Sprinting played one 420Hz burst on every floor of the game, and walking made
@@ -1590,14 +1668,13 @@ function shakeOffset() {
   if (m > T.SHAKE_CAP) { x = x / m * T.SHAKE_CAP; y = y / m * T.SHAKE_CAP; }
   return { x: x * shakeScale, y: y * shakeScale };
 }
-/* the stylesheet already drops the menu animations for this; a twenty pixel
-   lurch of the whole screen is exactly what it is asking about */
+/* The system preference is the default, not the law: on `auto` a change to it
+   takes effect, and once you have chosen for yourself it stops mattering. */
 try {
   const rmq = matchMedia('(prefers-reduced-motion: reduce)');
-  const applyRM = () => { shakeScale = rmq.matches ? 0.25 : 1; };
-  applyRM();
-  rmq.addEventListener('change', applyRM);
-} catch (e) {}
+  applySettings();
+  rmq.addEventListener('change', () => { if (settings.motion === 'auto') applySettings(); });
+} catch (e) { applySettings(); }
 
 function update(dt) {
   time += dt;
@@ -2422,7 +2499,7 @@ function nextMap() {
   totalRunCoins += coins;
   mapIdx = (mapIdx + 1) % MAPS.length;
   if (mapIdx === 0) { loop++; pickMod(); }
-  wipeT = T.WIPE_T; wipeName = MAPS[mapIdx].name;
+  wipeT = motionFull() ? T.WIPE_T : 0; wipeName = MAPS[mapIdx].name;
   loadMap(mapIdx);
   hud();
 }
@@ -4010,6 +4087,7 @@ function drawSticks() {
 
 /* ---------- particles ---------- */
 function burst(x, y, col, n, sp) {
+  if (!motionFull()) n = Math.max(1, Math.ceil(n * 0.35));
   for (let i = 0; i < n; i++) {
     const a = Math.random() * TAU, v = rand(0.2, 1) * sp;
     parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.3, 0.7), max: 0.7, col: col || glowGoldS, size: rand(2, 4) });
@@ -4269,8 +4347,10 @@ function renderAchs() {
 function renderDiff() {
   const b = $('diffBtn');
   if (!b) return;
-  b.textContent = 'DIFFICULTY — ' + D().name;
+  b.textContent = D().name;
   b.classList.toggle('on', diffIdx !== 1);
+  const note = $('diffNote');
+  if (note) note.textContent = DIFF_NOTE[D().id] || '';
 }
 
 function renderDaily() {
@@ -4420,6 +4500,22 @@ function renderPause() {
     keys.map(k => '<span class="key">' + k + '</span>').join('') + '</s></div>').join('');
   $('pSticks').style.display = TOUCH ? '' : 'none';
 }
+function renderSettings() {
+  $('volSlider').value = Math.round(settings.vol * 100);
+  $('volRead').textContent = Math.round(settings.vol * 100) + '%';
+  $('diffBtn').textContent = D().name;
+  $('diffNote').textContent = DIFF_NOTE[D().id] || 'Drone speed, meter fill, torch drain';
+  for (const b of $('motionSeg').children) b.classList.toggle('on', b.dataset.motion === settings.motion);
+}
+const DIFF_NOTE = {
+  casual: 'Slower drones, a kinder meter, a longer torch',
+  standard: 'The game as it is tuned',
+  blackout: 'Faster drones, a hungrier meter, and the lights go out',
+};
+function openSettings() { renderSettings(); $('settingsOv').classList.remove('hidden'); sfx.ui(); }
+function closeSettings() { $('settingsOv').classList.add('hidden'); sfx.ui(); }
+const settingsOpen = () => !$('settingsOv').classList.contains('hidden');
+
 function togglePause() {
   if (mode !== 'playing') return;
   paused = !paused;
@@ -4533,6 +4629,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'v' || e.key === 'V') && mode === 'playing') { dropDecoy(); }
   if ((e.key === 'g' || e.key === 'G') && mode === 'playing') { runMagnet(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
+  if (e.key === 'Escape' && settingsOpen()) { closeSettings(); return; }
   if ((e.key === 'p' || e.key === 'P')) togglePause();
 });
 window.addEventListener('keyup', e => {
@@ -4587,6 +4684,20 @@ bindBtn('againBtn', () => { setName($('nameInput2').value || name); startGame();
 bindBtn('endlessBtn', () => { if ($('nameInput3').value) setName($('nameInput3').value); continueEndless(); });
 bindBtn('escAgainBtn', () => { if ($('nameInput3').value) setName($('nameInput3').value); startGame(); });
 bindBtn('resumeBtn', togglePause);
+bindBtn('settingsBtn', openSettings);
+bindBtn('pauseSetBtn', openSettings);
+bindBtn('setDoneBtn', closeSettings);
+$('volSlider').addEventListener('input', e => {
+  settings.vol = clamp(+e.target.value / 100, 0, 1);
+  $('volRead').textContent = Math.round(settings.vol * 100) + '%';
+  applySettings(); saveSettings();
+});
+$('motionSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-motion]');
+  if (!b) return;
+  settings.motion = b.dataset.motion;
+  applySettings(); saveSettings(); renderSettings(); sfx.ui();
+});
 bindBtn('quitBtn', toMenu);
 bindBtn('pauseBtn', togglePause);
 bindBtn('muteBtn', toggleMute);
