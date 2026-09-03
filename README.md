@@ -156,6 +156,8 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Messages stack** — a plate going off while a crate is still being announced
+  no longer erases it. Three at a time, newest on top, each on its own clock.
 - **A board worth reading** — top runs ranked, with the floor you reached, the
   gold you carried and how long it took. The run you just finished is picked out
   wherever it lands.

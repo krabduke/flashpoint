@@ -379,24 +379,30 @@
   @media (max-width:430px){#floorGrid{gap:4px}.floor{font-size:11px;border-radius:6px}}
 
   /* ---- toast: field notice, never blocks the beam ---- */
+  /* a stack, newest at the top where your eye already is */
   #toast{
     position:absolute;top:calc(76px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);
-    z-index:5;pointer-events:none;max-width:min(560px,86vw);
+    z-index:5;pointer-events:none;width:max-content;max-width:min(560px,86vw);
+    display:flex;flex-direction:column;align-items:center;gap:7px;
+  }
+  .tmsg{
     font-family:'Orbitron',monospace;font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;
     text-align:center;line-height:1.6;color:#ffe9a8;
     padding:11px 20px;border-radius:12px;border:1px solid rgba(255,209,102,.34);border-left-width:3px;
     background:linear-gradient(180deg,rgba(22,15,44,.94),rgba(8,5,20,.94));
     box-shadow:0 14px 44px rgba(0,0,0,.6),0 0 22px rgba(255,190,80,.12);
     backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
-    opacity:0;transition:opacity .28s ease,transform .28s ease;
+    opacity:0;transform:translateY(-8px);
+    transition:opacity .28s ease,transform .28s ease;
   }
-  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-  #toast:not(.show){transform:translateX(-50%) translateY(-8px)}
+  .tmsg.show{opacity:1;transform:none}
+  /* older messages step back so the newest reads first */
+  .tmsg.show ~ .tmsg.show{opacity:.72;font-size:10px}
 
   @media (prefers-reduced-motion:reduce){
-    .floor,.floor.current,#toast{animation:none!important;transition:opacity .2s ease!important}
+    .floor,.floor.current,.tmsg{animation:none!important;transition:opacity .2s ease!important}
     .floor:not(.locked):hover{transform:none}
-    #toast:not(.show){transform:translateX(-50%)}
+    .tmsg{transform:none}
   }
 
   .hidden{display:none!important}
@@ -4246,7 +4252,6 @@ function setName(v) {
   totalRunCoins = 0;
 }
 /* transient field notice - top centre, never eats pointer events */
-let toastTimer = 0;
 /* A flare lands where it can: along the aim until a wall stops it. Because it is
    an emitter, coins inside it light up through code that already exists - and
    unlike mains lamps it keeps burning through a blackout. */
@@ -4440,17 +4445,41 @@ function throwFlare() {
   return true;
 }
 
+/* One element, overwritten in place, on a single shared timer: a plate firing
+   while a crate is still being announced simply erased the crate. Everything
+   competing for that one line - plates, crates, fog, sirens, a dead torch - and
+   only the last one ever survived. A stack keeps them all, each on its own
+   clock. */
+const TOAST_MAX = 3;
+let toasts = [];
+function dropToast(t) {
+  const i = toasts.indexOf(t);
+  if (i < 0) return;
+  toasts.splice(i, 1);
+  clearTimeout(t.timer);
+  t.el.classList.remove('show');
+  setTimeout(() => { if (t.el.parentNode) t.el.remove(); }, 320);
+}
 function toast(msg, secs) {
-  const el = $('toast');
-  if (!el) return;
+  const host = $('toast');
+  if (!host) return;
+  const life = Math.max(0.5, secs || 2.5) * 1000;
+  /* three crates in a row should refresh one line, not stack three copies */
+  const dup = toasts.find(t => t.msg === msg);
+  if (dup) { clearTimeout(dup.timer); dup.timer = setTimeout(() => dropToast(dup), life); return; }
+  const el = document.createElement('div');
+  el.className = 'tmsg';
   el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), Math.max(0.5, secs || 2.5) * 1000);
+  host.prepend(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  const t = { el, msg, timer: 0 };
+  t.timer = setTimeout(() => dropToast(t), life);
+  toasts.unshift(t);
+  while (toasts.length > TOAST_MAX) dropToast(toasts[toasts.length - 1]);
 }
 function clearToast() {
-  const el = $('toast');
-  if (el) { clearTimeout(toastTimer); el.classList.remove('show'); el.textContent = ''; }
+  for (const t of toasts.slice()) { clearTimeout(t.timer); if (t.el.parentNode) t.el.remove(); }
+  toasts = [];
 }
 
 /* floor select - cleared floors are lit, locked floors stay in the dark */
@@ -4902,6 +4931,10 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  toastList() { return toasts.map(t => t.msg); },
+  toastShown() { return [...$('toast').querySelectorAll('.tmsg')].map(e => e.textContent); },
+  toastVisible() { return [...$('toast').querySelectorAll('.tmsg.show')].length; },
+  toastCap() { return TOAST_MAX; },
   exitCompass() {
     if (mode !== 'playing') return null;
     const sx = (exitPt.x - camNow.cx) * Z, sy = (exitPt.y - camNow.cy) * Z, m = 26;

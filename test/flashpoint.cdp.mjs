@@ -3322,6 +3322,47 @@ ok('big scores are readable', brd.full.score === '15,000', brd.full.score);
 ok('the escape screen gets the same board', brd.escapedToo === 6, `rows=${brd.escapedToo}`);
 
 
+/* ---- toasts stack instead of overwriting ----
+   Real timers, so this block sleeps for real. The game is quietened first:
+   left alone it raises its own alerts and they land in the same stack. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+await evl(`mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0; clearToast();`);
+await evl("toast('PRESSURE PLATE', 6); toast('CRATE OPEN', 6); toast('FOG BANK', 6);");
+await sleep(420);
+const tst = { three: JSON.parse(await evl('JSON.stringify({ model: __fp.toastList(), dom: __fp.toastShown(), visible: __fp.toastVisible() })')) };
+await evl("toast('SIREN SWEEP', 6);");
+await sleep(180);
+tst.fourth = JSON.parse(await evl('JSON.stringify({ model: __fp.toastList(), cap: __fp.toastCap() })'));
+await evl("toast('SIREN SWEEP', 6); toast('SIREN SWEEP', 6);");
+await sleep(150);
+tst.repeat = JSON.parse(await evl('JSON.stringify(__fp.toastList())'));
+await evl("clearToast(); toast('SHORT ONE', 0.6); toast('LONG ONE', 9);");
+await sleep(1300);
+tst.lifetimes = JSON.parse(await evl('JSON.stringify({ model: __fp.toastList(), dom: __fp.toastShown() })'));
+await evl('clearToast();');
+tst.cleared = JSON.parse(await evl('JSON.stringify({ model: __fp.toastList(), dom: __fp.toastShown() })'));
+/* one message used to erase the one before it outright */
+ok('three events in a row all get said',
+  tst.three.model.length === 3 && tst.three.visible === 3
+  && tst.three.model.includes('PRESSURE PLATE') && tst.three.model.includes('CRATE OPEN')
+  && tst.three.model.includes('FOG BANK'), JSON.stringify(tst.three));
+ok('the newest is on top', tst.three.model[0] === 'FOG BANK' && tst.three.dom[0] === 'FOG BANK',
+  JSON.stringify(tst.three.dom));
+ok('a fourth pushes the oldest out rather than piling up',
+  tst.fourth.model.length === tst.fourth.cap && tst.fourth.model[0] === 'SIREN SWEEP'
+  && !tst.fourth.model.includes('PRESSURE PLATE'), JSON.stringify(tst.fourth));
+/* three crates in a row are three identical lines otherwise */
+ok('the same message twice refreshes one line instead of stacking copies',
+  tst.repeat.filter(m => m === 'SIREN SWEEP').length === 1 && tst.repeat.length === 3,
+  JSON.stringify(tst.repeat));
+ok('each message keeps its own clock',
+  tst.lifetimes.model.length === 1 && tst.lifetimes.model[0] === 'LONG ONE'
+  && !tst.lifetimes.dom.includes('SHORT ONE'), JSON.stringify(tst.lifetimes));
+ok('and clearing takes them out of the page, not just the list',
+  tst.cleared.model.length === 0 && tst.cleared.dom.length === 0, JSON.stringify(tst.cleared));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);
