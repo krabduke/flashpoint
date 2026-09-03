@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Colourblind mode** — drone cones turn blue and gain hatching, so they read
+  by pattern as well as by hue. Warm gold against red is the one pair this game
+  cannot afford to have collapse.
 - **Taught one thing at a time** — the first floor walks you through moving,
   then sweeping for gold, then taking it. The gold lesson ends when your beam
   actually lands on a coin, not when a timer runs out.

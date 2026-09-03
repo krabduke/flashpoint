@@ -530,6 +530,13 @@
         <button class="btn ghost" id="diffBtn" type="button" style="padding:9px 16px;font-size:10px">STANDARD</button>
       </div>
       <div class="set-row">
+        <span class="set-label"><b>COLOURBLIND</b><span>Drone cones go blue and hatched</span></span>
+        <div class="seg" id="cbSeg" role="group" aria-label="Colourblind mode">
+          <button type="button" data-cb="off">OFF</button>
+          <button type="button" data-cb="on">ON</button>
+        </div>
+      </div>
+      <div class="set-row">
         <span class="set-label"><b>MINIMAP</b><span>Only what your beam has already lit</span></span>
         <div class="seg" id="miniSeg" role="group" aria-label="Minimap">
           <button type="button" data-mini="on">ON</button>
@@ -1115,7 +1122,8 @@ try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
 /* Settings were scattered: difficulty was a button on the menu, volume did not
    exist at all beyond mute, and reduced motion was read straight off the media
    query with no way to disagree with it. */
-const SET0 = { vol: 0.55, motion: 'auto', minimap: true };
+const SET0 = { vol: 0.55, motion: 'auto', minimap: true, cb: false };
+const colourblind = () => settings.cb === true;
 let settings = (() => {
   try { return Object.assign({}, SET0, JSON.parse(localStorage.getItem('flashpoint.settings') || '{}')); }
   catch (e) { return Object.assign({}, SET0); }
@@ -2684,6 +2692,8 @@ function makeGlow(rgb) {
 }
 const glowGoldS = makeGlow('255,205,100');
 const glowRedS = makeGlow('255,70,60');
+const glowCyanS = makeGlow('60,170,255');
+const botGlow = () => colourblind() ? glowCyanS : glowRedS;
 const glowGreenS = makeGlow('70,255,160');
 const glowWhiteS = makeGlow('240,248,255');
 /* one glow per power-up, so the pickup burst is its own colour */
@@ -3141,14 +3151,14 @@ function render() {
     const d = Math.hypot(b.x - player.x, b.y - player.y);
     if (d < 270 && !revealed(b)) {
       ctx.globalAlpha = 0.16 + 0.1 * Math.sin(time * 5 + b.sweepP);
-      ctx.drawImage(glowRedS, b.x - 12, b.y - 12, 24, 24);
+      ctx.drawImage(botGlow(), b.x - 12, b.y - 12, 24, 24);
     }
     /* a drone building up on your light shows it, so being noticed is readable
        rather than mysterious - and it is your cue to look somewhere else */
     if (b.glow > 0.15 && b.state === 'patrol') {
       const k = Math.min(1, b.glow / T.BEAM_SEEN_T);
       ctx.globalAlpha = 0.25 + 0.45 * k;
-      ctx.drawImage(glowRedS, b.x - 14 - k * 6, b.y - 14 - k * 6, 28 + k * 12, 28 + k * 12);
+      ctx.drawImage(botGlow(), b.x - 14 - k * 6, b.y - 14 - k * 6, 28 + k * 12, 28 + k * 12);
       ctx.globalAlpha = 0.5 + 0.5 * k;
       ctx.strokeStyle = '#ff8a5c'; ctx.lineWidth = 1.4;
       ctx.beginPath();
@@ -3157,7 +3167,7 @@ function render() {
     }
     if (b.state === 'chase') {
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(time * 16);
-      ctx.drawImage(glowRedS, b.x - 20, b.y - 46, 40, 40);
+      ctx.drawImage(botGlow(), b.x - 20, b.y - 46, 40, 40);
       ctx.globalAlpha = 1; ctx.fillStyle = '#ff4646';
       ctx.font = '900 26px Orbitron, monospace'; ctx.textAlign = 'center';
       ctx.fillText('!', b.x, b.y - 24);
@@ -3394,7 +3404,7 @@ function drawBotBody(b) {
   if (heat > 0) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = a * heat * (0.25 + 0.15 * Math.sin(time * (6 + heat * 8)));
-    ctx.drawImage(glowRedS, 4 - 18, -18, 36, 36);
+    ctx.drawImage(botGlow(), 4 - 18, -18, 36, 36);
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a;
   }
 
@@ -3415,23 +3425,49 @@ function drawBotBody(b) {
 }
 
 
+/* The whole game is telling your warm light apart from their red light in a
+   dark room, and warm amber against red is exactly the pair red-green colour
+   blindness collapses. Recolouring alone is the half measure everyone reaches
+   for; hue is one channel and it is the one that fails. So this shifts the hue
+   AND hatches the cone, and the hatching is what still works in greyscale. */
+const CONE = {
+  off: { core: '255,70,60', mid: '255,50,50', far: '255,30,40', edge: '255,90,80' },
+  on:  { core: '60,170,255', mid: '40,150,255', far: '30,120,255', edge: '150,215,255' },
+};
 function drawBotCone(b) {
   const chase = b.state === 'chase', invest = b.state === 'invest';
   const range = b.range * (blackout > 0 ? 0.6 : 1);
   const rays = b.rays;
+  const cb = colourblind(), C = cb ? CONE.on : CONE.off;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   const gr = ctx.createRadialGradient(b.x, b.y, 6, b.x, b.y, range);
-  const base = chase ? 0.15 : invest ? 0.095 : 0.075;
+  const base = (chase ? 0.15 : invest ? 0.095 : 0.075) * (cb ? 1.15 : 1);
   const pulse = chase ? 0.04 * Math.sin(time * 15) : 0.015 * Math.sin(time * 3 + b.sweepP);
-  gr.addColorStop(0, 'rgba(255,70,60,' + (base + pulse + 0.05) + ')');
-  gr.addColorStop(0.45, 'rgba(255,50,50,' + ((base + pulse) * 0.55) + ')');
-  gr.addColorStop(1, 'rgba(255,30,40,0.004)');
+  gr.addColorStop(0, 'rgba(' + C.core + ',' + (base + pulse + 0.05) + ')');
+  gr.addColorStop(0.45, 'rgba(' + C.mid + ',' + ((base + pulse) * 0.55) + ')');
+  gr.addColorStop(1, 'rgba(' + C.far + ',0.004)');
   fanPath(ctx, b.x, b.y, rays, T.BOT_RAYS, b.half, range, b.face);
   ctx.fillStyle = gr; ctx.fill();
-  /* edges */
-  ctx.strokeStyle = 'rgba(255,90,80,' + (chase ? 0.32 : 0.17) + ')';
-  ctx.lineWidth = 1;
+  if (cb) {
+    /* hatching, clipped to the cone: a second channel that survives greyscale */
+    ctx.save();
+    fanPath(ctx, b.x, b.y, rays, T.BOT_RAYS, b.half, range, b.face);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(' + C.edge + ',' + (chase ? 0.2 : 0.12) + ')';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    const step = 16, span = range * 2;
+    for (let o = -span; o < span; o += step) {
+      ctx.moveTo(b.x + o, b.y - span);
+      ctx.lineTo(b.x + o + span * 2, b.y + span);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  /* edges - heavier when colour is not doing the work */
+  ctx.strokeStyle = 'rgba(' + C.edge + ',' + (chase ? (cb ? 0.5 : 0.32) : (cb ? 0.3 : 0.17)) + ')';
+  ctx.lineWidth = cb ? 1.6 : 1;
   ctx.beginPath();
   ctx.moveTo(b.x, b.y);
   for (let k = 0; k <= T.BOT_RAYS; k += 4) {
@@ -3526,7 +3562,7 @@ function drawPlate(pl) {
   if (pl.flash > 0) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = pl.flash * 0.4;
-    ctx.drawImage(glowRedS, pl.x - 26, pl.y - 26, 52, 52);
+    ctx.drawImage(botGlow(), pl.x - 26, pl.y - 26, 52, 52);
   }
   ctx.restore();
 }
@@ -4699,6 +4735,7 @@ function renderSettings() {
   $('diffNote').textContent = DIFF_NOTE[D().id] || 'Drone speed, meter fill, torch drain';
   for (const b of $('motionSeg').children) b.classList.toggle('on', b.dataset.motion === settings.motion);
   for (const b of $('miniSeg').children) b.classList.toggle('on', (b.dataset.mini === 'on') === (settings.minimap !== false));
+  for (const b of $('cbSeg').children) b.classList.toggle('on', (b.dataset.cb === 'on') === colourblind());
 }
 const DIFF_NOTE = {
   casual: 'Slower drones, a kinder meter, a longer torch',
@@ -4885,6 +4922,12 @@ $('volSlider').addEventListener('input', e => {
   $('volRead').textContent = Math.round(settings.vol * 100) + '%';
   applySettings(); saveSettings();
 });
+$('cbSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-cb]');
+  if (!b) return;
+  settings.cb = b.dataset.cb === 'on';
+  saveSettings(); renderSettings(); sfx.ui();
+});
 $('miniSeg').addEventListener('click', e => {
   const b = e.target.closest('button[data-mini]');
   if (!b) return;
@@ -4967,6 +5010,9 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  get colourblind() { return colourblind(); },
+  setCb(v) { settings.cb = !!v; saveSettings(); renderSettings(); return colourblind(); },
+  conePalette() { return colourblind() ? { ...CONE.on } : { ...CONE.off }; },
   tutorState() {
     return { on: tutorOn(), step: tutorStep, shown: tutorShown,
              msg: tutorStep >= 0 && TUTOR[tutorStep] ? TUTOR[tutorStep].msg : null,

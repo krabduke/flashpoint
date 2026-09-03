@@ -3420,6 +3420,64 @@ ok('and never appears in endless or on a later floor',
   `endless=${tut.offInEndless} floor5=${tut.offLaterFloor}`);
 
 
+/* ---- colourblind mode ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const cbl = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  mapIdx = 0; loop = 0; loadMap(0); invuln = 9e9; meter = 0;
+  bots.length = 1;
+  const b = bots[0];
+  b.x = player.x + 150; b.y = player.y; b.face = Math.PI; b.state = 'patrol'; b.path = [];
+  for (let i = 0; i < 8; i++) update(1 / 60);
+  render();
+  /* sample where the cone actually is. The whole canvas dilutes it to nothing:
+     a low-alpha cone is a small part of a big dark screen. */
+  const mx = (b.x + player.x) / 2, my = b.y;
+  const sx = (mx - camNow.cx) * Z, sy = (my - camNow.cy) * Z, half = 70;
+  const grab = () => ctx.getImageData((sx - half) * DPR, (sy - half) * DPR, half * 2 * DPR, half * 2 * DPR).data;
+  const read = () => { const d = grab(); let r = 0, g = 0, bl = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; bl += d[i + 2]; n++; }
+    return { r: +(r / n).toFixed(1), g: +(g / n).toFixed(1), b: +(bl / n).toFixed(1) }; };
+  /* luminance edges: what is left of the cone once hue is gone altogether */
+  const edges = () => { const d = grab(), w = Math.round(half * 2 * DPR); let n = 0;
+    for (let y = 1; y < Math.round(half * 2 * DPR); y++) for (let x = 1; x < w; x++) {
+      const i = (y * w + x) * 4, j = (y * w + x - 1) * 4;
+      const a = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const c = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+      if (Math.abs(a - c) > 4) n++;
+    }
+    return n; };
+  __fp.setCb(false); render(); o.off = read(); o.edgesOff = edges(); o.palOff = __fp.conePalette().core;
+  __fp.setCb(true);  render(); o.on = read(); o.edgesOn = edges(); o.palOn = __fp.conePalette().core;
+  /* the row H1 held back until it did something */
+  const seg = v => [...$('cbSeg').children].find(x => x.dataset.cb === v);
+  seg('off').click(); o.viaPanelOff = __fp.colourblind;
+  seg('on').click(); o.viaPanelOn = __fp.colourblind;
+  o.marked = [...$('cbSeg').children].filter(x => x.classList.contains('on')).map(x => x.dataset.cb);
+  o.stored = (JSON.parse(localStorage.getItem('flashpoint.settings') || '{}')).cb;
+  seg('off').click();
+  o.restored = (JSON.parse(localStorage.getItem('flashpoint.settings') || '{}')).cb;
+  return JSON.stringify(o);
+})()`));
+ok('the cone palette actually changes',
+  cbl.palOff === '255,70,60' && cbl.palOn === '60,170,255', `${cbl.palOff} -> ${cbl.palOn}`);
+/* warm amber against red is exactly the pair red-green colour blindness collapses */
+ok('and red stops dominating the cone on screen',
+  (cbl.off.r - cbl.off.b) > 8 && (cbl.on.r - cbl.on.b) < 4,
+  `r-b off=${(cbl.off.r - cbl.off.b).toFixed(1)} on=${(cbl.on.r - cbl.on.b).toFixed(1)}`);
+/* hue is one channel and it is the one that fails, so the cone is hatched too */
+ok('the cone keeps its shape with hue taken away entirely',
+  cbl.edgesOn > cbl.edgesOff * 1.05,
+  `luminance edges ${cbl.edgesOff} -> ${cbl.edgesOn}`);
+ok('the settings row works and marks what is chosen',
+  cbl.viaPanelOff === false && cbl.viaPanelOn === true
+  && cbl.marked.length === 1 && cbl.marked[0] === 'on', JSON.stringify(cbl.marked));
+ok('the choice is remembered', cbl.stored === true, `stored=${cbl.stored}`);
+ok('and this block leaves it off again', cbl.restored === false, `restored=${cbl.restored}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);
