@@ -160,9 +160,14 @@ only to attract something that hunts by sight.
       it to matter and brightens when you move; slow panned sonar so you can
       place one unseen; it turns to face what it heard. Found two real defects:
       two faceToward calls fighting, and an idle sweep on a thing with no cone.
-- [ ] J3 `Y` sentry — fixed, wide cone, asleep until an alarm wakes it
+- [x] J3 `Y` sentry — bolted down, wide short cone, deaf, asleep until an alarm; every one on the floor opens for 9s, so an alarm costs more than the drone it sends
 - [ ] J4 Mixed floors — which floors get which, and a per-map enemy list rather
-      than a bare `bots:` count
+      than a bare `bots:` count.
+      **Watch the shared `bots` array**: J3 found two places that assumed every
+      entry can walk — `raiseAlarm`'s nearest-bot pick, and `radio`'s net, where
+      a sentry was eating an E1 flank slot a drone should have had. Spreading
+      these across more floors will likely surface a third; grep for `of bots`
+      and check each one against a unit that cannot move.
 - [ ] J5 They tell each other — a listener that hears you hands a position to the
       drones that can see
 
@@ -256,3 +261,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · H8 · rescaled dead zone, sprint hysteresis 0.85/0.62, stick rings derived from the real thresholds, 8 assertions — **section H complete, backlog empty**
 - 2026-09-03 · J1 · the listener: no cone, hears 1.75x, caught by movement not by sight, 10 assertions; both failures were the caught-freeze and an unequal pixel comparison
 - 2026-09-03 · J2 · reach ring that answers your feet, panned sonar tick, lock-on posture, 6 assertions; fixed duelling faceToward calls and an idle sweep on a coneless thing
+- 2026-09-03 · J3 · sentries on the vault, alarms open the whole floor for 9s, 10 assertions; fixed alarms being handed to something bolted down and sentries eating flank slots in the radio net
