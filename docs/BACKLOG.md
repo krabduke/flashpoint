@@ -36,7 +36,11 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 6. A whole-canvas pixel average dilutes anything local into noise. Sample the
    region the change is in, computing its screen position from the camera rather
    than assuming the middle. This has cost three separate assertions now.
-7. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+7. When an assertion about a converging value fails, TRACE THE VALUE over time
+   before theorising. A stall and a wander look identical in a single end-state
+   reading and have completely different causes — J2 cost two wrong guesses and
+   two full runs before a five-sample trail named it in one glance.
+8. Web Audio does not settle where you think. `setTargetAtTime` approaches its
    target exponentially and never reaches it, so assert an inaudible floor
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
@@ -152,8 +156,10 @@ only to attract something that hunts by sight.
 - [x] J1 `H` listener — no cone at all, hears at 337 to a drone's 193, and knows
       you only while you are moving. Freezing is the counterplay, and a blackout
       is no help against something that never used its eyes.
-- [ ] J2 Listener made legible — you cannot see what it is "looking" at, so it
-      needs a different tell: posture, a pulse when it hears, an audible ping.
+- [x] J2 Listener made legible — its reach is drawn once you are near enough for
+      it to matter and brightens when you move; slow panned sonar so you can
+      place one unseen; it turns to face what it heard. Found two real defects:
+      two faceToward calls fighting, and an idle sweep on a thing with no cone.
 - [ ] J3 `Y` sentry — fixed, wide cone, asleep until an alarm wakes it
 - [ ] J4 Mixed floors — which floors get which, and a per-map enemy list rather
       than a bare `bots:` count
@@ -249,3 +255,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · H7 · colourblind cones by hue and hatching, red dominance +14 to +1, luminance edges 1093 to 1213, 6 assertions
 - 2026-09-03 · H8 · rescaled dead zone, sprint hysteresis 0.85/0.62, stick rings derived from the real thresholds, 8 assertions — **section H complete, backlog empty**
 - 2026-09-03 · J1 · the listener: no cone, hears 1.75x, caught by movement not by sight, 10 assertions; both failures were the caught-freeze and an unequal pixel comparison
+- 2026-09-03 · J2 · reach ring that answers your feet, panned sonar tick, lock-on posture, 6 assertions; fixed duelling faceToward calls and an idle sweep on a coneless thing
