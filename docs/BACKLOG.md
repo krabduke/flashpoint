@@ -96,7 +96,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 ## G · Sound
 
 - [x] G1 Drone vocalisations — rising as a drone warms, falling as it cools, inverse-square volume; a drone giving up had been silent, which is the most useful thing audio can say
-- [ ] G2 Room tone per theme — a bed that changes with the floor
+- [x] G2 Room tone per theme — nine beds over hum pitch, beat rate and a filtered air layer the game never had; glides across on the stairs
 - [ ] G3 Chase stinger — music that rises with the meter
 - [ ] G4 Footstep material — carpet, concrete, water, grating
 - [ ] G5 Spatial panning — pan by x offset from the player
@@ -167,3 +167,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F11 · four events, four textures (laser 30 crossings to caught's 8), directional push, reduced-motion respected on the canvas at last, 10 assertions
 - 2026-09-03 · F12 · pause becomes a briefing card, 13 assertions; one pins the control list against the item bar so the two cannot drift — **section F complete**
 - 2026-09-03 · G1 · servo chirps on every heat change, botHeat() shared with the sprite, 8 assertions; five runs, every failure in the test rather than the game
+- 2026-09-03 · G2 · nine room tones, server farm at 96Hz against the vault at 34Hz, 0.8s glide, 9 assertions
