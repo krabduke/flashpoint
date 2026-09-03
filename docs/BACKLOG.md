@@ -53,7 +53,11 @@ behaviour is assertable. Visual work gets a screenshot check instead.
     until something else starts contributing. K3 paying at `nextMap` broke two
     of K1's, correctly. Isolate the thing you name — zero the other contributors
     in setup — rather than widening the expected number.
-11. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+11. Adding a gadget touches four things the harness knows about: the `#itemBar`
+    markup, the gadget-count assertion, the pause screen's `CONTROLS` list, and
+    that list's row count. F12's control-list check exists precisely to catch
+    the third; do all four in the same edit.
+12. Web Audio does not settle where you think. `setTargetAtTime` approaches its
    target exponentially and never reaches it, so assert an inaudible floor
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
@@ -192,7 +196,7 @@ only to attract something that hunts by sight.
 
 ## L · More to carry
 
-- [ ] L1 Tripwire alarm you can place, to know when something followed you
+- [x] L1 Tripwire on `T` — the first gadget that acts on what you know rather than on them: silent, invisible to them, arms after 0.6s, and a bolted-down sentry can never be what came through
 - [ ] L2 Silencer charge — one floor of soft footsteps whatever you are carrying
 - [ ] L3 A gadget that uses the listener specifically, once J1 exists
 
@@ -279,3 +283,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · K1 · door at two thirds, clear bonus forfeited by leaving early, amber counter and pause label as tells, 8 assertions
 - 2026-09-03 · K2 · safes on four floors, loud throughout, flinch slips and leaving resets, 9 assertions; placement now runs validateMaps' own flood fill before accepting a tile
 - 2026-09-03 · K3 · three clean marks live in the HUD, 200 each and 400 for the set, 6 assertions; K1's two assertions corrected to isolate the clear bonus — **section K complete**
+- 2026-09-03 · L1 · tripwire on T, silent to them and spent when it speaks, 8 assertions; F12's anti-drift check caught the pause reference missing it
