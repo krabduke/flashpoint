@@ -107,7 +107,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] G2 Room tone per theme — nine beds over hum pitch, beat rate and a filtered air layer the game never had; glides across on the stairs
 - [x] G3 Chase stinger — a root climbing a fifth, a tritone held back until you are cornered, and the room bed ducking to make space; the bed got its own node so the duck and the theme cannot clobber each other
 - [x] G4 Footstep material — seven materials off existing tiles and themes, no new tile needed; walking is audible to you and still silent to them
-- [ ] G5 Spatial panning — pan by x offset from the player
+- [x] G5 Spatial panning — positional sounds pan by x offset from you, not from the screen; pan and distance stayed separate but the distance curve is now shared
 - [ ] G6 Coin pitch ladder — rising pitch as a floor empties
 
 ## H · Interface
@@ -178,3 +178,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · G2 · nine room tones, server farm at 96Hz against the vault at 34Hz, 0.8s glide, 9 assertions
 - 2026-09-03 · G3 · chase swell over the heartbeat, tritone late, bed ducks to 45%, 9 assertions; the heartbeat itself is finally tested too
 - 2026-09-03 · G4 · material per theme plus water and vent grating, walking finally makes a sound without making noise, 8 assertions
+- 2026-09-03 · G5 · stereo panning for the sounds that are in the room, centred for the ones that are not, servoVol generalised to distVol, 9 assertions
