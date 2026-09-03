@@ -241,8 +241,8 @@ await eq('the roost is three listeners in the dark', 'listenPts.length >= 3', tr
 await eq('and the dark is the point', '!!MAPS[16].blackout', true);
 
 /* a copy-pasted floor is the easy mistake when five arrive at once */
-await eq('every floor is named once', 'new Set(MAPS.map(m => m.name)).size', 17);
-await eq('every floor tags its depth once', 'new Set(MAPS.map(m => m.depth)).size', 17);
+await eq('every floor is named once', 'new Set(MAPS.map(m => m.name)).size', 20);
+await eq('every floor tags its depth once', 'new Set(MAPS.map(m => m.depth)).size', 20);
 await eq('every new floor is walkable end to end', 'validateMaps()', 'ok');
 
 /* full campaign -> win -> endless */
@@ -256,7 +256,7 @@ await evl(`(() => {
      campaign win on its first teleport and still report 'won'. */
   mapIdx = 0; loop = 0; loadMap(0); __fp.resetRunLog();
 })()`);
-await eq('campaign has 17 floors', 'MAPS.length', 17);
+await eq('campaign has 20 floors', 'MAPS.length', 20);
 const nMaps = await evl('MAPS.length');
 for (let i = 0; i < nMaps; i++) {
   await evl('__fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);');
@@ -264,11 +264,11 @@ for (let i = 0; i < nMaps; i++) {
 }
 await eq('campaign win', '__fp.mode', 'won');
 /* Q2: a seventeen floor run used to collapse into two totals */
-await eq('every floor cleared is written down', '__fp.runLog().length', 17);
+await eq('every floor cleared is written down', '__fp.runLog().length', 20);
 await eq('and each row carries that floor, not the next one',
   "__fp.runLog().every((f, i) => f.n === MAPS[i].name && f.of === MAPS[i].coins)", true);
 await eq('the escape card lists one row per floor',
-  "document.querySelectorAll('#escFloors .frow').length", 17);
+  "document.querySelectorAll('#escFloors .frow').length", 20);
 /* Q1: the story, not just the receipt */
 await eq('the summary says what the run was',
   "/ghosted|left behind|safe/.test(document.getElementById('escSummary').innerHTML)", true);
@@ -654,7 +654,7 @@ const loot = await evl(`(() => {
   return JSON.stringify({ kinds, uniq: [...new Set(kinds)].length, n: kinds.length });
 })()`);
 const lootRes = JSON.parse(loot);
-ok('every floor resolves a loot shape', lootRes.n === 17 && lootRes.kinds.every(k => !!k), loot);
+ok('every floor resolves a loot shape', lootRes.n === 20 && lootRes.kinds.every(k => !!k), loot);
 ok('and there is real variety across the campaign', lootRes.uniq >= 5, loot);
 
 /* the shape changes but nothing about picking it up does */
@@ -1619,8 +1619,8 @@ const grid12 = await evl(`(() => {
   });
 })()`);
 const g12 = JSON.parse(grid12);
-ok('the picker shows every floor', g12.n === 17, grid12);
-ok('seventeen boxes still fit a phone', g12.overflow === false, grid12);
+ok('the picker shows every floor', g12.n === 20, grid12);
+ok('twenty boxes still fit a phone', g12.overflow === false, grid12);
 ok('and stay tappable', g12.minW >= 28, grid12);
 await send('Emulation.clearDeviceMetricsOverride');
 
@@ -2731,7 +2731,7 @@ const pau = JSON.parse(await evl(`(() => {
 })()`));
 ok('pause opens the panel', pau.open.paused === true && pau.open.shown === true, JSON.stringify(pau.open));
 ok('it says where you are and how the run is going',
-  pau.text.where === 'THE CORE' && pau.text.floor === '9/17' && pau.text.gold === '3/12'
+  pau.text.where === 'THE CORE' && pau.text.floor === '9/20' && pau.text.gold === '3/12'
   && pau.text.score === '1840' && pau.text.time === '1:36', JSON.stringify(pau.text));
 ok('a later loop says so rather than repeating the floor name',
   pau.looped === 'LOOP 2 \u00b7 THE CORE', pau.looped);
@@ -4424,6 +4424,143 @@ ok('the HUD does not overflow its own width either',
   ui.hudRight <= ui.vw + 1, `${ui.hudRight} of ${ui.vw}`);
 ok('and it goes back', ui.back === '1', ui.back);
 
+/* ---- nothing the interface draws may hide your own character ---- */
+const dodge = JSON.parse(await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 9e9; meter = 0;
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+  const at = (gx, gy) => {
+    __fp.teleport(gx * 40 + 20, gy * 40 + 20);
+    render(); hudDodge(0.5); render(); hudDodge(0.5);
+    return { pos: __fp.playerScreen(), ...__fp.hudDodge() };
+  };
+  /* the top of the map is exactly where the toast used to sit */
+  const top = at(14, 1);
+  const bottom = at(14, 16);
+  /* and under the readouts themselves */
+  const shyAnywhere = top.shy.some(s => s.shy) || at(1, 1).shy.some(s => s.shy);
+  return JSON.stringify({ top, bottom, shyAnywhere });
+})()`));
+ok('at the top of the map the message moves out of the way',
+  dodge.top.toastLow === true, JSON.stringify(dodge.top.pos));
+ok('and comes back when you are not standing there',
+  dodge.bottom.toastLow === false, JSON.stringify(dodge.bottom.pos));
+ok('a readout you are standing under fades rather than covering you',
+  dodge.shyAnywhere === true, JSON.stringify(dodge.top.shy));
+
+/* ---- every floor has its own colour, not just its own tiles ---- */
+const grades = JSON.parse(await evl('JSON.stringify(__fp.grades())'));
+ok('every theme grades its own shadows and highlights',
+  grades.every(g => g.sh && g.hi), JSON.stringify(grades.filter(g => !g.sh)));
+/* atmosphere must never undo legibility, and this is the pairing that fails
+   first: a warm grade putting red back into the cone cb mode just took it out of */
+const gcb = JSON.parse(await evl(`(() => {
+  mapIdx = 0; loadMap(0);
+  __fp.setCb(false); const off = __fp.gradeApplied();
+  __fp.setCb(true);  const on = __fp.gradeApplied();
+  __fp.setCb(false);
+  return JSON.stringify({ off, on });
+})()`));
+ok('the colour grade stands down when colourblind mode is on',
+  gcb.on.warm === false && gcb.off.warm === true && gcb.on.shadow < gcb.off.shadow,
+  JSON.stringify(gcb));
+ok('and no two buildings are the same colour',
+  new Set(grades.map(g => g.sh)).size === grades.length,
+  `${new Set(grades.map(g => g.sh)).size} distinct of ${grades.length}`);
+
+/* ---- the walk is driven by distance, so it cannot moonwalk ---- */
+const gait = JSON.parse(await evl(`(() => {
+  mode = 'playing'; invuln = 9e9; mapIdx = 0; loadMap(0); bots.length = 0;
+  const sample = () => __fp.stride().p;
+  const still0 = sample();
+  for (let i = 0; i < 40; i++) { update(1 / 60); render(); }
+  const still1 = sample();
+  for (let i = 0; i < 40; i++) { keys.right = true; update(1 / 60); render(); }
+  keys.right = false;
+  const moved = sample();
+  return JSON.stringify({ stillDelta: +(still1 - still0).toFixed(3),
+    moveDelta: +(moved - still1).toFixed(3) });
+})()`));
+ok('standing still does not advance the walk', Math.abs(gait.stillDelta) < 0.01,
+  `${gait.stillDelta} while stationary`);
+ok('and walking does', gait.moveDelta > 0.5, `${gait.moveDelta} while moving`);
+
+/* ---- V1-V3: three more floors, and the campaign ends on the twentieth ---- */
+await evl('mapIdx = 17; loadMap(17);'); await sleep(200);
+await eq('the furnace is cover everywhere', 'crates.length >= 5', true);
+await eq('and mirrors to see round it', 'mirrors.length >= 3', true);
+await evl('mapIdx = 18; loadMap(18);'); await sleep(200);
+await eq('the stacks are cut through with vents', 'Array.from(ventAt).reduce((s,v)=>s+v,0) >= 4', true);
+await eq('and watched from the aisles', 'sentryPts.length >= 2', true);
+await evl('mapIdx = 19; loadMap(19);'); await sleep(200);
+await eq('the spire is the last floor', 'MAPS[19].name', 'THE SPIRE');
+await eq('and it runs everything at once',
+  '!!(MAPS[19].fog && MAPS[19].siren && MAPS[19].blackout)', true);
+await eq('with listeners in the dark', 'listenPts.length >= 3', true);
+await eq('every floor still validates', 'validateMaps()', 'ok');
+
+/* ---- U2-U5: the eight loop rules reach a normal run ---- */
+const cond = JSON.parse(await evl(`(() => {
+  const o = {};
+  __fp.setDaily(false);
+  endless = false; mapIdx = 0; loadMap(0);
+  /* the whole point: a modifier used to be unreachable outside endless */
+  __fp.setCondNow(0);                       /* SWARM */
+  __fp.setMod(0);
+  o.campaign = __fp.cond();
+  o.shownOn = __fp.condShown().filter(c => c.on).map(c => c.v);
+  /* U4: SEA HAAR on a floor that already has fog changes nothing, so the next
+     one along takes its place there */
+  const foggy = MAPS.findIndex(m => m.fog);
+  __fp.setMod(6);                           /* haar */
+  mapIdx = 0; loadMap(0); o.dryFloor = __fp.cond();
+  mapIdx = foggy; loadMap(foggy); o.fogFloor = __fp.cond();
+  o.foggyName = MAPS[foggy].name;
+  /* U5: a daily fixes the condition and locks the picker */
+  __fp.setDaily(true);
+  o.dailyLocked = __fp.condShown().every(c => c.off);
+  o.dailyRefused = __fp.setCondNow(3);
+  o.dailyWhat = __fp.condWhat();
+  __fp.setDaily(false);
+  o.pay = MODS.map(m => m.pay);
+  return JSON.stringify(o);
+})()`));
+ok('a condition applies on a campaign run, not only in endless',
+  cond.campaign.running === 'swarm', JSON.stringify(cond.campaign));
+ok('and the grid shows which one is picked', cond.shownOn.join() === '0', JSON.stringify(cond.shownOn));
+ok('fog on a dry floor is the fog condition', cond.dryFloor.running === 'haar',
+  JSON.stringify(cond.dryFloor));
+ok('fog on a floor that already has fog is swapped for one that bites',
+  cond.fogFloor.running !== 'haar' && cond.fogFloor.swapped === true,
+  `${cond.foggyName}: ${JSON.stringify(cond.fogFloor)}`);
+ok('a daily run locks the picker', cond.dailyLocked === true, JSON.stringify(cond.dailyLocked));
+ok('and refuses to be changed', cond.dailyRefused.ok === false, JSON.stringify(cond.dailyRefused));
+ok('saying so rather than looking broken', /fixes its own condition/.test(cond.dailyWhat), cond.dailyWhat);
+ok('every condition pays for itself', cond.pay.every(p => p >= 1), JSON.stringify(cond.pay));
+
+/* ---- the lighting model, read off the baked map rather than the screen ---- */
+const faces = JSON.parse(await evl(`(() => {
+  mapIdx = 1; loadMap(1); renderMapCanvas();
+  return JSON.stringify(__fp.wallFaces());
+})()`));
+ok('walls are lit from one direction, not shaded the same on every side',
+  faces && faces.left > faces.right * 1.08,
+  `left ${faces && faces.left} vs right ${faces && faces.right} over ${faces && faces.n} walls`);
+
+/* ---- rooms sound like rooms ---- */
+const room = JSON.parse(await evl(`(() => {
+  const table = __fp.roomTable();
+  initAudio();
+  setRoomTone('bank');   const dead = __fp.room();
+  setRoomTone('warehouse'); const live = __fp.room();
+  return JSON.stringify({ table, dead, live });
+})()`));
+ok('every theme declares its own tail',
+  room.table.every(r => r.rt > 0 && r.wet > 0), JSON.stringify(room.table));
+ok('a sealed vault is deader than an empty warehouse',
+  room.table.find(r => r.theme === 'bank').rt <
+  room.table.find(r => r.theme === 'warehouse').rt,
+  `bank ${room.table.find(r => r.theme === 'bank').rt}s vs warehouse ${room.table.find(r => r.theme === 'warehouse').rt}s`);
+
 /* ---- U1: the kit costs points, so packing is a trade ---- */
 ok('every gadget carries a cost', kit.costs.every(g => g.cost >= 1 && g.cost <= 3),
   JSON.stringify(kit.costs));
@@ -4650,7 +4787,7 @@ const mLog = JSON.parse(await evl(`(() => {
   document.getElementById('escaped').classList.add('hidden');
   return JSON.stringify(out);
 })()`));
-ok('a full run writes seventeen rows', mLog.n === 17 && mLog.rows === 17, JSON.stringify(mLog));
+ok('a full run writes twenty rows', mLog.n === 20 && mLog.rows === 20, JSON.stringify(mLog));
 ok('and they fit the phone without pushing the page sideways',
   mLog.right <= mLog.vw + 1 && mLog.scroll === false, JSON.stringify(mLog));
 ok('no floor name is cut off', mLog.clipped === 0, `${mLog.clipped} clipped`);

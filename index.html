@@ -272,6 +272,26 @@
   #kitWhat{min-height:2.1em;margin:7px 2px 0;font-size:9.5px;line-height:1.5;
     letter-spacing:.06em;color:#6a6190;text-align:center;transition:color .16s ease}
   #kitWhat.named{color:#a79ecc}
+  #condPanel{margin-top:12px}
+  #condGrid{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+  /* the conditions are a single choice, so they read as a row of switches
+     rather than the loadout's grid of slots */
+  .condchip{
+    pointer-events:auto;cursor:pointer;-webkit-appearance:none;appearance:none;
+    padding:6px 9px;border-radius:999px;background:rgba(18,13,38,.72);
+    border:1px solid rgba(120,110,170,.22);font-family:'Orbitron',monospace;
+    font-size:8px;font-weight:700;letter-spacing:.12em;color:#5b5478;
+    transition:border-color .16s ease,color .16s ease,background .16s ease;
+  }
+  .condchip:hover{border-color:rgba(160,150,220,.55);color:#a79ecc}
+  .condchip.on{color:#ffc7a8;border-color:rgba(255,140,90,.6);
+    background:linear-gradient(180deg,rgba(70,32,16,.6),rgba(24,16,42,.7));
+    box-shadow:0 0 12px rgba(255,120,60,.18)}
+  .condchip:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
+  .condchip[disabled]{opacity:.45;cursor:default}
+  #condWhat{min-height:2.1em;margin:7px 2px 0;font-size:9.5px;line-height:1.5;
+    letter-spacing:.06em;color:#6a6190;text-align:center}
+  #condPay{color:#ff9a6a}
 
   /* ---- settings ---- */
   #settingsOv{z-index:8}
@@ -460,6 +480,15 @@
 
   /* ---- toast: field notice, never blocks the beam ---- */
   /* a stack, newest at the top where your eye already is */
+  /* The message sits at the top, which is exactly where you stand when you are
+     at the top of the map - and then it covers the one thing you need to see.
+     A message can move; a readout should not, so this flips and the readouts
+     fade instead. */
+  #toast.low{top:auto;bottom:calc(104px + env(safe-area-inset-bottom))}
+  #toast,.hud-block,#itemBar{transition:opacity .22s ease}
+  .hud-block.shy{opacity:.15}
+  /* the bar has to stay tappable while it is out of the way, so it fades less */
+  #itemBar.shy{opacity:.34}
   #toast{
     position:absolute;top:calc(76px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);
     z-index:5;pointer-events:none;width:max-content;max-width:min(560px,86vw);
@@ -552,6 +581,11 @@
       <p class="floor-eyebrow">What you take in &mdash; <span id="kitCount">0/3</span></p>
       <div id="kitGrid" role="group" aria-label="Loadout"></div>
       <p id="kitWhat" aria-live="polite">three of seven — take what the building calls for</p>
+    </div>
+    <div id="condPanel">
+      <p class="floor-eyebrow">How hard you want it &mdash; <span id="condPay">no bonus</span></p>
+      <div id="condGrid" role="group" aria-label="Condition"></div>
+      <p id="condWhat" aria-live="polite">the building as it stands — pick a condition to make it worse</p>
     </div>
     <div class="namerow">
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
@@ -1172,7 +1206,67 @@ const MAPS = [
     '#d..c...######......#L.c.E##',
     '############################',
     '############################'
-  ], routes: [[[11,3], [17,3], [23,9], [11,9], [4,14], [23,14], [11,3]], [[11,3], [23,3], [23,9], [11,9], [4,14], [23,14], [11,3]], [[17,3], [23,3], [23,9], [11,9], [4,14], [23,14], [17,3]], [[17,3], [23,3], [23,9], [17,9], [4,14], [17,14], [17,3]]] }
+  ], routes: [[[11,3], [17,3], [23,9], [11,9], [4,14], [23,14], [11,3]], [[11,3], [23,3], [23,9], [11,9], [4,14], [23,14], [11,3]], [[17,3], [23,3], [23,9], [11,9], [4,14], [23,14], [17,3]], [[17,3], [23,3], [23,9], [17,9], [4,14], [17,14], [17,3]]] },
+  { name: 'THE FURNACE', depth: 'FURNACE', theme: 'core', coins: 16, bots: 4, spd: 1.46, rows: [
+    '############################',
+    '#...#..#.#.....#.##.#....M##',
+    '#.....c..#...Ox#...!##....##',
+    '#...#....##.#..#.##.###Pc###',
+    '#..O#M.#.....#....#....L..##',
+    '#...#...##..##.#c.c.#!.C.c##',
+    '##.#########################',
+    '#...#...####c#.c.C#.L..Oc.##',
+    '#.O.#c......s..#....#.....##',
+    '#..M##.O.#.....#.#.##.!#..##',
+    '#.e.#E...#..#.##....#.#c..##',
+    '###.###################.####',
+    '#...#...##.#...#.c..#.....##',
+    '#...#...O#....L#.#L......c##',
+    '#.c...#.##.#..##..c.#..c..##',
+    '#..##x......#...c#..##....##',
+    '############################',
+    '############################'
+  ], routes: [[[2,3], [2,14], [18,14], [23,14], [12,9]], [[2,3], [7,3], [2,9], [7,14], [12,14], [23,14]], [[23,14], [12,14], [2,9], [2,3], [12,9]], [[2,14], [2,9], [12,14], [18,9], [12,9]]] },
+  { name: 'THE STACKS', depth: 'STACKS', theme: 'warehouse', coins: 17, bots: 4, spd: 1.47, rows: [
+    '############################',
+    '##...#.#.......#...#......##',
+    '#.#....#..c..#.GOL##c.O...##',
+    '#..VO........#........CPc.##',
+    '##.#########################',
+    '#....#.##.C..##.....c.#...##',
+    '#......#.#.Y##.c.eV##..#..##',
+    '#......#.....#.....#.c.c#.##',
+    '#.....G#....c#..#.###....c##',
+    '#...V..#..#....#...###.#.###',
+    '##..###E.#..##.....#...c.L##',
+    '##.######################.##',
+    '#...#c...O...#.c##..c##...##',
+    '##.....#....##.....#.#.cc.##',
+    '#.O#c..#.Y...#.x#d##..L...##',
+    '#.cxL..#....V....#......#.##',
+    '############################',
+    '############################'
+  ], routes: [[[23,14], [23,8], [10,14], [4,14], [23,2]], [[10,14], [4,14], [4,8], [23,14], [10,8]], [[10,2], [4,2], [4,14], [10,14], [23,8], [23,2]], [[10,8], [23,8], [23,14], [10,14], [4,14], [23,2]]] },
+  { name: 'THE SPIRE', depth: 'SPIRE', theme: 'city', coins: 18, bots: 4, spd: 1.5, fog: true, siren: true, blackout: true, rows: [
+    '############################',
+    '#....#YMc......#.#...V....##',
+    '#....#...#.#..c#...#.#.#.###',
+    '#.x......f.#.....##..#.cY.##',
+    '###.#####################.##',
+    '##..##Lc...#.......#.###..##',
+    '#...c#.c...#.....#H..#...###',
+    '###.###...H#...c.#..##.M..##',
+    '##h.V#.N.#c...N.x##..#.N..##',
+    '##...#.#c..#c.c.##$..##..###',
+    '#....#E#.###...#.#.#.#.c#.##',
+    '#.....#c..N#.#...#........##',
+    '####.#######################',
+    '#..#c#....c#.H.c.#..###P..##',
+    '#..L.....#...c.#.#...#....##',
+    '#c...#.....#.#.....#......##',
+    '############################',
+    '############################'
+  ], routes: [[[8,14], [14,14], [24,14], [14,8], [8,8]], [[8,2], [3,8], [14,14], [19,14], [24,14], [14,8]], [[14,2], [24,8], [14,8], [3,14], [8,14]], [[8,14], [19,14], [24,14], [24,2], [24,8], [14,8]]] }
 ];
 
 /* ---------- state ---------- */
@@ -1220,20 +1314,52 @@ const D = () => DIFFS[diffIdx];
    rather than a knob invented for the occasion. Chosen from the loop number so a
    daily endless run is the same for everybody. */
 const MODS = [
-  { id: 'swarm',  name: 'SWARM',          note: 'One more drone on every floor',   bots: 1 },
-  { id: 'trigger',name: 'HAIR TRIGGER',   note: 'They pin you down faster',        fill: 1.4 },
-  { id: 'deadair',name: 'DEAD AIR',       note: 'The torch burns out sooner',      batt: 1.6 },
-  { id: 'brown',  name: 'BROWNOUT',       note: 'The lamps stay off',              brown: true },
-  { id: 'grid',   name: 'GRID FAILURE',   note: 'Blackouts on every floor',        blackout: true },
-  { id: 'wail',   name: 'WAILING',        note: 'Sirens on every floor',           siren: true },
-  { id: 'haar',   name: 'SEA HAAR',       note: 'Fog on every floor',              fog: true },
-  { id: 'curse',  name: "MAGPIE'S CURSE", note: 'Gold pays double and rings loud', coin: 2, haul: 2 }
+  { id: 'swarm',  name: 'SWARM',          note: 'One more drone on every floor',   bots: 1, pay: 1.35 },
+  { id: 'trigger',name: 'HAIR TRIGGER',   note: 'They pin you down faster',        fill: 1.4, pay: 1.3 },
+  { id: 'deadair',name: 'DEAD AIR',       note: 'The torch burns out sooner',      batt: 1.6, pay: 1.2 },
+  { id: 'brown',  name: 'BROWNOUT',       note: 'The lamps stay off',              brown: true, pay: 1.25 },
+  { id: 'grid',   name: 'GRID FAILURE',   note: 'Blackouts on every floor',        blackout: true, pay: 1.3 },
+  { id: 'wail',   name: 'WAILING',        note: 'Sirens on every floor',           siren: true, pay: 1.2 },
+  { id: 'haar',   name: 'SEA HAAR',       note: 'Fog on every floor',              fog: true, pay: 1.2 },
+  /* already doubles the gold, so it does not also multiply the total */
+  { id: 'curse',  name: "MAGPIE'S CURSE", note: 'Gold pays double and rings loud', coin: 2, haul: 2, pay: 1 }
 ];
 let modIdx = -1;
-const MOD = () => (endless && modIdx >= 0) ? MODS[modIdx] : {};
+/* what the player chose for a campaign run; endless still rolls its own */
+let condIdx = (() => {
+  try { const v = parseInt(localStorage.getItem('flashpoint.cond'), 10);
+    return Number.isFinite(v) && v >= -1 && v < 8 ? v : -1; } catch (e) { return -1; }
+})();
+function saveCond() { try { localStorage.setItem('flashpoint.cond', String(condIdx)); } catch (e) {} }
+
+/* BROWNOUT on a floor whose lamps are already out changes nothing, and a
+   condition that changes nothing is a condition the player was cheated of.
+   Rather than forbid the pairing, the next one along takes its place on that
+   floor - so whatever you picked, something always bites. */
+const modClash = (m, M) => !!(
+  (m.brown && (M.blackout || M.brown)) ||
+  (m.blackout && M.blackout) ||
+  (m.siren && M.siren) ||
+  (m.fog && M.fog));
+const MOD = () => {
+  if (modIdx < 0) return {};
+  const M = MAPS[mapIdx] || {};
+  for (let k = 0; k < MODS.length; k++) {
+    const m = MODS[(modIdx + k) % MODS.length];
+    if (!modClash(m, M)) return m;
+  }
+  return MODS[modIdx];
+};
+/* what was picked, as opposed to what is running on this particular floor */
+const chosenMod = () => modIdx >= 0 ? MODS[modIdx] : null;
+const modSwapped = () => { const c = chosenMod(); return !!c && MOD().id !== c.id; };
 function pickMod() {
-  modIdx = endless ? ((loop * 7 + (dailyOn ? todaySeed() : Math.floor(rng() * 997))) % MODS.length) : -1;
-  if (modIdx >= 0) toast('LOOP RULE — ' + MODS[modIdx].name + ': ' + MODS[modIdx].note, 3.2);
+  modIdx = endless
+    ? ((loop * 7 + (dailyOn ? todaySeed() : Math.floor(rng() * 997))) % MODS.length)
+    /* a daily run is the same building for everyone, so it is the same rules
+       too - otherwise two people compare scores from different games */
+    : (dailyOn ? todaySeed() % MODS.length : condIdx);
+  if (modIdx >= 0) toast((endless ? 'LOOP RULE' : 'CONDITION') + ' — ' + MODS[modIdx].name + ': ' + MODS[modIdx].note, 3.2);
   hud();
 }
 
@@ -1257,7 +1383,7 @@ function saveGhost() {
 let exitVertical = true;
 let listenPts = [], sentryPts = [];
 let caughtHold = 0;
-let wipeT = 0, wipeName = '';
+let wipeT = 0, wipeName = '', wipeCond = '';
 let fogBanks = [];
 let splashes = [], lastDt = 0.016;
 let alertLvl = 0, alertCool = 0;
@@ -1368,6 +1494,22 @@ let mapCv, mapCtx, darkCv, darkCtx, losGrid;
 /* ---------- audio ---------- */
 let AC = null, master = null, droneO = null, droneO2 = null, droneG = null, rainN = null, airN = null, airF = null, airG = null, muted = false;
 let roomTone = null, bedG = null, stingG = null, stingA = null, stingB = null, stingBG = null;
+let conv = null, convG = null;
+/* A room's tail is the cheapest way to say how big it is. Noise decaying
+   exponentially is a serviceable impulse - a real one is a recording, and this
+   game has no room to ship audio files in. */
+function makeIR(seconds, ctxA) {
+  const len = Math.max(1, Math.floor(ctxA.sampleRate * seconds));
+  const buf = ctxA.createBuffer(2, len, ctxA.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      const k = 1 - i / len;
+      d[i] = (Math.random() * 2 - 1) * Math.pow(k, 2.6);
+    }
+  }
+  return buf;
+}
 let tension = 0, stingT = 0;
 try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
 /* Settings were scattered: difficulty was a button on the menu, volume did not
@@ -1446,6 +1588,11 @@ function initAudio() {
      parameter - which is the whole reason a floor change mid-chase does not
      undo the duck. */
   bedG = AC.createGain(); bedG.gain.value = 1; bedG.connect(master);
+  /* one send, shared by everything that makes a sound, so the whole floor sits
+     in the same room rather than each effect carrying its own */
+  conv = AC.createConvolver(); conv.buffer = makeIR(R.rt || 1, AC);
+  convG = AC.createGain(); convG.gain.value = R.wet || 0.12;
+  conv.connect(convG); convG.connect(master);
   droneG = AC.createGain(); droneG.gain.value = R.humV; droneG.connect(bedG);
   droneO = AC.createOscillator(); droneO.type = 'sine'; droneO.frequency.value = R.hum;
   droneO2 = AC.createOscillator(); droneO2.type = 'sine'; droneO2.frequency.value = R.hum + R.beat;
@@ -1472,10 +1619,11 @@ function initAudio() {
    into one ear: 0.85 keeps it playable on headphones. */
 function panFor(x) { return clamp((x - player.x) / T.PAN_HALF, -1, 1) * T.PAN_MAX; }
 function sinkAt(at) {
-  if (!at || !AC || !AC.createStereoPanner) return master;
+  if (!at || !AC || !AC.createStereoPanner) { if (conv && master) return master; return master; }
   const p = AC.createStereoPanner();
   p.pan.value = panFor(at.x);
   p.connect(master);
+  if (conv) p.connect(conv);   /* dry to master, wet to the room */
   panLog.push({ pan: +p.pan.value.toFixed(3), x: Math.round(at.x) });
   if (panLog.length > 32) panLog.shift();
   return p;
@@ -1600,15 +1748,15 @@ function surfaceAt(x, y) {
    that actually separates a concrete warehouse from a server room, and which
    the game had none of outside rain. */
 const ROOM = {
-  house:     { hum: 58, beat: 1.2, air: 400,  airV: 0.006, humV: 0.030 },  /* small, domestic */
-  warehouse: { hum: 38, beat: 1.8, air: 260,  airV: 0.012, humV: 0.038 },  /* big empty concrete */
-  city:      { hum: 46, beat: 3.6, air: 900,  airV: 0.010, humV: 0.032 },  /* neon, traffic below */
-  ward:      { hum: 72, beat: 0.7, air: 1500, airV: 0.008, humV: 0.026 },  /* clinical, thin */
-  museum:    { hum: 44, beat: 0.9, air: 320,  airV: 0.005, humV: 0.028 },  /* hushed and still */
-  server:    { hum: 96, beat: 7.5, air: 2600, airV: 0.018, humV: 0.030 },  /* fans, electrical */
-  bank:      { hum: 34, beat: 1.1, air: 180,  airV: 0.007, humV: 0.034 },  /* sealed and dead */
-  docks:     { hum: 41, beat: 2.6, air: 700,  airV: 0.014, humV: 0.036 },  /* wide, wet, cold */
-  core:      { hum: 30, beat: 5.2, air: 220,  airV: 0.020, humV: 0.042 },  /* hot and wrong */
+  house:     { hum: 58, beat: 1.2, air: 400,  airV: 0.006, humV: 0.030, rt: 0.50, wet: 0.10 },  /* small, domestic */
+  warehouse: { hum: 38, beat: 1.8, air: 260,  airV: 0.012, humV: 0.038, rt: 2.40, wet: 0.28 },  /* big empty concrete */
+  city:      { hum: 46, beat: 3.6, air: 900,  airV: 0.010, humV: 0.032, rt: 1.10, wet: 0.15 },  /* neon, traffic below */
+  ward:      { hum: 72, beat: 0.7, air: 1500, airV: 0.008, humV: 0.026, rt: 1.40, wet: 0.20 },  /* clinical, thin */
+  museum:    { hum: 44, beat: 0.9, air: 320,  airV: 0.005, humV: 0.028, rt: 1.90, wet: 0.22 },  /* hushed and still */
+  server:    { hum: 96, beat: 7.5, air: 2600, airV: 0.018, humV: 0.030, rt: 0.70, wet: 0.12 },  /* racks absorb it */
+  bank:      { hum: 34, beat: 1.1, air: 180,  airV: 0.007, humV: 0.034, rt: 0.35, wet: 0.07 },  /* sealed and dead */
+  docks:     { hum: 41, beat: 2.6, air: 700,  airV: 0.014, humV: 0.036, rt: 2.10, wet: 0.25 },  /* wide, wet, cold */
+  core:      { rt: 1.20, wet: 0.18, hum: 30, beat: 5.2, air: 220,  airV: 0.020, humV: 0.042 },  /* hot and wrong */
 };
 /* ramp rather than jump: changing a running oscillator's frequency outright
    clicks, and a floor change should feel like the 0.6s wipe looks */
@@ -1621,35 +1769,47 @@ function setRoomTone(theme) {
   droneG.gain.linearRampToValueAtTime(R.humV, t + ramp);
   if (airF) airF.frequency.linearRampToValueAtTime(R.air, t + ramp);
   if (airG) airG.gain.linearRampToValueAtTime(R.airV, t + ramp);
+  /* a convolver's buffer cannot be ramped, so the wet level is faded down,
+     swapped, and brought back - otherwise the tail of the last floor clicks */
+  if (conv && convG) {
+    convG.gain.cancelScheduledValues(t);
+    convG.gain.setValueAtTime(convG.gain.value, t);
+    convG.gain.linearRampToValueAtTime(0.0001, t + 0.25);
+    setTimeout(() => {
+      if (!AC || !conv) return;
+      try { conv.buffer = makeIR(R.rt || 1, AC); } catch (e) {}
+      convG.gain.linearRampToValueAtTime(R.wet || 0.12, AC.currentTime + 0.5);
+    }, 280);
+  }
 }
 
 /* ---------- themes ---------- */
 const THEMES = {
-  house: { floor: '#2a1f18', floor2: '#33261c', wall: '#4e3a2c', wallTop: '#6b5040', ink: '#0a0710',
+  house: { grade: { sh: '#3a2412', hi: '#ffd9a0', a: 0.2, b: 0.06 }, floor: '#2a1f18', floor2: '#33261c', wall: '#4e3a2c', wallTop: '#6b5040', ink: '#0a0710',
     lamp: '#ffcf8e', accent: '#ffd9a0', fog: 'rgba(10,7,16,' , dust: '#ffe9c8',
     props: ['sofa', 'plant', 'rug', 'tv'] },
-  warehouse: { floor: '#1d2026', floor2: '#23272f', wall: '#39424e', wallTop: '#525f6f', ink: '#07080e',
+  warehouse: { grade: { sh: '#16202e', hi: '#cfe0ff', a: 0.24, b: 0.05 }, floor: '#1d2026', floor2: '#23272f', wall: '#39424e', wallTop: '#525f6f', ink: '#07080e',
     lamp: '#ffe9c0', accent: '#cfd8e8', fog: 'rgba(7,8,14,', dust: '#cfe0ee',
     props: ['crate', 'shelf', 'barrel', 'pallet'] },
-  city: { floor: '#14162a', floor2: '#181c33', wall: '#262b4a', wallTop: '#3b4270', ink: '#05060f',
+  city: { grade: { sh: '#241040', hi: '#7ef0ff', a: 0.26, b: 0.08 }, floor: '#14162a', floor2: '#181c33', wall: '#262b4a', wallTop: '#3b4270', ink: '#05060f',
     lamp: '#ff3e8f', accent: '#3ef0ff', fog: 'rgba(5,6,15,', dust: '#9fd8ff', rain: true,
     props: ['stall', 'ac', 'bench', 'holo'] },
-  ward: { floor: '#18211e', floor2: '#1d2825', wall: '#2e423d', wallTop: '#455f58', ink: '#050a08',
+  ward: { grade: { sh: '#0f2418', hi: '#d6fff0', a: 0.22, b: 0.06 }, floor: '#18211e', floor2: '#1d2825', wall: '#2e423d', wallTop: '#455f58', ink: '#050a08',
     lamp: '#ff5040', accent: '#8fe8d8', fog: 'rgba(5,10,8,', dust: '#bfe8dd',
     props: ['gurney', 'chair', 'locker', 'glass'] },
-  museum: { floor: '#2b2620', floor2: '#332d25', wall: '#5a5148', wallTop: '#7d7161', ink: '#0a0806',
+  museum: { grade: { sh: '#2a1c0c', hi: '#ffeccc', a: 0.2, b: 0.06 }, floor: '#2b2620', floor2: '#332d25', wall: '#5a5148', wallTop: '#7d7161', ink: '#0a0806',
     lamp: '#ffd9a0', accent: '#e8c877', fog: 'rgba(10,8,6,', dust: '#ffe9c8',
     props: ['plant', 'bench', 'rug', 'sofa'] },
-  server: { floor: '#10161f', floor2: '#141c28', wall: '#1f2c3f', wallTop: '#31465f', ink: '#04070c',
+  server: { grade: { sh: '#04202a', hi: '#c8f4ff', a: 0.26, b: 0.07 }, floor: '#10161f', floor2: '#141c28', wall: '#1f2c3f', wallTop: '#31465f', ink: '#04070c',
     lamp: '#7df9ff', accent: '#3ef0ff', fog: 'rgba(4,7,12,', dust: '#9fd8ff',
     props: ['ac', 'crate', 'bench', 'holo'] },
-  bank: { floor: '#1c221e', floor2: '#222a24', wall: '#3d4a3f', wallTop: '#5a6f60', ink: '#06090a',
+  bank: { grade: { sh: '#1a2410', hi: '#ffe6b0', a: 0.22, b: 0.06 }, floor: '#1c221e', floor2: '#222a24', wall: '#3d4a3f', wallTop: '#5a6f60', ink: '#06090a',
     lamp: '#ffe9b0', accent: '#d8b45a', fog: 'rgba(6,9,10,', dust: '#ffe9c8',
     props: ['locker', 'crate', 'plant', 'pallet'] },
-  docks: { floor: '#171a20', floor2: '#1c2028', wall: '#2c333d', wallTop: '#465161', ink: '#050609',
+  docks: { grade: { sh: '#08142a', hi: '#ffc98a', a: 0.26, b: 0.07 }, floor: '#171a20', floor2: '#1c2028', wall: '#2c333d', wallTop: '#465161', ink: '#050609',
     lamp: '#ffc46e', accent: '#8fb6cc', fog: 'rgba(5,6,9,', dust: '#cfe0ee', rain: true,
     props: ['barrel', 'crate', 'pallet', 'bench'] },
-  core: { floor: '#1e1214', floor2: '#251619', wall: '#4a2830', wallTop: '#6d3c46', ink: '#0a0406',
+  core: { grade: { sh: '#2a0808', hi: '#ffb08a', a: 0.24, b: 0.08 }, floor: '#1e1214', floor2: '#251619', wall: '#4a2830', wallTop: '#6d3c46', ink: '#0a0406',
     lamp: '#ff5040', accent: '#ff8a5c', fog: 'rgba(10,4,6,', dust: '#ffb8a8',
     props: ['locker', 'barrel', 'ac', 'gurney'] }
 };
@@ -3151,12 +3311,13 @@ function nextMap() {
   mapIdx = (mapIdx + 1) % MAPS.length;
   if (mapIdx === 0) { loop++; pickMod(); }
   wipeT = motionFull() ? T.WIPE_T : 0; wipeName = MAPS[mapIdx].name;
+  wipeCond = MOD().name ? (MOD().name + (modSwapped() ? ' \u00b7 SWAPPED HERE' : '')) : '';
   loadMap(mapIdx);
   hud();
 }
 
 /* A total that lands all at once reads as a receipt. One that arrives reads as a
-   result, which is what finishing seventeen floors deserves. */
+   result, which is what finishing twenty floors deserves. */
 function countUp(el, to, dur) {
   if (!el) return;
   const from = 0, t0 = performance.now();
@@ -3356,10 +3517,29 @@ function renderMapCanvas() {
         g.fillRect(px, py, 40, 40);
         g.strokeStyle = 'rgba(0,0,0,.14)'; g.strokeRect(px + .5, py + .5, 39, 39);
       }
-      if (y > 0 && grid[(y - 1) * T.COLS + x]) {
-        const ao = g.createLinearGradient(0, py, 0, py + 14);
-        ao.addColorStop(0, 'rgba(0,0,0,0.5)'); ao.addColorStop(1, 'rgba(0,0,0,0)');
-        g.fillStyle = ao; g.fillRect(px, py, 40, 14);
+      const solid = (gx, gy) => gx >= 0 && gy >= 0 && gx < T.COLS && gy < T.ROWS && grid[gy * T.COLS + gx];
+      /* contact shadow from every wall beside this tile. The light is up-left,
+         so those two sides throw the long shadow and the other two only darken
+         where they meet. */
+      if (solid(x, y - 1)) {
+        const ao = g.createLinearGradient(0, py, 0, py + 15);
+        ao.addColorStop(0, 'rgba(0,0,0,0.52)'); ao.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = ao; g.fillRect(px, py, 40, 15);
+      }
+      if (solid(x - 1, y)) {
+        const ao = g.createLinearGradient(px, 0, px + 13, 0);
+        ao.addColorStop(0, 'rgba(0,0,0,0.44)'); ao.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = ao; g.fillRect(px, py, 13, 40);
+      }
+      if (solid(x + 1, y)) {
+        const ao = g.createLinearGradient(px + 40, 0, px + 33, 0);
+        ao.addColorStop(0, 'rgba(0,0,0,0.24)'); ao.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = ao; g.fillRect(px + 33, py, 7, 40);
+      }
+      if (solid(x, y + 1)) {
+        const ao = g.createLinearGradient(0, py + 40, 0, py + 33);
+        ao.addColorStop(0, 'rgba(0,0,0,0.22)'); ao.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = ao; g.fillRect(px, py + 33, 40, 7);
       }
       if (srand() < 0.14) { g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(px + srand() * 30, py + srand() * 30, 3, 2); }
     } else {
@@ -3367,6 +3547,19 @@ function renderMapCanvas() {
       const gw = g.createLinearGradient(0, py, 0, py + T.TILE);
       gw.addColorStop(0, 'rgba(255,255,255,0.10)'); gw.addColorStop(1, 'rgba(0,0,0,0.16)');
       g.fillStyle = gw; g.fillRect(px, py, T.TILE, T.TILE);
+      /* the faces this block turns toward the light, and the one it turns away.
+         A wall only has a face where there is open floor to show it. */
+      const open = (gx, gy) => !(gx >= 0 && gy >= 0 && gx < T.COLS && gy < T.ROWS && grid[gy * T.COLS + gx]);
+      if (open(x - 1, y)) {
+        const lf = g.createLinearGradient(px, 0, px + 9, 0);
+        lf.addColorStop(0, 'rgba(255,240,214,0.17)'); lf.addColorStop(1, 'rgba(255,240,214,0)');
+        g.fillStyle = lf; g.fillRect(px, py, 9, T.TILE);
+      }
+      if (open(x + 1, y)) {
+        const rf = g.createLinearGradient(px + T.TILE, 0, px + T.TILE - 9, 0);
+        rf.addColorStop(0, 'rgba(0,0,0,0.34)'); rf.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = rf; g.fillRect(px + T.TILE - 9, py, 9, T.TILE);
+      }
       if (y === 0 || !grid[(y - 1) * T.COLS + x]) {
         g.fillStyle = TH.wallTop; g.fillRect(px, py, T.TILE, 10);
         g.fillStyle = 'rgba(255,255,255,.16)'; g.fillRect(px, py, T.TILE, 2);
@@ -3747,6 +3940,16 @@ function render() {
     ctx.globalAlpha = 0.30 + 0.28 * tw;
     ctx.drawImage(glowGoldS, c.x - 11, c.y - 11, 22, 22);
   }
+  /* Bloom: the same sources again, wider and fainter. A bright thing bleeds
+     into what surrounds it, and without that a lamp is only a pale circle. */
+  for (const e of emitters) {
+    if (e.dead || e.kind === 'exit' || e.kind === 'search') continue;
+    const lit = e.kind === 'flare' ? Math.min(1, (e.life || 0) / 2) : 1;
+    if (lit <= 0.02) continue;
+    ctx.globalAlpha = 0.09 * lit;
+    ctx.drawImage(glowGoldS, e.x - e.r * 0.62, e.y - e.r * 0.62, e.r * 1.24, e.r * 1.24);
+  }
+  ctx.globalAlpha = 1;
   /* bot eye glints when near & hidden */
   for (const b of bots) {
     /* A listener has no eyes to glint, and giving it one would hand you the very
@@ -3808,6 +4011,30 @@ function render() {
   }
   ctx.globalCompositeOperation = 'source-over';
   ctx.restore();
+
+  /* ---- the building's own colour ----
+     Applied to the finished frame in screen space: the shadows take the
+     building's colour, the highlights take what lights it. This is what makes
+     a server room and a bank vault read as different places rather than the
+     same room repainted. */
+  if (TH.grade) {
+    const cb = colourblind();
+    ctx.save();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = TH.grade.a * (cb ? 0.6 : 1);
+    ctx.fillStyle = TH.grade.sh; ctx.fillRect(0, 0, W, H);
+    /* the warm pass is the one that reddens a cone, so it does not run at all
+       when the player has asked for red not to be the signal */
+    if (!cb) {
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = TH.grade.b;
+      ctx.fillStyle = TH.grade.hi; ctx.fillRect(0, 0, W, H);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
 
   /* rain above everything (screen space) */
   if (TH.rain && rain.length) {
@@ -4079,10 +4306,32 @@ function drawBotBody(b) {
   }
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a;
 
+  /* downwash: the air it is pushing at the floor, which is the only reason
+     anything that heavy stays up */
+  ctx.globalAlpha = a * (0.05 + heat * 0.05);
+  ctx.strokeStyle = '#8fa6d8'; ctx.lineWidth = 1;
+  const dw = 15 + ((time * (1.4 + heat)) % 1) * 9;
+  ctx.beginPath(); ctx.ellipse(0, 6, dw, dw * 0.42, 0, 0, TAU); ctx.stroke();
+  ctx.globalAlpha = a;
+
   /* booms out to the rotors */
   ctx.strokeStyle = '#12141d'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-3, -5); ctx.lineTo(-2, -11); ctx.moveTo(-3, 5); ctx.lineTo(-2, 11); ctx.stroke();
   ctx.lineCap = 'butt';
+
+  /* navigation lights: red to port, green to starboard, the way every aircraft
+     since 1948 has worn them. They blink on the machine's own clock, so a room
+     of drones does not pulse in unison. */
+  ctx.globalCompositeOperation = 'lighter';
+  const blink = ((time * 1.6 + b.sweepP) % 1) < 0.14 ? 1 : 0.22;
+  for (const [sgn, col] of [[-1, '255,70,60'], [1, '90,255,150']]) {
+    ctx.globalAlpha = a * blink * 0.9;
+    ctx.fillStyle = 'rgba(' + col + ',1)';
+    ctx.beginPath(); ctx.arc(-2, sgn * 11, 1.5, 0, TAU); ctx.fill();
+    ctx.globalAlpha = a * blink * 0.35;
+    ctx.beginPath(); ctx.arc(-2, sgn * 11, 4.2, 0, TAU); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a;
 
   /* chassis */
   const body = ctx.createLinearGradient(6, -10, -10, 10);
@@ -4803,10 +5052,17 @@ function drawExit() {
 }
 
 
+/* Stride advances with DISTANCE, not time, so the feet keep pace with however
+   fast you are actually moving and stop dead when you do - a time-driven cycle
+   moonwalks the moment you slow down. */
+let strideP = 0, coatA = 0;
 function drawPlayer() {
   const x = player.x, y = player.y, a = player.aim;
   const spd = Math.hypot(player.vx, player.vy);
-  const bob = Math.sin(time * (spd > 20 ? 11 : 3.2)) * (spd > 20 ? 0.7 : 0.35);
+  strideP += spd * (lastDt || 0.016) * 0.075;
+  const moving = spd > 12;
+  const swing = moving ? Math.sin(strideP) : 0;
+  const bob = (moving ? Math.abs(Math.cos(strideP)) * 0.9 : Math.sin(time * 3.2) * 0.35);
   ctx.save(); ctx.translate(x, y + bob);
 
   /* contact shadow */
@@ -4814,7 +5070,38 @@ function drawPlayer() {
   ctx.beginPath(); ctx.ellipse(1.5, 7.4, 9.8, 4.2, 0, 0, TAU); ctx.fill();
   ctx.globalAlpha = 1;
 
+  /* ---- the coat, which lags the turn ----
+     It trails the direction of travel rather than the direction you are
+     looking, so turning on the spot swings it and a straight run settles it. */
+  if (spd > 4) {
+    const mv = Math.atan2(player.vy, player.vx);
+    let dA = ((mv - coatA + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    coatA += dA * Math.min(1, (lastDt || 0.016) * 7);
+  }
+  {
+    const lag = Math.min(1, spd / 190);
+    ctx.save(); ctx.rotate(coatA + Math.PI);
+    ctx.fillStyle = 'rgba(16,15,26,' + (0.5 + lag * 0.35).toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.moveTo(2, -6);
+    ctx.quadraticCurveTo(9 + lag * 11, -4 - swing * 2.2, 12 + lag * 15, 0);
+    ctx.quadraticCurveTo(9 + lag * 11, 4 + swing * 2.2, 2, 6);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
   ctx.rotate(a);
+
+  /* ---- feet, under everything ---- */
+  if (moving) {
+    ctx.fillStyle = '#100f19';
+    for (const sgn of [-1, 1]) {
+      const s = swing * sgn;
+      ctx.beginPath();
+      ctx.ellipse(s * 4.6, sgn * 4.2, 3.1, 2.0, 0, 0, TAU);
+      ctx.fill();
+    }
+  }
 
   if (spd > 150) {
     ctx.globalCompositeOperation = 'lighter';
@@ -4980,6 +5267,14 @@ function drawFloorWipe() {
     ctx.beginPath();
     ctx.moveTo(W / 2 - w / 2 - 14, H / 2 + 18); ctx.lineTo(W / 2 + w / 2 + 14, H / 2 + 18);
     ctx.stroke();
+    /* the condition belongs on the card that announces the floor, not only in
+       a toast that has gone by the time you are playing */
+    if (wipeCond) {
+      ctx.globalAlpha = nameA * 0.85;
+      ctx.fillStyle = '#ff9a6a';
+      ctx.font = '700 ' + Math.round(Math.min(W, H) * 0.018) + 'px Orbitron, monospace';
+      ctx.fillText(wipeCond, W / 2, H / 2 + 40);
+    }
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   }
   ctx.restore();
@@ -5165,7 +5460,7 @@ function resetKit() {
   magCharges = kv('mag');
 }
 
-const coinValue = () => Math.round((MOD().coin || 1) * D().score * T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
+const coinValue = () => Math.round((MOD().coin || 1) * (MOD().pay || 1) * D().score * T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
 
 /* Throw a coin you are carrying. It clatters where it lands and drones walk to
    noise - but the floor still wants every coin, so you have just moved gold you
@@ -5444,6 +5739,36 @@ function describeKit(id) {
   el.classList.toggle('named', !!g);
 }
 
+function renderCond() {
+  const g = $('condGrid');
+  if (!g) return;
+  /* a daily run fixes its own condition, so the picker shows it and locks */
+  const locked = dailyOn;
+  g.innerHTML = ['<button class="condchip' + (condIdx < 0 ? ' on' : '') + '" type="button" data-cond="-1"'
+      + (locked ? ' disabled' : '') + '>NONE</button>']
+    .concat(MODS.map((m, i) =>
+      '<button class="condchip' + (condIdx === i ? ' on' : '') + '" type="button" data-cond="' + i + '"'
+      + (locked ? ' disabled' : '') + '>' + m.name + '</button>')).join('');
+  const c = $('condPay');
+  if (c) c.textContent = condIdx < 0 ? 'no bonus'
+    : '+' + Math.round(((MODS[condIdx].pay || 1) - 1) * 100) + '% on every coin';
+  describeCond(condIdx);
+}
+function describeCond(i) {
+  const el = $('condWhat');
+  if (!el) return;
+  el.textContent = dailyOn
+    ? "today's run fixes its own condition, the same for everyone"
+    : (i >= 0 && MODS[i]) ? MODS[i].name + ' — ' + MODS[i].note
+    : 'the building as it stands — pick a condition to make it worse';
+}
+function setCond(i) {
+  if (dailyOn) { sfx.ui(); return false; }
+  condIdx = (i >= 0 && i < MODS.length) ? i : -1;
+  saveCond(); renderCond(); sfx.ui();
+  return true;
+}
+
 function toggleKit(id) {
   if (!GADGETS.some(x => x.id === id)) return false;
   const i = loadout.indexOf(id);
@@ -5526,7 +5851,8 @@ function startGame() {
   mapIdx = completedLevels.length > 0 ? completedLevels.length : 0;
   loop = Math.floor(mapIdx / MAPS.length);
   mapIdx = mapIdx % MAPS.length;
-  endless = false; modIdx = -1; runT = 0; score = 0; totalRunCoins = 0;
+  endless = false; runT = 0; score = 0; totalRunCoins = 0;
+  modIdx = dailyOn ? todaySeed() % MODS.length : condIdx;
   runLog = []; caughtBy = null; runSafes = 0; ghostStreak = 0; bestStreak = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
@@ -5623,6 +5949,7 @@ function renderPause() {
   if (M.siren || MOD().siren) haz.push('SIREN SWEEPS');
   if (M.fog || MOD().fog) haz.push('FOG BANKS');
   if (blackoutMap) haz.push('BLACKOUTS');
+  if (MOD().name) haz.push(MOD().name + (modSwapped() ? ' (SWAPPED)' : ''));
   $('pHaz').innerHTML = haz.map(h => '<b>' + h + '</b>').join('');
   /* a phone has no keys to look up, and the item bar is already tappable */
   $('pKeys').innerHTML = TOUCH ? '' : controlRows().map(([what, keys]) =>
@@ -5670,7 +5997,7 @@ function hud() {
   coinsEl.classList.toggle('canleave', exitOpen && !exitFull);
   $('score').textContent = score;
   mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name
-    + (modIdx >= 0 && endless ? ' · ' + MODS[modIdx].name : '');
+    + (modIdx >= 0 ? ' · ' + MOD().name : '');
   whoEl.textContent = name || 'ANON';
   /* the clean-floor marks, lit while you still hold them */
   const cr = $('cleanRow');
@@ -5867,6 +6194,17 @@ $('cbSeg').addEventListener('click', e => {
    put there. Only a mouse leaving the grid means "nothing is being pointed at". */
 $('kitGrid').addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') describeKit(null); });
 $('kitGrid').addEventListener('focusout', () => { if (!$('kitGrid').matches(':hover')) describeKit(null); });
+$('condGrid').addEventListener('click', e => {
+  const b = e.target.closest('button[data-cond]');
+  if (b && !b.disabled) setCond(parseInt(b.dataset.cond, 10));
+});
+['pointerover', 'focusin'].forEach(ev => $('condGrid').addEventListener(ev, e => {
+  const b = e.target.closest('.condchip');
+  if (b) describeCond(parseInt(b.dataset.cond, 10));
+}));
+$('condGrid').addEventListener('pointerleave', e => {
+  if (e.pointerType === 'mouse') describeCond(condIdx);
+});
 $('kitGrid').addEventListener('click', e => {
   const b = e.target.closest('button[data-kit]');
   if (!b) return;
@@ -5905,7 +6243,7 @@ bindBtn('diffBtn', () => {
   try { localStorage.setItem('flashpoint.diff', D().id); } catch (e) {}
   renderDiff();
 });
-bindBtn('dailyBtn', () => { dailyOn = !dailyOn; if (dailyOn) seedDaily(); renderDaily(); hud(); });
+bindBtn('dailyBtn', () => { dailyOn = !dailyOn; if (dailyOn) seedDaily(); renderDaily(); renderCond(); hud(); });
 /* the same actions the keys fire, so touch reaches every gadget */
 bindBtn('itTorch', () => { if (!battDead) { beamOn = !beamOn; sfx.ui(); hud(); } });
 bindBtn('itFlare', throwFlare);
@@ -5957,9 +6295,37 @@ renderDaily();
 renderAchs();
 renderDiff();
 renderKit();
+renderCond();
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
 let last = performance.now();
+/* Nothing the interface draws should ever be the reason you cannot see your
+   own character. Rects are cached and refreshed a few times a second: reading
+   layout every frame for five elements is a guaranteed thrash. */
+let dodgeT = 0, dodgeRects = null;
+function hudDodge(dt) {
+  const host = $('toast');
+  if (mode !== 'playing') {
+    if (host) host.classList.remove('low');
+    if (dodgeRects) for (const { el } of dodgeRects) el.classList.remove('shy');
+    return;
+  }
+  dodgeT -= dt;
+  if (!dodgeRects || dodgeT <= 0) {
+    dodgeT = 0.25;
+    dodgeRects = [...document.querySelectorAll('#hud .hud-block, #itemBar')]
+      .map(el => ({ el, r: el.getBoundingClientRect() }));
+  }
+  const { cx, cy } = camFit();
+  const px = (player.x - cx) * Z, py = (player.y - cy) * Z;
+  if (host) host.classList.toggle('low', py < H * 0.36);
+  for (const { el, r } of dodgeRects) {
+    if (!r.width) continue;
+    const near = px > r.left - 30 && px < r.right + 30 && py > r.top - 30 && py < r.bottom + 30;
+    el.classList.toggle('shy', near);
+  }
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = (now - last) / 1000; last = now;
@@ -5967,6 +6333,7 @@ function frame(now) {
   if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
   if (freeze > 0) { freeze -= dt; dt = 0; }
   update(dt);
+  hudDodge(lastDt);
   render();
 }
 requestAnimationFrame(frame);
@@ -6096,6 +6463,44 @@ window.__fp = {
   streak() { return { now: ghostStreak, best: bestStreak, mult: streakMult() }; },
   setStreak(n) { ghostStreak = n; bestStreak = Math.max(bestStreak, n); },
   noiseRings() { return noise.map(n => ({ r: n.r, t: +n.t.toFixed(3) })); },
+  room() { const R = roomTone || {}; return { rt: R.rt, wet: R.wet,
+    irSeconds: conv && conv.buffer ? +(conv.buffer.length / conv.buffer.sampleRate).toFixed(2) : null,
+    wetNow: convG ? +convG.gain.value.toFixed(4) : null }; },
+  roomTable() { return Object.entries(ROOM).map(([k, v]) => ({ theme: k, rt: v.rt, wet: v.wet })); },
+  /* Reads the baked map canvas rather than the screen, so the claim under test
+     is the lighting model itself and not whatever the torch happened to reach.
+     Averages the lit left face against the turned-away right face of every wall
+     tile that has open floor on both sides. */
+  hudDodge() {
+    const host = document.getElementById('toast');
+    return { toastLow: !!host && host.classList.contains('low'),
+      shy: [...document.querySelectorAll('#hud .hud-block, #itemBar')]
+        .map(e => ({ id: e.id || e.className, shy: e.classList.contains('shy') })) };
+  },
+  playerScreen() { const { cx, cy } = camFit();
+    return { x: Math.round((player.x - cx) * Z), y: Math.round((player.y - cy) * Z), H: Math.round(H) }; },
+  gradeApplied() { const cb = colourblind();
+    return { warm: !!TH.grade && !cb, shadow: TH.grade ? +(TH.grade.a * (cb ? 0.6 : 1)).toFixed(3) : 0 }; },
+  grade() { return TH.grade ? { sh: TH.grade.sh, hi: TH.grade.hi, a: TH.grade.a } : null; },
+  grades() { return Object.entries(THEMES).map(([k, v]) => ({ theme: k,
+    sh: v.grade && v.grade.sh, hi: v.grade && v.grade.hi })); },
+  stride() { return { p: +strideP.toFixed(2), coat: +coatA.toFixed(2) }; },
+  wallFaces() {
+    if (!mapCtx) return null;
+    let L = 0, R = 0, n = 0;
+    const lum = (d, i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    for (let y = 1; y < T.ROWS - 1; y++) for (let x = 1; x < T.COLS - 1; x++) {
+      if (!grid[y * T.COLS + x]) continue;
+      if (grid[y * T.COLS + x - 1] || grid[y * T.COLS + x + 1]) continue;
+      const px = x * T.TILE, py = y * T.TILE + 20;
+      const l = mapCtx.getImageData(px + 2, py, 4, 1).data;
+      const r = mapCtx.getImageData(px + T.TILE - 6, py, 4, 1).data;
+      let ls = 0, rs = 0;
+      for (let i = 0; i < 16; i += 4) { ls += lum(l, i); rs += lum(r, i); }
+      L += ls / 4; R += rs / 4; n++;
+    }
+    return n ? { left: +(L / n).toFixed(2), right: +(R / n).toFixed(2), n } : null;
+  },
   uiScale() { return getComputedStyle(document.documentElement).getPropertyValue('--ui').trim(); },
   conePalette() { return colourblind() ? { ...CONE.on } : { ...CONE.off }; },
   tutorState() {
@@ -6263,13 +6668,20 @@ window.__fp = {
   get loopModName() { return modIdx >= 0 ? MODS[modIdx].name : null; },
   get modsTotal() { return MODS.length; },
   setMod(i) { modIdx = i; hud(); return MOD().id || null; },
+  setCondNow(i) { const r = setCond(i); return { ok: r, cond: condIdx }; },
+  cond() { return { idx: condIdx, chosen: (chosenMod() || {}).id || null,
+    running: MOD().id || null, swapped: modSwapped(), pay: MOD().pay || 1 }; },
+  condShown() { return [...$('condGrid').querySelectorAll('.condchip')]
+    .map(e => ({ v: e.dataset.cond, on: e.classList.contains('on'), off: e.disabled })); },
+  condWhat() { return $('condWhat').textContent; },
+  wipeCond() { return wipeCond; },
   pickMod() { pickMod(); return __fp.loopMod; },
   get diff() { return D().id; },
   get diffMods() { return Object.assign({}, D()); },
   setDiff(id) { const i = DIFFS.findIndex(d => d.id === id); if (i >= 0) diffIdx = i; renderDiff(); return D().id; },
   get dailyOn() { return dailyOn; },
   get dailySeed() { return todaySeed(); },
-  setDaily(v) { dailyOn = !!v; if (dailyOn) seedDaily(); renderStats(); hud(); return dailyOn; },
+  setDaily(v) { dailyOn = !!v; if (dailyOn) seedDaily(); renderStats(); renderCond(); hud(); return dailyOn; },
   rngProbe(n) { const out = []; for (let i = 0; i < n; i++) out.push(+rng().toFixed(6)); return out; },
   bumpAlert() { alertCool = 0; bumpAlert(); return alertLvl; },
   get botSpeedMult() { return speedMult(); },
