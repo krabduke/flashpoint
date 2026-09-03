@@ -215,6 +215,56 @@ only to attract something that hunts by sight.
 
 ---
 
+# Round three
+
+Sections J, K and L are done (11/12; M1 is blocked on auth, not on work).
+Surveyed before writing this, and two gaps stand out — both of them about choice
+the game does not currently offer.
+
+**Eight gadgets exist and you always start with the same four.** flare, smoke,
+wire and hush are handed to you; emp, decoy, magnet and jammer have to be found.
+What you bring is never a decision.
+
+**Eight endless modifiers exist, built and asserted in D7, and the campaign never
+touches them** — `MOD()` returns `{}` unless `endless`. So twelve floors run
+byte-identical every single time. The expensive half of that feature is already
+written.
+
+## N · What you bring
+
+- [ ] N1 Loadout — pick three of the eight before a run, rather than being handed
+      four. The kit tables and the item bar already exist; this is the choice.
+- [ ] N2 Loadout has a cost — better kit for a harder building, so picking is a
+      trade rather than a wishlist
+- [ ] N3 The menu says what each one is for, since half of them are now only
+      meaningful against a specific hunter
+
+## P · A building that is not the same twice
+
+- [ ] P1 Campaign conditions — let the D7 modifiers apply to a normal run, chosen
+      per floor rather than per loop, so floor 7 is not the same floor 7
+- [ ] P2 Say which condition is on, on the floor card and in the pause briefing
+- [ ] P3 Conditions that suit the floor — no BROWNOUT on a floor whose whole
+      point is its lamps; pick from what actually makes that floor different
+- [ ] P4 A daily run pins its conditions to the seed, so the same day is the
+      same building for everyone
+
+## Q · What the run was
+
+- [ ] Q1 The escape screen tells the story: floors ghosted, safes cracked, gold
+      left behind, conditions survived
+- [ ] Q2 Per-floor breakdown, since a twelve floor run currently collapses to
+      three numbers
+- [ ] Q3 The caught screen should say what got you — which kind, and on what
+
+## R · Reach
+
+- [ ] R1 Hold-to-crack as an alternative to stand-still, for anyone who cannot
+      hold a stick perfectly steady for four and a half seconds
+- [ ] R2 Interface scale, since the HUD is 9px type on a phone
+
+---
+
 ## Log
 
 Append one line per completed item: `date · id · commit · note`.
