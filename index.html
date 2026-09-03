@@ -257,6 +257,9 @@
   }
   .kitchip b{font-size:8px;font-weight:700;letter-spacing:.12em}
   .kitchip s{text-decoration:none;font-size:7px;letter-spacing:.14em;color:#443e5e}
+  /* what it costs, as pips rather than a number - the grid is read at a glance */
+  .kitchip u{text-decoration:none;font-size:9px;line-height:1;letter-spacing:.18em;color:#4a4468}
+  .kitchip.on u{color:#c8a86a}
   .kitchip:hover{border-color:rgba(160,150,220,.55);color:#a79ecc}
   .kitchip.on{color:#ffe9a8;border-color:rgba(255,209,102,.55);
     background:linear-gradient(180deg,rgba(58,42,16,.6),rgba(24,16,42,.7));
@@ -760,7 +763,8 @@ const T = {
   /* the kit you start a run with, and the most you can carry of each */
   /* water: you cannot cross a puddle quietly, not even in soft shoes */
   WATER_MULT: 1.4, WATER_STEP: 0.34, WALK_STEP: 0.44,
-  LOADOUT_MAX: 3,
+  LOADOUT_MAX: 4, LOADOUT_BUDGET: 5,
+  STREAK_STEP: 0.5, STREAK_CAP: 3, NOISE_T: 0.3,
   KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, hush: 1, jam: 0 },
   CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, hush: 2, jam: 2 },
   /* The EMP's opposite number. That one takes their sight away in a radius;
@@ -1281,6 +1285,10 @@ let fSeen = false, fSprint = false, fNoticed = false, fEmp = false;
    call sites of caught() both fire on meter >= 1, so the cause has to be
    recorded where the meter rises, not where the run ends. */
 let runLog = [], caughtBy = null, floorT0 = 0, fSafes = 0, runSafes = 0;
+/* Ghosting one floor is luck; ghosting four in a row is a way of playing, and
+   the payout should be able to say so. Breaking it costs you the multiplier,
+   not the floor. */
+let ghostStreak = 0, bestStreak = 0;
 let runUnlocks = [];
 
 function unlock(id) {
@@ -1369,36 +1377,47 @@ try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
    their own markup, so an assertion checks all three agree rather than a
    refactor putting the lot at risk. */
 const GADGETS = [
-  { id: 'flare', label: 'FLARE',  key: 'Q', btn: 'itFlare',
+  { id: 'flare', label: 'FLARE',  key: 'Q', btn: 'itFlare', cost: 1,
     what: 'thrown light, and a noise where you are not' },
-  { id: 'smoke', label: 'SMOKE',  key: 'X', btn: 'itSmoke',
+  { id: 'smoke', label: 'SMOKE',  key: 'X', btn: 'itSmoke', cost: 2,
     what: 'a cloud neither of you can see through' },
-  { id: 'emp',   label: 'EMP',    key: 'C', btn: 'itEmp',
+  { id: 'emp',   label: 'EMP',    key: 'C', btn: 'itEmp', cost: 3,
     what: 'the grid dies around you — loudly' },
-  { id: 'decoy', label: 'DECOY',  key: 'V', btn: 'itDecoy',
+  { id: 'decoy', label: 'DECOY',  key: 'V', btn: 'itDecoy', cost: 2,
     what: 'a noise that keeps talking, worth walking to' },
-  { id: 'mag',   label: 'MAGNET', key: 'G', btn: 'itMag',
+  { id: 'mag',   label: 'MAGNET', key: 'G', btn: 'itMag', cost: 1,
     what: 'loose gold within reach comes to your hand' },
-  { id: 'hush',  label: 'MUFFLE', key: 'B', btn: 'itHush',
+  { id: 'hush',  label: 'MUFFLE', key: 'B', btn: 'itHush', cost: 2,
     what: 'the haul stops rattling, for this floor only' },
-  { id: 'jam',   label: 'JAMMER', key: 'J', btn: 'itJam',
+  { id: 'jam',   label: 'JAMMER', key: 'J', btn: 'itJam', cost: 3,
     what: 'a bubble the drones inside it cannot hear through' },
 ];
+/* trimmed from the end, so the first things you picked are the ones you keep */
+function affordable(ids) {
+  const out = [];
+  for (const id of ids) {
+    if (out.length >= T.LOADOUT_MAX) break;
+    const c = (GADGETS.find(g => g.id === id) || {}).cost || 1;
+    if (out.reduce((s, x) => s + ((GADGETS.find(g => g.id === x) || {}).cost || 1), 0) + c > T.LOADOUT_BUDGET) continue;
+    out.push(id);
+  }
+  return out.length ? out : ['flare'];
+}
+
 let loadout = (() => {
   try {
     const v = JSON.parse(localStorage.getItem('flashpoint.loadout') || 'null');
     if (Array.isArray(v)) {
       /* a saved loadout can name a gadget that no longer exists - the tripwire
          was removed, and anyone who had packed it would otherwise be short */
-      const ok = v.filter(id => GADGETS.some(g => g.id === id));
-      if (ok.length) {
-        for (const g of GADGETS) { if (ok.length >= 3) break; if (!ok.includes(g.id)) ok.push(g.id); }
-        return ok.slice(0, 3);
-      }
+      const ok = affordable(v.filter(id => GADGETS.some(g => g.id === id)));
+      if (ok.length) return ok;
     }
   } catch (e) {}
   return ['flare', 'smoke', 'hush'];
 })();
+const gadgetCost = (id) => (GADGETS.find(g => g.id === id) || { cost: 1 }).cost;
+const loadoutCost = () => loadout.reduce((s, id) => s + gadgetCost(id), 0);
 function saveLoadout() { try { localStorage.setItem('flashpoint.loadout', JSON.stringify(loadout)); } catch (e) {} }
 
 const SET0 = { vol: 0.55, motion: 'auto', minimap: true, cb: false, ui: 1, crack: 'still' };
@@ -2023,7 +2042,7 @@ function coinRatio() {
 const haulNoise = () => hushOn ? 1
   : 1 + T.HAUL_NOISE * (MOD().haul || 1) * (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
 
-function makeNoise(x, y, r) { noise.push({ x, y, r, t: 0.3 }); }
+function makeNoise(x, y, r) { noise.push({ x, y, r, t: T.NOISE_T, max: T.NOISE_T }); }
 
 /* ---------- screen shake ----------
    A hit is a decaying oscillation with a direction, not per-frame static. The
@@ -3098,10 +3117,18 @@ function nextMap() {
   let cleanPay = kept.length * T.CLEAN_EACH;
   /* the whole floor, taken without being seen, heard or noticed */
   const ghost = kept.length === CLEAN.length && exitFull;
-  if (ghost) cleanPay += T.CLEAN_ALL;
+  if (ghost) {
+    cleanPay += T.CLEAN_ALL;
+    ghostStreak++;
+    bestStreak = Math.max(bestStreak, ghostStreak);
+    cleanPay = Math.round(cleanPay * streakMult());
+  } else ghostStreak = 0;
   if (cleanPay > 0) {
     score += cleanPay;
-    toast((ghost ? 'GHOSTED THE FLOOR' : kept.map(c => c.label).join(' · ')) + ' — ' + cleanPay, 2.6);
+    const tag = ghost
+      ? 'GHOSTED THE FLOOR' + (ghostStreak > 1 ? ' \u00d7' + ghostStreak : '')
+      : kept.map(c => c.label).join(' \u00b7 ');
+    toast(tag + ' — ' + cleanPay, 2.6);
   }
   sfx.door();
   saveGhost();
@@ -3145,6 +3172,9 @@ function countUp(el, to, dur) {
 
 /* Recorded on the way out of a floor, where realCoins and the CLEAN flags are
    still the ones that floor earned. After loadMap they belong to the next one. */
+/* capped, so a long run cannot run away with the scoreboard */
+const streakMult = () => Math.min(T.STREAK_CAP, 1 + T.STREAK_STEP * Math.max(0, ghostStreak - 1));
+
 function logFloor(ghost) {
   runLog.push({ n: MAPS[mapIdx].name, c: realCoins, of: coinsTotal,
     t: Math.max(0, runT - floorT0), g: !!ghost, s: fSafes, seen: fSeen });
@@ -3183,6 +3213,7 @@ function win() {
   const gh = runLog.filter(f => f.g).length;
   if (gh > 0) bits.push('<b>' + gh + '</b> floor' + (gh > 1 ? 's' : '') + ' ghosted');
   if (runSafes > 0) bits.push('<b>' + runSafes + '</b> safe' + (runSafes > 1 ? 's' : '') + ' cracked');
+  if (bestStreak > 1) bits.push('<b>' + bestStreak + '</b> in a row unseen');
   const left = runLog.reduce((s, f) => s + (f.of - f.c), 0);
   if (left > 0) bits.push('<b>' + left + '</b> left behind');
   const sm2 = $('escSummary');
@@ -3703,6 +3734,10 @@ function render() {
   for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
   for (const d of doors) drawDoor(d);
   for (const k of keycards) if (!k.got) drawKeycard(k);
+  /* The whole game turns on how far a sound carried, and until now that was the
+     one system with no picture at all - you learned it by being caught by it.
+     The ring is the real radius the drones test against, not a decoration. */
+  for (const n of noise) drawNoiseRing(n);
   /* the bots: the darkness hides them — your beam is the only truth */
   if (mode !== 'menu') { for (const b of bots) drawBotBody(b); }
   ctx.globalCompositeOperation = 'lighter';
@@ -4199,6 +4234,21 @@ function coinLight(c) {
    a note to yourself, and it should never read as either. */
 /* Quiet, cold and wide: it should read as an absence rather than a weapon,
    because that is what it is - a hole in what they can hear. */
+function drawNoiseRing(n) {
+  const k = 1 - Math.max(0, n.t) / (n.max || T.NOISE_T);
+  /* reduced motion gets the radius without the expansion, since the sweep is
+     the part that moves; the information is the circle either way */
+  const r = motionFull() ? n.r * (0.25 + 0.75 * k) : n.r;
+  const a = (1 - k) * 0.34;
+  if (a <= 0.01) return;
+  ctx.save();
+  ctx.strokeStyle = TH.accent;
+  ctx.globalAlpha = a;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+
 function drawJam(j) {
   const k = j.life / j.max;
   ctx.save(); ctx.translate(j.x, j.y);
@@ -5378,10 +5428,10 @@ function renderKit() {
   if (!g) return;
   g.innerHTML = GADGETS.map(x =>
     '<button class="kitchip' + (loadout.includes(x.id) ? ' on' : '') + '" type="button" data-kit="' + x.id + '">'
-    + '<b>' + x.label + '</b><s>' + x.key + '</s></button>').join('');
+    + '<b>' + x.label + '</b><s>' + x.key + '</s><u>' + '•'.repeat(x.cost) + '</u></button>').join('');
   describeKit(null);
   const c = $('kitCount');
-  if (c) c.textContent = loadout.length + '/' + T.LOADOUT_MAX;
+  if (c) c.textContent = loadoutCost() + '/' + T.LOADOUT_BUDGET + ' PTS';
 }
 /* Hover cannot be the only way in - on a phone there is no hover - so a tap
    describes as well as picks. */
@@ -5389,8 +5439,8 @@ function describeKit(id) {
   const el = $('kitWhat');
   if (!el) return;
   const g = GADGETS.find(x => x.id === id);
-  el.textContent = g ? g.label + ' — ' + g.what
-    : 'three of seven — take what the building calls for';
+  el.textContent = g ? g.label + ' · ' + g.cost + 'pt — ' + g.what
+    : T.LOADOUT_BUDGET + ' points to spend — a heavy kit means fewer of them';
   el.classList.toggle('named', !!g);
 }
 
@@ -5401,7 +5451,10 @@ function toggleKit(id) {
     if (loadout.length <= 1) { sfx.ui(); return false; }   /* take something */
     loadout.splice(i, 1);
   } else {
-    /* the newest choice pushes out the oldest, so a full grid never dead-ends */
+    /* A budget rather than a headcount: three flares and a magnet is a different
+       run from one EMP. The newest choice still pushes out the oldest rather
+       than refusing, so the grid can never dead-end - it just costs you. */
+    while (loadout.length && loadoutCost() + gadgetCost(id) > T.LOADOUT_BUDGET) loadout.shift();
     if (loadout.length >= T.LOADOUT_MAX) loadout.shift();
     loadout.push(id);
   }
@@ -5474,7 +5527,7 @@ function startGame() {
   loop = Math.floor(mapIdx / MAPS.length);
   mapIdx = mapIdx % MAPS.length;
   endless = false; modIdx = -1; runT = 0; score = 0; totalRunCoins = 0;
-  runLog = []; caughtBy = null; runSafes = 0;
+  runLog = []; caughtBy = null; runSafes = 0; ghostStreak = 0; bestStreak = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
@@ -5502,7 +5555,7 @@ function startFromFloor(floorIdx) {
   mapIdx = floorIdx % MAPS.length;
   loop = Math.floor(floorIdx / MAPS.length);
   endless = false; runT = 0; score = 0; totalRunCoins = 0;
-  runLog = []; caughtBy = null; runSafes = 0;
+  runLog = []; caughtBy = null; runSafes = 0; ghostStreak = 0; bestStreak = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
@@ -5969,7 +6022,7 @@ window.__fp = {
   },
   gadgets() { return GADGETS.map(g => ({ ...g })); },
   get loadout() { return loadout.slice(); },
-  setLoadout(ids) { loadout = ids.filter(id => GADGETS.some(g => g.id === id)).slice(0, T.LOADOUT_MAX); saveLoadout(); renderKit(); return loadout.slice(); },
+  setLoadout(ids) { loadout = affordable(ids.filter(id => GADGETS.some(g => g.id === id))); saveLoadout(); renderKit(); return loadout.slice(); },
   toggleKitNow(id) { return toggleKit(id); },
   kitShown() { return [...$('kitGrid').querySelectorAll('.kitchip')].map(e => ({ id: e.dataset.kit, on: e.classList.contains('on') })); },
   kitWhat(id) { describeKit(id); return $('kitWhat').textContent; },
@@ -6036,8 +6089,13 @@ window.__fp = {
      is a duplicate key, and the later one silently wins. */
   holdCrack(on) { keys.crack = !!on; },
   controlRows() { return controlRows().length; },
-  resetRunLog() { runLog = []; runSafes = 0; caughtBy = null; },
+  resetRunLog() { runLog = []; runSafes = 0; caughtBy = null; ghostStreak = 0; bestStreak = 0; },
   setSafeT(v) { safeT = v; },
+  loadoutCost() { return loadoutCost(); }, budget() { return T.LOADOUT_BUDGET; },
+  gadgetCosts() { return GADGETS.map(g => ({ id: g.id, cost: g.cost })); },
+  streak() { return { now: ghostStreak, best: bestStreak, mult: streakMult() }; },
+  setStreak(n) { ghostStreak = n; bestStreak = Math.max(bestStreak, n); },
+  noiseRings() { return noise.map(n => ({ r: n.r, t: +n.t.toFixed(3) })); },
   uiScale() { return getComputedStyle(document.documentElement).getPropertyValue('--ui').trim(); },
   conePalette() { return colourblind() ? { ...CONE.on } : { ...CONE.off }; },
   tutorState() {

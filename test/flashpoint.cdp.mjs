@@ -4294,7 +4294,7 @@ const kit = JSON.parse(await evl(`(() => {
   const ctlKeys = CONTROLS.map(c => c[1][0]);
   o.keysNotInControls = __fp.gadgets().filter(g => !ctlKeys.includes(g.key)).map(g => g.id);
   /* you start with what you picked, and nothing else */
-  __fp.setLoadout(['jam', 'decoy', 'mag']);
+  __fp.setLoadout(['jam', 'mag']);          /* 3 + 1 = 4 of 5 */
   o.chosen = __fp.loadout;
   o.lit = __fp.kitShown().filter(x => x.on).map(x => x.id);
   startGame();
@@ -4305,6 +4305,21 @@ const kit = JSON.parse(await evl(`(() => {
   toMenu(); __fp.setLoadout(['flare']);
   __fp.toggleKitNow('smoke'); __fp.toggleKitNow('emp'); __fp.toggleKitNow('jam');
   o.pushedOut = __fp.loadout;
+  o.spent = __fp.loadoutCost(); o.budget = __fp.budget();
+  o.costs = __fp.gadgetCosts();
+  /* how many you can actually field: take them cheapest first until broke */
+  o.maxAffordable = (() => {
+    let spent = 0, n = 0;
+    for (const g of __fp.gadgetCosts().slice().sort((a, b) => a.cost - b.cost)) {
+      if (spent + g.cost > __fp.budget()) break;
+      spent += g.cost; n++;
+    }
+    return n;
+  })();
+  /* a kit saved before the budget existed must not survive into a run over it */
+  localStorage.setItem('flashpoint.loadout', JSON.stringify(['emp', 'jam', 'smoke']));
+  o.overBudget = __fp.setLoadout(['emp', 'jam', 'smoke']);
+  o.overCost = __fp.loadoutCost();
   /* and you cannot walk in with nothing */
   __fp.setLoadout(['flare']);
   o.lastOne = { removed: __fp.toggleKitNow('flare'), loadout: __fp.loadout };
@@ -4315,8 +4330,13 @@ const kit = JSON.parse(await evl(`(() => {
   return JSON.stringify(o);
 })()`));
 const only = (c, ids) => Object.entries(c).every(([k, v]) => ids.includes(k) ? v === 1 : v === 0);
-ok('every gadget is described in one place', kit.gadgets.length === 7 && kit.max === 3,
-  `${kit.gadgets.length} gadgets, pick ${kit.max}`);
+/* the headcount used to be the constraint; points are now, and LOADOUT_MAX is
+   only a safety rail the budget reaches first - so assert the thing that binds */
+ok('every gadget is described in one place', kit.gadgets.length === 7 && kit.budget === 5,
+  `${kit.gadgets.length} gadgets, ${kit.budget} points`);
+ok('and points, not a headcount, are what limit the pick',
+  kit.maxAffordable <= kit.max && kit.maxAffordable === 3,
+  `budget buys ${kit.maxAffordable}, rail at ${kit.max}`);
 /* GADGETS, T.KIT, the item bar and the pause reference all describe this kit */
 ok('and the other three lists agree with it',
   kit.missingFromKit.length === 0 && kit.orphanInKit.length === 0
@@ -4324,12 +4344,17 @@ ok('and the other three lists agree with it',
   `kit=${JSON.stringify(kit.missingFromKit)} orphan=${JSON.stringify(kit.orphanInKit)} btns=${JSON.stringify(kit.missingButtons)} ctl=${JSON.stringify(kit.keysNotInControls)}`);
 /* the same four used to be handed over every run, leaving half the kit as litter */
 ok('you set out with exactly what you picked',
-  only(kit.gotChosen, ['jam', 'decoy', 'mag']), JSON.stringify(kit.gotChosen));
+  only(kit.gotChosen, ['jam', 'mag']), JSON.stringify(kit.gotChosen));
 ok('and a different pick gives a different run',
   only(kit.gotDefault, ['flare', 'smoke', 'hush']), JSON.stringify(kit.gotDefault));
-ok('the grid is lit to match', kit.lit.sort().join(',') === 'decoy,jam,mag', JSON.stringify(kit.lit));
-ok('a fourth choice pushes the oldest out instead of refusing',
-  kit.pushedOut.length === 3 && !kit.pushedOut.includes('flare'), JSON.stringify(kit.pushedOut));
+ok('the grid is lit to match', kit.lit.sort().join(',') === 'jam,mag', JSON.stringify(kit.lit));
+/* the cap is points now, not headcount: flare+smoke+emp+jam is 9 of a 5 budget,
+   so the oldest picks drop until the newest one fits, rather than being refused */
+ok('a pick you cannot afford drops the oldest rather than refusing',
+  kit.pushedOut.includes('jam') && !kit.pushedOut.includes('flare'),
+  JSON.stringify(kit.pushedOut));
+ok('and what you end up with is always inside the budget',
+  kit.spent <= kit.budget && kit.spent > 0, `${kit.spent} of ${kit.budget}`);
 ok('but you can never walk in carrying nothing',
   kit.lastOne.removed === false && kit.lastOne.loadout.length === 1, JSON.stringify(kit.lastOne));
 ok('and the choice is remembered', kit.stored.join(',') === 'emp,hush', JSON.stringify(kit.stored));
@@ -4399,6 +4424,56 @@ ok('the HUD does not overflow its own width either',
   ui.hudRight <= ui.vw + 1, `${ui.hudRight} of ${ui.vw}`);
 ok('and it goes back', ui.back === '1', ui.back);
 
+/* ---- U1: the kit costs points, so packing is a trade ---- */
+ok('every gadget carries a cost', kit.costs.every(g => g.cost >= 1 && g.cost <= 3),
+  JSON.stringify(kit.costs));
+ok('and they are not all the same, or there is no trade to make',
+  new Set(kit.costs.map(g => g.cost)).size >= 3, JSON.stringify(kit.costs.map(g => g.cost)));
+/* emp+jam+smoke is 8 of a 5 budget - a kit saved before the budget existed */
+ok('a kit saved over the budget is trimmed rather than honoured',
+  kit.overCost <= kit.budget && kit.overBudget.length > 0,
+  `${JSON.stringify(kit.overBudget)} = ${kit.overCost}`);
+
+/* ---- U12: ghosting twice running is worth more than twice ---- */
+const strk = JSON.parse(await evl(`(() => {
+  const at = (n) => { __fp.setStreak(n); return __fp.streak().mult; };
+  return JSON.stringify({ zero: at(0), one: at(1), two: at(2), three: at(3),
+    ten: at(10), step: T.STREAK_STEP, cap: T.STREAK_CAP });
+})()`));
+ok('one ghosted floor pays flat', strk.one === 1, `${strk.one}`);
+ok('a second in a row pays more', strk.two > strk.one, `${strk.one} -> ${strk.two}`);
+ok('and it keeps climbing', strk.three > strk.two, `${strk.two} -> ${strk.three}`);
+ok('but it is capped, so a long run cannot run away with the board',
+  strk.ten === strk.cap, `${strk.ten} vs cap ${strk.cap}`);
+
+/* the real path: a floor cleared clean has to actually move the streak */
+const strk2 = JSON.parse(await evl(`(() => {
+  __fp.resetRunLog(); mode = 'playing'; invuln = 999;
+  mapIdx = 0; loop = 0; loadMap(0);
+  const before = __fp.streak().now;
+  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+  for (let i = 0; i < 40; i++) update(1 / 60);
+  const after = __fp.streak().now;
+  return JSON.stringify({ before, after, log: __fp.runLog().length });
+})()`));
+ok('clearing a floor unseen moves the streak', strk2.after > strk2.before,
+  JSON.stringify(strk2));
+
+/* ---- U14: the radius drones test against, drawn ---- */
+const rings = JSON.parse(await evl(`(() => {
+  mode = 'playing'; noise.length = 0;
+  makeNoise(player.x, player.y, 480);
+  const made = __fp.noiseRings();
+  for (let i = 0; i < 30; i++) update(1 / 60);   /* half a second */
+  const gone = __fp.noiseRings();
+  return JSON.stringify({ made, gone, life: T.NOISE_T });
+})()`));
+ok('a noise leaves a ring', rings.made.length === 1, JSON.stringify(rings.made));
+ok('and the ring is the radius the drones actually hear, not a decoration',
+  rings.made[0].r === 480, `${rings.made[0].r}`);
+ok('the ring goes when the noise does', rings.gone.length === 0,
+  JSON.stringify(rings.gone));
+
 /* ---- the loadout says what each thing is for ---- */
 const kw = JSON.parse(await evl(`(() => {
   const copy = __fp.gadgetCopy();
@@ -4413,8 +4488,9 @@ const kw = JSON.parse(await evl(`(() => {
 ok('every gadget says what it is for', kw.missing.length === 0, JSON.stringify(kw.missing));
 ok('and no two say the same thing', kw.dupes === 0, `${kw.dupes} repeated`);
 ok('the line invites a choice when nothing is pointed at',
-  /three of seven/.test(kw.idle), kw.idle);
-ok('and names the one you point at', /^JAMMER — /.test(kw.named), kw.named);
+  /points to spend/.test(kw.idle), kw.idle);
+ok('and names the one you point at, and what it costs',
+  /^JAMMER · 3pt — /.test(kw.named), kw.named);
 ok('the line is marked as named so it can be styled apart',
   kw.cls === 'named', kw.cls);
 /* a tap has to describe as well as pick, because a phone has no hover */
@@ -4425,7 +4501,7 @@ const kwTap = JSON.parse(await evl(`(() => {
     on: __fp.loadout.includes('emp') });
 })()`));
 ok('tapping a gadget describes it as well as picking it',
-  /^EMP — /.test(kwTap.line), kwTap.line);
+  /^EMP · 3pt — /.test(kwTap.line), kwTap.line);
 
 /* ---- you do not start the floor inside a patrol ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

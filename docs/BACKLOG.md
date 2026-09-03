@@ -302,6 +302,34 @@ It does not. Rendered at 390x844 with real DPR and touch emulation:
 - [x] T4 Floor 16 · THE ARCHIVE — bank, 16 coins, two safes, three sentries, a siren
 - [x] T5 Floor 17 · THE ROOST — city, 16 coins, blackout and three listeners
 
+## U · Fifteen more features
+
+Five of these were already specified and unbuilt (N2, P1-P4); ten are new. Each
+one reuses a system that already exists rather than adding a parallel one -
+that has been the pattern that works in this codebase.
+
+- [x] U1  Loadout has a cost, so picking is a real trade (was N2)
+- [ ] U2  Campaign conditions — the 8 endless modifiers apply to a normal run (was P1)
+- [ ] U3  Say which condition is on, on the floor card and in the pause briefing (was P2)
+- [ ] U4  Conditions that suit the floor — no BROWNOUT where the lights are already out (was P3)
+- [ ] U5  A daily run pins its conditions to the seed (was P4)
+- [ ] U6  `A` lockers — step in and vanish; you cannot see out either
+- [ ] U7  Shift change — patrols swap routes mid-floor, so a memorised beat stops being free
+- [ ] U8  Blueprint pickup — reveals the floor's walls on the minimap, never the drones
+- [ ] U9  `J` jewels — high value, silent to carry, always behind glass or a safe
+- [ ] U10 A prize on the deep floors — optional, guarded, worth going out of your way for
+- [ ] U11 Two exits on some floors — one close and watched, one far and quiet
+- [x] U12 Ghost streak — consecutive ghosted floors multiply, and the run says so
+- [ ] U13 Last-seen marker — the minimap shows where they think you are, not where you are
+- [x] U14 Noise rings — a brief ring showing how far the sound you just made carried
+- [ ] U15 A choice at the stairs — one of three boons between floors
+
+## V · Three more floors
+
+- [ ] V1 Floor 18 · THE FURNACE — core, cramped, cover everywhere and nowhere to run
+- [ ] V2 Floor 19 · THE STACKS — warehouse, long aisles broken by what you can hide behind
+- [ ] V3 Floor 20 · THE SPIRE — city, the last floor: fog, blackout and a siren together
+
 ## Log
 
 Append one line per completed item: `date · id · commit · note`.
@@ -419,3 +447,6 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · R1 · hold-to-crack on Z, movement no longer slips progress; disabled on touch so a desktop preference cannot brick a phone safe, 6 assertions
 - 2026-09-03 · R2 · interface scale 100/125/150% via zoom on the HUD, default unchanged, 4 assertions
 - 2026-09-03 · mobile · 16 assertions inside the 390x844 phone block covering all five features. Two of them first passed while measuring hidden 0x0 elements; both now reveal the element and carry a control that it had a size at all
+- 2026-09-03 · U1 · the kit costs points not slots (5 to spend, 1-3 each); one affordable() shared by the storage loader and the hook, so a kit saved before the budget cannot smuggle itself into a run, 5 assertions
+- 2026-09-03 · U12 · ghost streak, +0.5 per consecutive clean floor, capped at 3x, best run shown on the escape card, 5 assertions
+- 2026-09-03 · U14 · noise rings at the exact radius the drones test against; reduced motion gets the circle without the sweep, 3 assertions
