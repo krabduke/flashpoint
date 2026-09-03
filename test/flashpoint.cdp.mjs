@@ -1973,7 +1973,7 @@ ok('you cannot carry more than the cap', JSON.parse(capped).flares === JSON.pars
 /* ---- item bar: every gadget reachable without a keyboard ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('the item bar has every gadget', (await evl("document.querySelectorAll('#itemBar .item').length")) === 8,
+ok('the item bar has every gadget', (await evl("document.querySelectorAll('#itemBar .item').length")) === 9,
   `n=${await evl("document.querySelectorAll('#itemBar .item').length")}`);
 ok('it is reachable by a finger', await evl(`(() => {
   const b = document.getElementById('itFlare');
@@ -2694,7 +2694,7 @@ ok('and claims nothing on a floor that is quiet', pau.hazHouse.length === 0, JSO
 /* the agreement is the point; the row count just has to keep up with the game
    growing a gadget, which is what caught the tripwire missing from here */
 ok('the control list agrees with the item bar',
-  pau.keysAgree === true && pau.rows === 13, `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows}`);
+  pau.keysAgree === true && pau.rows === 14, `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows}`);
 ok('pausing again re-reads the run instead of replaying the last look',
   pau.refreshed.score === '9999' && pau.refreshed.gold === '7/12', JSON.stringify(pau.refreshed));
 ok('resume puts you back in', pau.closed.paused === false && pau.closed.hidden === true, JSON.stringify(pau.closed));
@@ -4136,6 +4136,59 @@ ok('it is spent once it has spoken',
 ok('a sentry sitting on one never trips it',
   wir.sentry.stillThere === 1 && wir.sentry.fired === 0, JSON.stringify(wir.sentry));
 ok('the block measured a running game', wir.mode === 'playing', wir.mode);
+
+
+/* ---- the muffle: buying back what a full haul costs you ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const hsh = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  startGame(); mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; clearToast();
+  o.charges = __fp.hushCharges;
+  coins = 0; o.empty = __fp.haulNoiseNow();
+  coins = coinsTotal; o.loaded = __fp.haulNoiseNow();
+  o.used = __fp.useHushNow();
+  o.muffled = { haul: __fp.haulNoiseNow(), on: __fp.hushOn, charges: __fp.hushCharges };
+  o.usedTwice = __fp.useHushNow();
+  /* what a drone or a listener actually hears, rather than the multiplier */
+  const sprintR = () => { noise = [];
+    for (let i = 0; i < 40; i++) { keys.right = true; keys.sprint = true; update(1 / 60); }
+    keys.right = false; keys.sprint = false;
+    return noise.length ? Math.round(Math.max(...noise.map(n => n.r))) : 0; };
+  hushOn = false; const loud = sprintR();
+  hushOn = true; const quiet = sprintR();
+  o.radius = { loud, quiet, listenerHears: Math.round(T.HEAR_R * T.LISTEN_HEAR * 0.4) };
+  /* one floor means one floor */
+  nextMap();
+  coins = coinsTotal;
+  o.afterStairs = { on: __fp.hushOn, haul: __fp.haulNoiseNow() };
+  /* and it is in both places a gadget has to be */
+  o.inBar = !!$('itHush');
+  togglePause();
+  o.inControls = [...$('pKeys').querySelectorAll('.key')].map(e => e.textContent.trim()).includes('B');
+  togglePause();
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+ok('you set out with one', hsh.charges === 1 && hsh.used === true, `charges=${hsh.charges}`);
+ok('with empty pockets there is nothing for it to buy back', hsh.empty === 1, `haul=${hsh.empty}`);
+/* D2 made a full haul 1.55x louder, which is what makes the walk back tense */
+ok('a full haul is markedly louder to carry', hsh.loaded > 1.5, `haul=${hsh.loaded}`);
+ok('and the muffle takes that back, spending the charge',
+  hsh.muffled.haul === 1 && hsh.muffled.on === true && hsh.muffled.charges === 0,
+  JSON.stringify(hsh.muffled));
+ok('it cannot be spent twice over', hsh.usedTwice === false);
+/* the multiplier is the mechanism; this is the thing that actually matters */
+ok('what they hear drops a long way',
+  hsh.radius.loud > 780 && hsh.radius.quiet < 560 && hsh.radius.quiet < hsh.radius.loud,
+  `${hsh.radius.loud} -> ${hsh.radius.quiet} (a listener hears about ${hsh.radius.listenerHears})`);
+ok('and it lapses on the stairs, being one floor of quiet',
+  hsh.afterStairs.on === false && hsh.afterStairs.haul > 1.5, JSON.stringify(hsh.afterStairs));
+/* trap 11: a new gadget has to reach the bar and the control reference */
+ok('it reaches both the item bar and the control list',
+  hsh.inBar === true && hsh.inControls === true, `bar=${hsh.inBar} controls=${hsh.inControls}`);
+ok('the block measured a running game', hsh.mode === 'playing', hsh.mode);
 
 
 const clean = problems.length === 0;

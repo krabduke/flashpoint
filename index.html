@@ -457,6 +457,7 @@
         <button class="item" id="itDecoy" type="button"><b>DECOY</b><s>V</s></button>
         <button class="item" id="itMag"   type="button"><b>MAGNET</b><s>G</s></button>
         <button class="item" id="itWire"  type="button"><b>WIRE</b><s>T</s></button>
+        <button class="item" id="itHush"  type="button"><b>MUFFLE</b><s>B</s></button>
       </div>
     </div>
   </div>
@@ -665,8 +666,8 @@ const T = {
   /* the kit you start a run with, and the most you can carry of each */
   /* water: you cannot cross a puddle quietly, not even in soft shoes */
   WATER_MULT: 1.4, WATER_STEP: 0.34, WALK_STEP: 0.44,
-  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, wire: 1 },
-  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, wire: 3 },
+  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, wire: 1, hush: 1 },
+  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, wire: 3, hush: 2 },
   /* Every other gadget acts on them. This one acts on what you know: it makes
      no noise, draws nothing to it, and only ever tells YOU. */
   WIRE_R: 54, WIRE_ARM: 0.6,
@@ -996,6 +997,7 @@ let smokes = [], smokePellets = 1;
 let emps = [], empCharges = 1;
 let decoys = [], decoyCharges = 1;
 let wires = [], wireCharges = 1;
+let hushOn = false, hushCharges = 1;
 let magT = 0, magCharges = 1;
 let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 let safes = [], safeT = 0, safeOn = null, safeTick = 0;
@@ -1130,6 +1132,7 @@ const PU = {
   e: { label: 'EMP', glow: null, col: '#9fd8ff', ring: 'rgba(159,216,255,.9)' },
   s: { label: 'SMOKE', glow: null, col: '#b0b0c4', ring: 'rgba(176,176,196,.9)' },
   w: { label: 'WIRE', glow: null, col: '#8fe8d8', ring: 'rgba(143,232,216,.9)' },
+  h: { label: 'MUFFLE', glow: null, col: '#c9bfe8', ring: 'rgba(201,191,232,.9)' },
   f: { label: 'FLARE', glow: null, col: '#ffb347', ring: 'rgba(255,179,71,.9)' },
   Z: { label: 'SHOES', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
   I: { label: 'GHOST', glow: null, col: '#d8b6ff', ring: 'rgba(216,182,255,.9)' }
@@ -1429,7 +1432,7 @@ function loadMap(idx) {
        applies to one - the alarm, an EMP killing it, smoke breaking its line -
        applies here for free. It only needs pointing somewhere useful. */
     if (ch === 'C') emitters.push({ x: cx, y: cy, r: 205, col: '#ffe0c0', flick: 0, kind: 'search', cam: true, ang: 0, spin: 0, rays: new Float32Array(17) });
-    if ('fsedmw'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
+    if ('fsedmwh'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
     /* Glass is deliberately NOT a wall in the grid. That is what lets sight
        through it for free - losClear and both cones read the grid, so they need
        no changes at all. Only bodies are stopped, and only where bodies move. */
@@ -1514,6 +1517,7 @@ function loadMap(idx) {
   trail = []; trailT = 0; floorT = 0; loadGhost();
   /* live objects clear with the floor; what you are carrying does not */
   smokes = []; emps = []; decoys = []; wires = []; magT = 0;
+  hushOn = false;   /* one floor, so it lapses on the stairs */
   hasKey = false; pickT = 0; pickOn = null;
   safeT = 0; safeOn = null; safeTick = 0;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
@@ -1757,7 +1761,11 @@ function coinRatio() {
   const semi = COIN_RUNGS[Math.round(prog * (COIN_RUNGS.length - 1))];
   return Math.pow(2, semi / 12);
 }
-const haulNoise = () => 1 + T.HAUL_NOISE * (MOD().haul || 1) * (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
+/* D2 made a full haul 1.55x louder to carry, which is what makes the walk back
+   to the door the tense part. The muffler buys that back for one floor, and
+   nothing else: it is worth most exactly when you are carrying everything. */
+const haulNoise = () => hushOn ? 1
+  : 1 + T.HAUL_NOISE * (MOD().haul || 1) * (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
 
 function makeNoise(x, y, r) { noise.push({ x, y, r, t: 0.3 }); }
 
@@ -1986,6 +1994,7 @@ function update(dt) {
     if (u.kind === 'e') { empCharges = Math.min(T.CAP.emp, empCharges + 1); toast('EMP CHARGE STOWED', 1.8); }
     if (u.kind === 'd') { decoyCharges = Math.min(T.CAP.decoy, decoyCharges + 1); toast('DECOY STOWED', 1.8); }
     if (u.kind === 'w') { wireCharges = Math.min(T.CAP.wire, wireCharges + 1); toast('WIRE STOWED', 1.8); }
+    if (u.kind === 'h') { hushCharges = Math.min(T.CAP.hush, hushCharges + 1); toast('MUFFLE STOWED', 1.8); }
     if (u.kind === 'm') { magCharges = Math.min(T.CAP.mag, magCharges + 1); toast('MAGNET STOWED', 1.8); }
     hud();
   }
@@ -2935,6 +2944,7 @@ PU.d.glow = makeGlow('125,255,196');
 PU.e.glow = makeGlow('159,216,255');
 PU.s.glow = makeGlow('176,176,196');
 PU.w.glow = makeGlow('143,232,216');
+PU.h.glow = makeGlow('201,191,232');
 PU.f.glow = makeGlow('255,179,71');
 PU.Z.glow = makeGlow('125,255,196');
 PU.I.glow = makeGlow('216,182,255');
@@ -4773,6 +4783,7 @@ function resetKit() {
   empCharges = Math.max(0, T.KIT.emp + Math.max(0, k));
   decoyCharges = Math.max(0, T.KIT.decoy + Math.max(0, k));
   wireCharges = kv(T.KIT.wire);
+  hushCharges = kv(T.KIT.hush);
   magCharges = Math.max(0, T.KIT.mag + Math.max(0, k));
 }
 
@@ -4899,6 +4910,15 @@ function dropWire() {
   wires.push({ x: player.x, y: player.y, arm: T.WIRE_ARM, fired: 0, ph: rand(0, TAU) });
   sfx.ui();
   toast('WIRE SET — IT WILL TELL YOU', 2.2);
+  hud();
+  return true;
+}
+
+function useHush() {
+  if (mode !== 'playing' || hushCharges <= 0 || hushOn) { sfx.ui(); return false; }
+  hushCharges--; hushOn = true;
+  sfx.ui();
+  toast('MUFFLED — THE GOLD STOPS TALKING', 2.4);
   hud();
   return true;
 }
@@ -5162,7 +5182,8 @@ const CONTROLS = [
   ['FLARE', ['Q']], ['TOSS A COIN', ['E']],
   ['SMOKE', ['X']], ['EMP', ['C']],
   ['DECOY', ['V']], ['MAGNET', ['G']],
-  ['TRIPWIRE', ['T']], ['MUTE', ['M']],
+  ['TRIPWIRE', ['T']], ['MUFFLE', ['B']],
+  ['MUTE', ['M']],
   ['NEW RUN', ['R']],
 ];
 function renderPause() {
@@ -5258,6 +5279,7 @@ function hud() {
     set('itDecoy', decoyCharges > 0);
     set('itMag', magCharges > 0, magT > 0);
     set('itWire', wireCharges > 0, wires.some(w => w.fired <= 0));
+    set('itHush', hushCharges > 0 && !hushOn, hushOn);
   }
 
   const dt2 = $('dailyTag');
@@ -5332,6 +5354,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'c' || e.key === 'C') && mode === 'playing') { fireEmp(); }
   if ((e.key === 'v' || e.key === 'V') && mode === 'playing') { dropDecoy(); }
   if ((e.key === 't' || e.key === 'T') && mode === 'playing') { dropWire(); }
+  if ((e.key === 'b' || e.key === 'B') && mode === 'playing') { useHush(); }
   if ((e.key === 'g' || e.key === 'G') && mode === 'playing') { runMagnet(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if (e.key === 'Escape' && settingsOpen()) { closeSettings(); return; }
@@ -5433,6 +5456,7 @@ bindBtn('itEmp', fireEmp);
 bindBtn('itDecoy', dropDecoy);
 bindBtn('itMag', runMagnet);
 bindBtn('itWire', dropWire);
+bindBtn('itHush', useHush);
 ['nameInput', 'nameInput2', 'nameInput3'].forEach((id, i) => {
   const el = $(id);
   el.value = name;
@@ -5840,6 +5864,10 @@ window.__fp = {
   get hasKey() { return hasKey; },
   get pickT() { return +pickT.toFixed(2); },
   wireCount() { return wires.length; },
+  get hushOn() { return hushOn; },
+  get hushCharges() { return hushCharges; },
+  useHushNow() { return useHush(); },
+  haulNoiseNow() { return +haulNoise().toFixed(4); },
   get wireCharges() { return wireCharges; },
   wireState() { return wires.map(w => ({ armed: w.arm <= 0, fired: +w.fired.toFixed(2), x: Math.round(w.x), y: Math.round(w.y) })); },
   dropWireNow() { return dropWire(); },
