@@ -170,8 +170,9 @@ only to attract something that hunts by sight.
       sentries from six, all three on the Core; sentry wake scales with depth.
       The predicted third `of bots` defect was real: the red eye glint was being
       drawn on listeners, handing you the very cue their design removes.
-- [ ] J5 They tell each other — a listener that hears you hands a position to the
-      drones that can see
+- [x] J5 They tell each other — a listener with a lock puts your position out to
+      every drone in range, once every 6.5s. Deliberately not `raiseAlarm`: no
+      alert bump, no sentries woken. One unit reporting, not the building.
 
 ## K · Risk against reward
 
@@ -265,3 +266,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · J2 · reach ring that answers your feet, panned sonar tick, lock-on posture, 6 assertions; fixed duelling faceToward calls and an idle sweep on a coneless thing
 - 2026-09-03 · J3 · sentries on the vault, alarms open the whole floor for 9s, 10 assertions; fixed alarms being handed to something bolted down and sentries eating flank slots in the radio net
 - 2026-09-03 · J4 · units spread across all twelve floors, glint and tutorial fixed for coneless units, empty route guarded against taking the frame loop down, 9 assertions
+- 2026-09-03 · J5 · listeners call drones in on a 6.5s cooldown without raising the building, 8 assertions — **section J complete**
