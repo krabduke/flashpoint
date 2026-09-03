@@ -146,7 +146,7 @@
   .tag b{color:#ffd166;font-weight:600}
   .tag .red{color:#ff6b6b}
   .hint{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#5e5679}
-  .hint .key{display:inline-block;border:1px solid rgba(130,120,180,.4);border-radius:5px;padding:1px 7px;margin:0 2px;color:#a49dcf;font-size:10.5px}
+  .hint .key,.prow .key{display:inline-block;border:1px solid rgba(130,120,180,.4);border-radius:5px;padding:1px 7px;margin:0 2px;color:#a49dcf;font-size:10.5px}
 
   .namerow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
   .namefield{
@@ -195,6 +195,35 @@
   .stat{display:flex;flex-direction:column;gap:5px;align-items:center}
   .stat b{font-family:'Orbitron',monospace;font-size:clamp(20px,5vw,26px);font-weight:900;color:#eef0ff;font-variant-numeric:tabular-nums}
   .stat span{font-size:9px;letter-spacing:.26em;color:#5e5679}
+  /* ---- pause: the one calm moment, so it can afford to be dense ---- */
+  .pausecard{gap:3px}
+  .pstrip{display:flex;gap:24px;align-items:center;justify-content:center;
+    flex-wrap:wrap;margin:12px 0 3px}
+  .pmeta{display:flex;align-items:center;gap:9px}
+  .pmeta>span{font-size:9px;letter-spacing:.26em;color:#5e5679}
+  .pbar{display:block;width:76px;height:5px;border-radius:999px;
+    background:rgba(120,110,170,.2);overflow:hidden}
+  .pbar u{display:block;height:100%;width:0;border-radius:999px;background:#ffd166}
+  .pbar.low u{background:#ff9f43}
+  .pbar.dead u{background:#ff4646}
+  .pnotches{display:flex;gap:4px}
+  .pnotches i{width:13px;height:5px;border-radius:2px;background:rgba(120,110,170,.22)}
+  .pnotches i.on{background:#ff6b6b;box-shadow:0 0 8px rgba(255,90,90,.45)}
+  .phaz{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+  .phaz:empty{display:none}
+  .phaz b{font-family:'Orbitron',monospace;font-size:8.5px;font-weight:700;letter-spacing:.22em;
+    color:#ffb4a4;border:1px solid rgba(255,120,100,.32);border-radius:999px;padding:3px 11px;
+    background:rgba(58,20,26,.45)}
+  .pkeys{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;
+    margin:15px 0 8px;width:100%;max-width:410px}
+  .pkeys:empty{display:none}
+  .prow{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:4px 0;border-top:1px solid rgba(120,100,180,.12)}
+  .prow em{font-style:normal;font-size:10.5px;letter-spacing:.09em;
+    text-transform:uppercase;color:#8d84b3;white-space:nowrap}
+  .prow s{text-decoration:none;display:flex;gap:3px;flex-shrink:0}
+  @media (max-width:430px){.pkeys{grid-template-columns:1fr;max-width:250px}}
+
   .records{margin:6px 0 4px;min-width:min(300px,80vw)}
   .records table{width:100%;border-collapse:collapse;font-size:11.5px;color:#a99fd0}
   .records td{padding:4px 6px;border-top:1px solid rgba(120,100,180,.14);font-variant-numeric:tabular-nums}
@@ -416,11 +445,27 @@
     </div>
   </div>
 
-  <div id="pausedOv" class="overlay hidden" style="gap:10px">
-    <h1 style="font-size:clamp(30px,7vw,52px);animation:none">PAUSED</h1>
-    <button class="btn ghost" id="resumeBtn">RESUME</button>
-    <button class="btn ghost" id="quitBtn">ABANDON RUN</button>
-    <p class="hint">P or II to resume</p>
+  <div id="pausedOv" class="overlay hidden">
+    <div class="card pausecard">
+      <h2>PAUSED</h2>
+      <p class="tag" id="pWhere"></p>
+      <div class="stats">
+        <div class="stat"><b id="pFloor">-</b><span>FLOOR</span></div>
+        <div class="stat"><b id="pGold">-</b><span>GOLD HERE</span></div>
+        <div class="stat"><b id="pScore">-</b><span>SCORE</span></div>
+        <div class="stat"><b id="pTime">-</b><span>ELAPSED</span></div>
+      </div>
+      <div class="pstrip">
+        <div class="pmeta"><span>TORCH</span><i class="pbar" id="pBattWrap"><u id="pBatt"></u></i></div>
+        <div class="pmeta"><span>ALERT</span><i class="pnotches" id="pAlert"></i></div>
+      </div>
+      <div class="phaz" id="pHaz"></div>
+      <div class="pkeys" id="pKeys"></div>
+      <p class="hint" id="pSticks" style="display:none">Left stick moves &middot; right stick aims &middot; tap an item to use it</p>
+      <button class="btn" id="resumeBtn">RESUME</button>
+      <button class="btn ghost" id="quitBtn">ABANDON RUN</button>
+      <p class="hint"><span class="key">P</span> or <span class="key">II</span> to resume</p>
+    </div>
   </div>
 </div>
 
@@ -4134,9 +4179,45 @@ function toMenu() {
   renderAchs();
   renderDiff();
 }
+/* R starts a whole new run, not the floor again - label it for what it does */
+const CONTROLS = [
+  ['MOVE', ['W', 'A', 'S', 'D']], ['AIM', ['MOUSE']],
+  ['SPRINT', ['SHIFT']], ['TORCH', ['F']],
+  ['FLARE', ['Q']], ['TOSS A COIN', ['E']],
+  ['SMOKE', ['X']], ['EMP', ['C']],
+  ['DECOY', ['V']], ['MAGNET', ['G']],
+  ['MUTE', ['M']], ['NEW RUN', ['R']],
+];
+function renderPause() {
+  const M = MAPS[mapIdx];
+  $('pWhere').textContent = (loop ? 'LOOP ' + (loop + 1) + ' \u00b7 ' : '') + M.name;
+  $('pFloor').textContent = (mapIdx + 1) + '/' + MAPS.length;
+  $('pGold').textContent = coins + '/' + coinsTotal;
+  $('pScore').textContent = score;
+  $('pTime').textContent = fmtTime(runT);
+  const pct = Math.max(0, Math.min(100, batt));
+  $('pBatt').style.width = pct + '%';
+  $('pBattWrap').className = 'pbar' + (battDead ? ' dead' : pct < 25 ? ' low' : '');
+  /* alert survives the stairs and caps at four, so show all four sockets */
+  let al = '';
+  for (let i = 0; i < 4; i++) al += '<i class="' + (i < alertLvl ? 'on' : '') + '"></i>';
+  $('pAlert').innerHTML = al;
+  /* only what this floor actually does, mods included */
+  const haz = [];
+  if (M.siren || MOD().siren) haz.push('SIREN SWEEPS');
+  if (M.fog || MOD().fog) haz.push('FOG BANKS');
+  if (blackoutMap) haz.push('BLACKOUTS');
+  $('pHaz').innerHTML = haz.map(h => '<b>' + h + '</b>').join('');
+  /* a phone has no keys to look up, and the item bar is already tappable */
+  $('pKeys').innerHTML = TOUCH ? '' : CONTROLS.map(([what, keys]) =>
+    '<div class="prow"><em>' + what + '</em><s>' +
+    keys.map(k => '<span class="key">' + k + '</span>').join('') + '</s></div>').join('');
+  $('pSticks').style.display = TOUCH ? '' : 'none';
+}
 function togglePause() {
   if (mode !== 'playing') return;
   paused = !paused;
+  if (paused) renderPause();
   $('pausedOv').classList.toggle('hidden', !paused);
 }
 function hud() {

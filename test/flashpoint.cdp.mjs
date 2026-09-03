@@ -2630,6 +2630,78 @@ ok('several hits at once stay inside the cap',
   shk.capped.n === 4 && shk.capped.mag <= shk.capped.cap + 0.01, JSON.stringify(shk.capped));
 
 
+/* ---- pause screen: the run at a glance, and what the keys do ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const pau = JSON.parse(await evl(`(() => {
+  const o = {};
+  const vis = id => { const el = $(id); return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); };
+  o.quietBefore = $('pausedOv').classList.contains('hidden');
+  mapIdx = 8; loop = 0; loadMap(8);
+  coins = 3; score = 1840; runT = 96; alertLvl = 2; batt = 61; battDead = false; hud();
+  togglePause();
+  o.open = { paused, shown: !$('pausedOv').classList.contains('hidden') };
+  o.text = { where: $('pWhere').textContent, floor: $('pFloor').textContent, gold: $('pGold').textContent,
+             score: $('pScore').textContent, time: $('pTime').textContent };
+  o.seen = { floor: vis('pFloor'), gold: vis('pGold'), score: vis('pScore'), time: vis('pTime') };
+  o.batt = { w: $('pBatt').style.width, cls: $('pBattWrap').className };
+  o.alert = { sockets: $('pAlert').children.length, on: $('pAlert').querySelectorAll('.on').length };
+  o.hazCore = [...$('pHaz').children].map(b => b.textContent);
+  /* the reference must agree with the item bar, which is the other place keys
+     are shown - two sources of truth is how a control list goes stale */
+  const barKeys = [...document.querySelectorAll('#itemBar .item s')].map(e => e.textContent.trim());
+  const refKeys = [...$('pKeys').querySelectorAll('.key')].map(e => e.textContent.trim());
+  o.keysAgree = barKeys.every(k => refKeys.includes(k));
+  o.barKeys = barKeys; o.rows = $('pKeys').children.length;
+  togglePause(); loop = 1; togglePause();
+  o.looped = $('pWhere').textContent;
+  togglePause(); loop = 0; togglePause();
+  /* re-pausing has to re-read, not show what it showed last time */
+  togglePause(); score = 9999; coins = 7; togglePause();
+  o.refreshed = { score: $('pScore').textContent, gold: $('pGold').textContent };
+  /* a quiet floor should not claim hazards it does not have */
+  togglePause(); mapIdx = 0; loadMap(0); togglePause();
+  o.hazHouse = [...$('pHaz').children].map(b => b.textContent);
+  o.battDead = (() => { batt = 0; battDead = true; togglePause(); togglePause(); return $('pBattWrap').className; })();
+  /* resume puts you back in the game */
+  togglePause();
+  o.closed = { paused, hidden: $('pausedOv').classList.contains('hidden') };
+  /* a phone has no keys to look up */
+  const wasTouch = TOUCH; TOUCH = true; togglePause();
+  o.touch = { rows: $('pKeys').children.length, sticks: $('pSticks').style.display !== 'none' };
+  togglePause(); TOUCH = wasTouch;
+  /* and it must not open from the menu */
+  const wasMode = mode; mode = 'menu'; togglePause();
+  o.fromMenu = { paused, hidden: $('pausedOv').classList.contains('hidden') };
+  mode = wasMode;
+  return JSON.stringify(o);
+})()`));
+ok('pause opens the panel', pau.open.paused === true && pau.open.shown === true, JSON.stringify(pau.open));
+ok('it says where you are and how the run is going',
+  pau.text.where === 'THE CORE' && pau.text.floor === '9/12' && pau.text.gold === '3/12'
+  && pau.text.score === '1840' && pau.text.time === '1:36', JSON.stringify(pau.text));
+ok('a later loop says so rather than repeating the floor name',
+  pau.looped === 'LOOP 2 \u00b7 THE CORE', pau.looped);
+ok('and every one of those is actually on screen',
+  Object.values(pau.seen).every(Boolean), JSON.stringify(pau.seen));
+ok('the torch bar reads the real charge', pau.batt.w === '61%' && pau.batt.cls === 'pbar', JSON.stringify(pau.batt));
+ok('a dead torch reads dead, not just low', pau.battDead === 'pbar dead', pau.battDead);
+ok('alert shows all four sockets and lights the ones you have earned',
+  pau.alert.sockets === 4 && pau.alert.on === 2, JSON.stringify(pau.alert));
+ok('it names what this floor throws at you',
+  pau.hazCore.includes('SIREN SWEEPS') && pau.hazCore.includes('BLACKOUTS'), JSON.stringify(pau.hazCore));
+ok('and claims nothing on a floor that is quiet', pau.hazHouse.length === 0, JSON.stringify(pau.hazHouse));
+ok('the control list agrees with the item bar',
+  pau.keysAgree === true && pau.rows === 12, `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows}`);
+ok('pausing again re-reads the run instead of replaying the last look',
+  pau.refreshed.score === '9999' && pau.refreshed.gold === '7/12', JSON.stringify(pau.refreshed));
+ok('resume puts you back in', pau.closed.paused === false && pau.closed.hidden === true, JSON.stringify(pau.closed));
+ok('touch gets the sticks, not a key table it cannot use',
+  pau.touch.rows === 0 && pau.touch.sticks === true, JSON.stringify(pau.touch));
+ok('and it stays shut outside a run',
+  pau.fromMenu.paused === false && pau.fromMenu.hidden === true, JSON.stringify(pau.fromMenu));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);
