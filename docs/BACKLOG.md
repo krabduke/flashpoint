@@ -16,7 +16,10 @@ behaviour is assertable. Visual work gets a screenshot check instead.
    gets the player caught leaves every later `drive()` running against a frozen
    game, which reads exactly like the feature under test doing nothing. Drain
    `meter` and set `invuln` before parking a drone next to the player, and put
-   `mode` in the failure message.
+   `mode` in the failure message. **This has now cost four separate blocks.** If
+   a block deliberately fills the meter, give it a `revive()` that resets
+   `mode`, `meter` and `invuln`, call it after every such run, and assert the
+   mode at each stage so a frozen game cannot masquerade as a broken feature.
 2. Own your state, do not inherit it. `loop`, `diffIdx`, `modIdx`, `endless` and
    `alertLvl` all survive into a block from the four hundred assertions before
    it, and each one changes how the game behaves.
@@ -146,8 +149,9 @@ only to attract something that hunts by sight.
 
 ## J · A second kind of hunter
 
-- [ ] J1 `H` listener — no cone at all, hunts by sound alone. The noise system
-      already exists and nothing currently makes it frightening.
+- [x] J1 `H` listener — no cone at all, hears at 337 to a drone's 193, and knows
+      you only while you are moving. Freezing is the counterplay, and a blackout
+      is no help against something that never used its eyes.
 - [ ] J2 Listener made legible — you cannot see what it is "looking" at, so it
       needs a different tell: posture, a pulse when it hears, an audible ping.
 - [ ] J3 `Y` sentry — fixed, wide cone, asleep until an alarm wakes it
@@ -244,3 +248,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · H6 · staged tutorial, the gold lesson cleared by doing it, 7 assertions; test had to be routed through startGame rather than loadMap
 - 2026-09-03 · H7 · colourblind cones by hue and hatching, red dominance +14 to +1, luminance edges 1093 to 1213, 6 assertions
 - 2026-09-03 · H8 · rescaled dead zone, sprint hysteresis 0.85/0.62, stick rings derived from the real thresholds, 8 assertions — **section H complete, backlog empty**
+- 2026-09-03 · J1 · the listener: no cone, hears 1.75x, caught by movement not by sight, 10 assertions; both failures were the caught-freeze and an unequal pixel comparison
