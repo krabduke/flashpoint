@@ -197,7 +197,7 @@ only to attract something that hunts by sight.
 ## L · More to carry
 
 - [x] L1 Tripwire on `T` — the first gadget that acts on what you know rather than on them: silent, invisible to them, arms after 0.6s, and a bolted-down sentry can never be what came through
-- [ ] L2 Silencer charge — one floor of soft footsteps whatever you are carrying
+- [x] L2 Muffle on `B` — cancels D2's haul penalty for one floor; sprint noise 806 down to 520, which is the difference between trackable and not against a listener's 337
 - [ ] L3 A gadget that uses the listener specifically, once J1 exists
 
 ## M · Blocked
@@ -284,3 +284,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · K2 · safes on four floors, loud throughout, flinch slips and leaving resets, 9 assertions; placement now runs validateMaps' own flood fill before accepting a tile
 - 2026-09-03 · K3 · three clean marks live in the HUD, 200 each and 400 for the set, 6 assertions; K1's two assertions corrected to isolate the clear bonus — **section K complete**
 - 2026-09-03 · L1 · tripwire on T, silent to them and spent when it speaks, 8 assertions; F12's anti-drift check caught the pause reference missing it
+- 2026-09-03 · L2 · muffle cancels the weight penalty for a floor, 806 to 520 sprint radius, 9 assertions; all four gadget touchpoints done in one edit this time
