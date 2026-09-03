@@ -10,6 +10,19 @@ carries on. Nothing here depends on conversation context.
 `ALL CHECKS PASSED`, and the change has a harness assertion of its own where the
 behaviour is assertable. Visual work gets a screenshot check instead.
 
+**Three traps this harness sets, all of them paid for:**
+
+1. `update()` returns early unless `mode === 'playing' && !paused`. A block that
+   gets the player caught leaves every later `drive()` running against a frozen
+   game, which reads exactly like the feature under test doing nothing. Drain
+   `meter` and set `invuln` before parking a drone next to the player, and put
+   `mode` in the failure message.
+2. Own your state, do not inherit it. `loop`, `diffIdx`, `modIdx`, `endless` and
+   `alertLvl` all survive into a block from the four hundred assertions before
+   it, and each one changes how the game behaves.
+3. The AI overrules a bare `b.state = ...` on the very next update. Re-assert it
+   every frame, or drive the real behaviour instead of forcing it.
+
 ---
 
 ## A · Items and tools
@@ -82,7 +95,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 
 ## G · Sound
 
-- [ ] G1 Drone vocalisations — a servo chirp on state change
+- [x] G1 Drone vocalisations — rising as a drone warms, falling as it cools, inverse-square volume; a drone giving up had been silent, which is the most useful thing audio can say
 - [ ] G2 Room tone per theme — a bed that changes with the floor
 - [ ] G3 Chase stinger — music that rises with the meter
 - [ ] G4 Footstep material — carpet, concrete, water, grating
@@ -153,3 +166,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F10 · two float fields replace the canvas, trail half-life 1.7s over a survey at 34s; found the afterglow had been jamming at 0.12 and never fading, 9 assertions
 - 2026-09-03 · F11 · four events, four textures (laser 30 crossings to caught's 8), directional push, reduced-motion respected on the canvas at last, 10 assertions
 - 2026-09-03 · F12 · pause becomes a briefing card, 13 assertions; one pins the control list against the item bar so the two cannot drift — **section F complete**
+- 2026-09-03 · G1 · servo chirps on every heat change, botHeat() shared with the sprite, 8 assertions; five runs, every failure in the test rather than the game
