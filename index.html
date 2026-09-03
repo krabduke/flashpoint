@@ -831,7 +831,7 @@ const MAPS = [
 let W = 0, H = 0, DPR = 1, Z = 1, TOUCH = false;
 let mode = 'menu', paused = false, time = 0;
 let mapIdx = 0, loop = 0, endless = false, runT = 0;
-let coins = 0, coinsTotal = 5, score = 0;
+let coins = 0, realCoins = 0, coinsTotal = 5, score = 0;
 let grid = null, spawnPt = { x: 0, y: 0 }, exitPt = { x: 0, y: 0 };
 let coinList = [], emitters = [], propsXY = [];
 let bots = [], noise = [], stepLog = [], panLog = [];
@@ -1084,7 +1084,15 @@ function setRain(on) {
   } else if (rainN) rainN._g.gain.value = on ? 0.028 : 0;
 }
 const sfx = {
-  pickup() { tone(980, 1400, 0.16, 0.2); tone(1400, 2100, 0.22, 0.08); },
+  /* Every coin sounded identical, so a floor gave no sense of being nearly
+     done. A pentatonic ladder has no wrong rung, and normalising it on the
+     floor's own count means the last coin of a five-coin floor and of a
+     fourteen-coin floor both land on the octave. */
+  pickup(at, r) {
+    const k = r || 1;
+    tone(760 * k, 1080 * k, 0.16, 0.2, 'sine', 0, at);
+    tone(1080 * k, 1620 * k, 0.22, 0.08, 'sine', 0, at);
+  },
   unlock() { tone(500, 500, 0.2, 0.18); tone(750, 750, 0.3, 0.16); tone(1000, 1000, 0.5, 0.14); },
   alert(at) { tone(320, 620, 0.16, 0.3, 'square', 0, at); tone(320, 620, 0.16, 0.22, 'square', AC ? AC.currentTime + 0.18 : 0, at); },
   notice(at) { tone(520, 640, 0.1, 0.1, 'triangle', 0, at); },
@@ -1315,7 +1323,7 @@ function loadMap(idx) {
     castCone(e.rays, e.x, e.y, e.ang, 0.13, 16, e.r);
   }
 
-  coinsTotal = coinList.length; coins = 0;
+  coinsTotal = coinList.length; coins = 0; realCoins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
@@ -1526,6 +1534,13 @@ let beatT = 0, beatN = 0;
 
 /* Gold is heavy and it jingles. A full run home is louder than an empty walk in,
    which is what makes the last stretch of a floor the frightening one. */
+const COIN_RUNGS = [0, 2, 4, 7, 9, 12];          /* pentatonic, plus the octave */
+function coinRatio() {
+  const span = Math.max(1, coinsTotal - 1);
+  const prog = clamp((realCoins - 1) / span, 0, 1);
+  const semi = COIN_RUNGS[Math.round(prog * (COIN_RUNGS.length - 1))];
+  return Math.pow(2, semi / 12);
+}
 const haulNoise = () => 1 + T.HAUL_NOISE * (MOD().haul || 1) * (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
 
 function makeNoise(x, y, r) { noise.push({ x, y, r, t: 0.3 }); }
@@ -1706,10 +1721,15 @@ function update(dt) {
       if (mirrorBeam && inFan(c.x, c.y, mirrorBeam.x, mirrorBeam.y, mirrorBeam.ang, T.FL_HALF, mirrorBeam.range, mirrorBeam.hits, T.FL_RAYS)
           && !inFan(c.x, c.y, player.x, player.y, player.aim, T.FL_HALF, flRange(), flHits, T.FL_RAYS)) unlock('glass');
       c.got = true; coins++;
+      /* A crate coin is a bonus and must not count toward the floor. It used to:
+         five real coins plus one from a crate hit the total and opened the exit
+         with a real coin still lying in the dark. */
+      if (!c.bonus) realCoins++;
       score += coinValue();
-      sfx.pickup(); burst(c.x, c.y, glowGoldS, 12, 150);
+      sfx.pickup(c, coinRatio());
+      burst(c.x, c.y, glowGoldS, 12, 150);
       makeNoise(c.x, c.y, T.NOISE_PICKUP);
-      if (coins >= coinsTotal) { exitOpen = true; unlockFlash = 1; sfx.unlock(); }
+      if (realCoins >= coinsTotal) { exitOpen = true; unlockFlash = 1; sfx.unlock(); }
       hud();
     }
   }
@@ -2390,7 +2410,7 @@ function nextMap() {
   if (!fSprint) unlock('quiet');
   if (!fNoticed) unlock('unseen');
   if (fEmp) unlock('emp');
-  if (coins >= coinsTotal) unlock('magpie');
+  if (realCoins >= coinsTotal) unlock('magpie');
   if (mapIdx >= 8) unlock('deep');
   stats.floors++; saveStats();
   if (!endless && !completedLevels.includes(mapIdx)) {
@@ -4187,12 +4207,12 @@ function tossCoin() {
     if (bodyBlocked(nx, ny)) break;
     tx = nx; ty = ny;
   }
-  coins--;
+  coins--; realCoins = Math.max(0, realCoins - 1);
   score = Math.max(0, score - coinValue());
   coinList.push({ x: tx, y: ty, ph: rand(0, TAU), got: false, seen: true });
   makeNoise(tx, ty, T.TOSS_NOISE);
   sfx.pickup(); burst(tx, ty, glowGoldS, 10, 130);
-  exitOpen = coins >= coinsTotal;
+  exitOpen = realCoins >= coinsTotal;
   hud();
   return true;
 }
@@ -4637,6 +4657,14 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  get realCoins() { return realCoins; },
+  coinRatioNow() { return +coinRatio().toFixed(5); },
+  coinLadder() {
+    const was = realCoins, out = [];
+    for (let i = 1; i <= coinsTotal; i++) { realCoins = i; out.push(+coinRatio().toFixed(5)); }
+    realCoins = was;
+    return out;
+  },
   get panLog() { return panLog.map(e => ({ ...e })); },
   panClear() { panLog = []; },
   panAt(x) { return +panFor(x).toFixed(4); },
@@ -4812,7 +4840,7 @@ window.__fp = {
   forceSiren() { sirenT = 5; nextSiren = 1e9; },
   forceFog() { fogT = 6; nextFog = 1e9; },
   aimStick(dx, dy) { if (sticks.R) { sticks.R.dx = dx; sticks.R.dy = dy; } },
-  clearCoins() { for (const c of coinList) if (!c.got) { c.got = true; coins++; } if (coins >= coinsTotal) { exitOpen = true; } hud(); },
+  clearCoins() { for (const c of coinList) if (!c.got) { c.got = true; coins++; if (!c.bonus) realCoins++; } if (realCoins >= coinsTotal) { exitOpen = true; } hud(); },
   /* light-gated coins */
   get coinsLit() { return coinList.filter(c => !c.got && coinLight(c) === 'lit').length; },
   get coinsDark() { return coinList.filter(c => !c.got && coinLight(c) === 'dark').length; },

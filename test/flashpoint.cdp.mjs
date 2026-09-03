@@ -3018,6 +3018,69 @@ ok('panning follows you, not the camera',
   pnl.cameraProof[0] === pnl.cameraProof[1], JSON.stringify(pnl.cameraProof));
 
 
+/* ---- the coin ladder, and the door it exposed ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const ldr = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  mapIdx = 1; loop = 0; loadMap(1); bots.length = 0; invuln = 9e9; meter = 0;
+  o.crates = crates.length;
+  /* A crate coin used to count toward the floor's requirement: take every real
+     coin but one, add a bonus, and the exit opened with gold still in the dark. */
+  breakCrate(crates[0]);
+  const real = coinList.filter(c => !c.bonus), bonus = coinList.filter(c => c.bonus);
+  for (let i = 0; i < real.length - 1; i++) { real[i].got = true; coins++; realCoins++; }
+  const scoreBefore = score;
+  bonus[0].got = true; coins++; score += coinValue();
+  o.bonusHeld = { coins, realCoins, total: coinsTotal, opens: realCoins >= coinsTotal,
+                  realLeft: coinList.filter(c => !c.bonus && !c.got).length,
+                  paid: score > scoreBefore };
+  real[real.length - 1].got = true; coins++; realCoins++;
+  o.lastReal = { coins, realCoins, opens: realCoins >= coinsTotal };
+  /* the ladder itself */
+  mapIdx = 0; loadMap(0); o.small = { n: coinsTotal, rungs: __fp.coinLadder() };
+  mapIdx = 11; loadMap(11); o.big = { n: coinsTotal, rungs: __fp.coinLadder() };
+  /* tossing a coin steps back down the ladder and re-collecting climbs again */
+  mapIdx = 0; loadMap(0);
+  realCoins = 3; coins = 3; const at3 = __fp.coinRatioNow();
+  realCoins = 2; coins = 2; const at2 = __fp.coinRatioNow();
+  o.step = { at2, at3 };
+  /* a coin's chime comes from the coin */
+  __fp.panClear(); player.x = 560; player.y = 360;
+  sfx.pickup({ x: 160, y: 360 }, 1);
+  o.panned = __fp.panLog.map(e => e.pan);
+  return JSON.stringify(o);
+})()`));
+const semis = [0, 2, 4, 7, 9, 12].map(n => +Math.pow(2, n / 12).toFixed(5));
+ok('the warehouse still has crates to test with', ldr.crates > 0, `n=${ldr.crates}`);
+/* the headline: this was a live exploit - break a crate, skip a coin, leave */
+ok('a crate coin no longer opens the exit for you',
+  ldr.bonusHeld.opens === false && ldr.bonusHeld.realLeft === 1
+  && ldr.bonusHeld.coins > ldr.bonusHeld.realCoins,
+  JSON.stringify(ldr.bonusHeld));
+ok('but it still pays and still weighs', ldr.bonusHeld.paid === true, `score rose=${ldr.bonusHeld.paid}`);
+ok('and the last real coin does open it',
+  ldr.lastReal.opens === true && ldr.lastReal.coins === ldr.lastReal.realCoins + 1,
+  JSON.stringify(ldr.lastReal));
+ok('the ladder only ever climbs',
+  ldr.small.rungs.every((v, i) => i === 0 || v >= ldr.small.rungs[i - 1])
+  && ldr.big.rungs.every((v, i) => i === 0 || v >= ldr.big.rungs[i - 1]),
+  `small=${JSON.stringify(ldr.small.rungs)}`);
+ok('it starts at the bottom and finishes on the octave whatever the floor holds',
+  ldr.small.rungs[0] === 1 && ldr.small.rungs[ldr.small.n - 1] === 2
+  && ldr.big.rungs[0] === 1 && ldr.big.rungs[ldr.big.n - 1] === 2,
+  `${ldr.small.n} coins -> ${ldr.small.rungs[ldr.small.n - 1]}, ${ldr.big.n} -> ${ldr.big.rungs[ldr.big.n - 1]}`);
+/* pentatonic: there is no rung that sounds like a mistake */
+ok('every rung is in the scale',
+  [...ldr.small.rungs, ...ldr.big.rungs].every(v => semis.includes(v)),
+  `scale=${JSON.stringify(semis)}`);
+ok('spending a coin steps back down the ladder', ldr.step.at2 < ldr.step.at3,
+  `2 coins=${ldr.step.at2} 3 coins=${ldr.step.at3}`);
+ok('the chime comes from the coin, not from your head',
+  ldr.panned.length > 0 && ldr.panned.every(v => v < -0.5), JSON.stringify(ldr.panned));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);
