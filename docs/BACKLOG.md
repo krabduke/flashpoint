@@ -74,7 +74,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] F5 Win screen — totals count up, a line saying how you did it, and the achievements that run earned
 - [x] F6 Floor transitions — the screen opens from dark with the floor's name; swap stays instant so no flow changes
 - [x] F7 Lighting falloff — one shared curve for every light: hot core, quick mid drop, long tail
-- [ ] F8 Fog rendering — volumetric rather than flat alpha
+- [x] F8 Fog rendering — 14 drifting banks tied to the beam choke; fog had no visual at all before this
 - [ ] F9 Rain — depth layers and splash
 - [ ] F10 Memory afterglow — warmer, longer, more legible
 - [ ] F11 Screen shake — tune per event, currently uniform
@@ -148,3 +148,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F5 · counted totals + run summary + earned-achievement chips; caught a regression where my own edit hid the TIME stat, 6 assertions
 - 2026-09-03 · F6 · 0.62s opening wipe on floor advance only, 7 assertions
 - 2026-09-03 · F7 · FALLOFF applied to torch, bubble, lamps, searchlights and warm wash; lamp centre 264 vs rim 65, 6 assertions
+- 2026-09-03 · F8 · fog banks roll through the room, screen brightness 67 clear vs 108 thick, 5 assertions

@@ -482,6 +482,7 @@ const T = {
   RADIO_COOL: 4.5,
   CAUGHT_HOLD: 0.72,   /* the beat between being taken and being told */
   WIPE_T: 0.62,
+  FOG_BANKS: 14, FOG_R0: 90, FOG_R1: 210, FOG_DRIFT: 12,
   /* how much of HEAR_R a drone adds to a noise's own radius */
   HEAR_BASE: 0.35, HEAR_FLOOR: 0.02, HEAR_LOOP: 0.05, WARY_HEAR: 1.2,
   /* per-drone quirks, so a patrol is not four copies of one clock */
@@ -854,6 +855,7 @@ function saveGhost() {
 let exitVertical = true;
 let caughtHold = 0;
 let wipeT = 0, wipeName = '';
+let fogBanks = [];
 let alertLvl = 0, alertCool = 0;
 /* Twelve, each one about a system this game actually has rather than a
    participation prize. Per-floor flags are what make the negative ones
@@ -1103,6 +1105,16 @@ function loadMap(idx) {
   blackoutMap = M.theme === 'ward' || !!M.blackout || !!MOD().blackout;
   sirenT = 0; nextSiren = (M.siren || MOD().siren) ? rand(8, 12) : 1e9;
   fogT = 0; flScale = 1; nextFog = M.fog ? rand(7, 12) : 1e9;
+  /* banks only exist where fog does, so nothing is drifting on a dry floor */
+  fogBanks = [];
+  if (M.fog || MOD().fog) {
+    for (let i = 0; i < T.FOG_BANKS; i++) fogBanks.push({
+      x: rand(0, T.COLS * T.TILE), y: rand(0, T.ROWS * T.TILE),
+      r: rand(T.FOG_R0, T.FOG_R1),
+      vx: rand(-T.FOG_DRIFT, T.FOG_DRIFT), vy: rand(-T.FOG_DRIFT * 0.4, T.FOG_DRIFT * 0.4),
+      ph: rand(0, TAU)
+    });
+  }
   rusty = (M.rusty || []).map(([x, y]) => ({ i: y * T.COLS + x, t: 0 }));
   cats = (M.cat || []).map(([x, y]) => ({ x: (x + .5) * T.TILE, y: (y + .5) * T.TILE, vx: 0, vy: 0, r: 6, state: 'sleep', t: rand(1, 3), ph: rand(0, TAU), face: rand(0, TAU) }));
   belts = (M.belts || []).map(b => ({ x0: b[0] * T.TILE, y0: b[1] * T.TILE, x1: (b[2] + 1) * T.TILE, y1: (b[3] + 1) * T.TILE, vx: b[4], vy: b[5] }));
@@ -1623,6 +1635,13 @@ function update(dt) {
   else { nextFog -= dt; if (nextFog <= 0) { fogT = 6; nextFog = rand(14, 20); toast('FOG BANK — BEAM DYING', 2.5); } }
   if (MOD().fog && nextFog > 1e8) nextFog = rand(6, 12);
   flScale += ((fogT > 0 ? 0.55 : 1) - flScale) * Math.min(1, dt * 1.6);
+  /* the banks drift whenever they exist, so fog rolls in rather than blinking on */
+  for (const f of fogBanks) {
+    f.x += f.vx * dt; f.y += f.vy * dt;
+    const w = T.COLS * T.TILE, h = T.ROWS * T.TILE;
+    if (f.x < -f.r) f.x = w + f.r; else if (f.x > w + f.r) f.x = -f.r;
+    if (f.y < -f.r) f.y = h + f.r; else if (f.y > h + f.r) f.y = -f.r;
+  }
 
   /* neon signs overload and flash */
   if (surging) { surging.surgeT -= dt; if (surging.surgeT <= 0) surging = null; }
@@ -2529,6 +2548,7 @@ function render() {
   drawLasers();
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
+  drawFog();
   drawParticles();
   if (mode === 'playing' || mode === 'menu') drawPlayer();
   ctx.restore();
@@ -3421,6 +3441,28 @@ function rampTint(g, rgb, peak) {
   return g;
 }
 
+/* Fog was a number that shrank your beam and a line of text. Now it is weather:
+   banks that roll through the room, thickening exactly as the beam chokes, so
+   the reason you cannot see is visible. */
+function drawFog() {
+  if (!fogBanks.length) return;
+  const dens = Math.max(0, Math.min(1, (1 - flScale) / 0.45));
+  if (dens < 0.02) return;
+  ctx.save();
+  for (const f of fogBanks) {
+    const breathe = 0.85 + 0.15 * Math.sin(time * 0.5 + f.ph);
+    const r = f.r * breathe;
+    const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+    const a = dens * 0.11;
+    g.addColorStop(0, 'rgba(196,206,224,' + a.toFixed(4) + ')');
+    g.addColorStop(0.55, 'rgba(184,196,216,' + (a * 0.55).toFixed(4) + ')');
+    g.addColorStop(1, 'rgba(176,190,212,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawFloorWipe() {
   if (wipeT <= 0) return;
   const k = 1 - wipeT / T.WIPE_T;             /* 0 just arrived, 1 fully open */
@@ -4175,6 +4217,8 @@ window.__fp = {
   get caughtHold() { return +caughtHold.toFixed(3); },
   get wipeT() { return +wipeT.toFixed(3); },
   get falloff() { return FALLOFF.map(f => f.slice()); },
+  get fogBanks() { return fogBanks.length; },
+  get fogDensity() { return +Math.max(0, Math.min(1, (1 - flScale) / 0.45)).toFixed(3); },
   get wipeName() { return wipeName; },
   get runUnlocks() { return runUnlocks.slice(); },
   get achs() { return JSON.parse(JSON.stringify(achs)); },

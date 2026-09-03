@@ -375,6 +375,57 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- fog you can see, not just feel ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const fogVis = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999; endless = false;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const dry = __fp.fogBanks;
+  mapIdx = 7; loadMap(7); hud();          /* the Fog Docks */
+  const wet = __fp.fogBanks;
+  const clearDens = __fp.fogDensity;
+  __fp.forceFog();
+  for (let i = 0; i < 90; i++) update(0.016);
+  const thickDens = __fp.fogDensity;
+  /* the banks should be moving */
+  const p0 = { x: fogBanks[0].x, y: fogBanks[0].y };
+  for (let i = 0; i < 40; i++) update(0.016);
+  const moved = Math.hypot(fogBanks[0].x - p0.x, fogBanks[0].y - p0.y);
+  return JSON.stringify({ dry, wet, clearDens, thickDens, moved: +moved.toFixed(1) });
+})()`);
+const fv = JSON.parse(fogVis);
+ok('dry floors carry no fog', fv.dry === 0, fogVis);
+ok('the docks do', fv.wet > 0, fogVis);
+ok('fog thickens as the beam chokes', fv.thickDens > fv.clearDens + 0.5, fogVis);
+ok('and the banks drift', fv.moved > 1, fogVis);
+
+/* it actually reaches the screen */
+const fogPix = await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 7; loadMap(7); hud();
+  player.x = spawnPt.x; player.y = spawnPt.y;
+  fogT = 0; flScale = 1;
+  for (let i = 0; i < 20; i++) update(0.016);
+  paused = true; render();
+  const read = () => {
+    const d = ctx.getImageData((W / 2 - 40) * DPR, (H / 2 - 40) * DPR, 80 * DPR, 80 * DPR).data;
+    let s2 = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { s2 += d[i] + d[i+1] + d[i+2]; n++; }
+    return Math.round(s2 / n);
+  };
+  const clear = read();
+  paused = false;
+  __fp.forceFog();
+  for (let i = 0; i < 90; i++) update(0.016);
+  paused = true; render();
+  const thick = read();
+  paused = false;
+  return JSON.stringify({ clear, thick, dens: __fp.fogDensity });
+})()`);
+const fp2 = JSON.parse(fogPix);
+ok('a fog bank puts something on the screen', fp2.thick > fp2.clear + 3, fogPix);
+
 /* ---- light falls off on a curve, not a line ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

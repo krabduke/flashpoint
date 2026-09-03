@@ -186,7 +186,7 @@ either. They see what their light sees, and nothing else.
 | 5 | The Museum | marble slabs, golden calm | 2 bots + **sweeping searchlights** + a fixed camera |
 | 6 | The Server Farm | cold raised panels, LED racks | 2 bots + **pulsing laser gates** — a live beam spikes detection and screams your position |
 | 7 | The Bank Vault | brass-lit vault rooms | 3 bots + **siren sweeps** — periodically every drone wakes and its cone grows |
-| 8 | The Fog Docks | rain, amber dock lamps | 3 bots + **fog banks** — your beam strangles to a candle for six seconds |
+| 8 | The Fog Docks | rain, amber dock lamps | 3 bots + **fog banks** that roll through the room — your beam strangles to a candle |
 | 9 | The CORE | red emergency gloom | 3 fast bots + blackouts + sirens + searchlights. Everything listens. |
 | 10 | The Gallery | museum marble, long halls | 3 bots + sirens + cameras + plates |
 | 11 | The Cold Store | dock amber, standing water | 3 bots + fog + flooded aisles + crates |
