@@ -481,6 +481,7 @@ const T = {
   WARY_T: 7, WARY_SWEEP: 2.1, WARY_RANGE: 1.12,
   RADIO_COOL: 4.5,
   CAUGHT_HOLD: 0.72,   /* the beat between being taken and being told */
+  WIPE_T: 0.62,
   /* how much of HEAR_R a drone adds to a noise's own radius */
   HEAR_BASE: 0.35, HEAR_FLOOR: 0.02, HEAR_LOOP: 0.05, WARY_HEAR: 1.2,
   /* per-drone quirks, so a patrol is not four copies of one clock */
@@ -852,6 +853,7 @@ function saveGhost() {
 
 let exitVertical = true;
 let caughtHold = 0;
+let wipeT = 0, wipeName = '';
 let alertLvl = 0, alertCool = 0;
 /* Twelve, each one about a system this game actually has rather than a
    participation prize. Per-floor flags are what make the negative ones
@@ -1140,6 +1142,8 @@ function loadMap(idx) {
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
   caughtHold = 0;
+  /* a wipe left over from the previous floor would darken the new one */
+  if (mode !== 'playing') wipeT = 0;
   puLens = 0; puShoe = 0; puGhost = 0;
   batt = T.BATT_MAX; beamOn = true; battDead = false;
   fSeen = false; fSprint = false; fNoticed = false; fEmp = false;
@@ -1335,6 +1339,7 @@ function makeNoise(x, y, r) { noise.push({ x, y, r, t: 0.3 }); }
 
 function update(dt) {
   time += dt;
+  if (wipeT > 0) wipeT = Math.max(0, wipeT - dt);
   if (mode === 'caught' && caughtHold > 0) {
     caughtHold = Math.max(0, caughtHold - dt);
     if (caughtHold === 0) $('caught').classList.remove('hidden');
@@ -2065,6 +2070,7 @@ function nextMap() {
   totalRunCoins += coins;
   mapIdx = (mapIdx + 1) % MAPS.length;
   if (mapIdx === 0) { loop++; pickMod(); }
+  wipeT = T.WIPE_T; wipeName = MAPS[mapIdx].name;
   loadMap(mapIdx);
   hud();
 }
@@ -2567,6 +2573,7 @@ function render() {
 
   /* screen HUD canvas bits: detection vignette + film grain + exit arrow + sticks */
   drawVignette();
+  drawFloorWipe();
   drawCaughtHold();
   ctx.globalAlpha = 0.05; ctx.globalCompositeOperation = 'overlay';
   const go = (time * 733) % 64; ctx.drawImage(grainS, -go, -go, W + 150, H + 150);
@@ -3399,6 +3406,37 @@ function drawPlayer() {
 }
 
 
+/* The floor does not cut, it opens: a shutter lifting off the new place with its
+   name on it. The swap itself already happened, so nothing about the flow moves. */
+function drawFloorWipe() {
+  if (wipeT <= 0) return;
+  const k = 1 - wipeT / T.WIPE_T;             /* 0 just arrived, 1 fully open */
+  const ease = k * k * (3 - 2 * k);
+  ctx.save();
+  /* two bands drawing back from the middle */
+  ctx.fillStyle = 'rgba(4,3,10,' + (0.96 - ease * 0.1) + ')';
+  const half = H / 2;
+  ctx.fillRect(0, 0, W, Math.max(0, half * (1 - ease)));
+  ctx.fillRect(0, half + half * ease, W, Math.max(0, half * (1 - ease)));
+  /* the name of where you have arrived, fading as the bands part */
+  const nameA = Math.min(1, (1 - ease) * 2.2);
+  if (nameA > 0.02 && wipeName) {
+    ctx.globalAlpha = nameA;
+    ctx.fillStyle = '#cfd0f2';
+    ctx.font = '700 ' + Math.round(Math.min(W, H) * 0.045) + 'px Orbitron, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(wipeName, W / 2, H / 2);
+    ctx.globalAlpha = nameA * 0.5;
+    ctx.strokeStyle = 'rgba(255,209,102,.7)'; ctx.lineWidth = 1;
+    const w = ctx.measureText(wipeName).width;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - w / 2 - 14, H / 2 + 18); ctx.lineTo(W / 2 + w / 2 + 14, H / 2 + 18);
+    ctx.stroke();
+    ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  }
+  ctx.restore();
+}
+
 function drawCaughtHold() {
   if (mode !== 'caught' || caughtHold <= 0) return;
   const k = 1 - caughtHold / T.CAUGHT_HOLD;      /* 0 at the instant, 1 as the card lands */
@@ -4122,6 +4160,8 @@ window.__fp = {
   get haulNoise() { return +haulNoise().toFixed(3); },
   get alertLvl() { return alertLvl; },
   get caughtHold() { return +caughtHold.toFixed(3); },
+  get wipeT() { return +wipeT.toFixed(3); },
+  get wipeName() { return wipeName; },
   get runUnlocks() { return runUnlocks.slice(); },
   get achs() { return JSON.parse(JSON.stringify(achs)); },
   get achCount() { return ACHS.filter(a => achs[a[0]]).length; },

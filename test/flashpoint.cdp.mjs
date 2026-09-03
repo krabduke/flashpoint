@@ -375,6 +375,35 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- floors open rather than cut ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const wipe = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999; endless = false;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const before = { t: __fp.wipeT, floor: mapIdx };
+  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+  for (let i = 0; i < 3; i++) update(0.016);
+  const justAfter = { t: __fp.wipeT, name: __fp.wipeName, floor: mapIdx };
+  for (let i = 0; i < 50; i++) update(0.016);
+  const later = { t: __fp.wipeT };
+  return JSON.stringify({ before, justAfter, later, len: T.WIPE_T });
+})()`);
+const wp = JSON.parse(wipe);
+ok('no wipe while you are just playing', wp.before.t === 0, wipe);
+ok('taking the stairs starts one', wp.justAfter.t > 0, wipe);
+ok('and it names where you have arrived', wp.justAfter.name === 'THE WAREHOUSE', wipe);
+ok('the floor has already changed underneath it', wp.justAfter.floor === wp.before.floor + 1, wipe);
+ok('and it clears itself', wp.later.t === 0, wipe);
+ok('the wipe is brief', wp.len < 1, wipe);
+
+ok('a wipe never carries into a fresh run', await evl(`(() => {
+  mode = 'playing'; wipeT = T.WIPE_T;
+  mode = 'menu';
+  loop = 0; mapIdx = 0; loadMap(0);
+  return __fp.wipeT === 0;
+})()`));
+
 /* ---- the win screen says how you did it ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

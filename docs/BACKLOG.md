@@ -72,7 +72,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] F3 Coin sprite — 7 silhouettes across 12 floors: disc, chip, vial, gem, card, ingot, ring
 - [x] F4 Caught sequence — 0.72s hold: their light floods in and the room closes down before the card lands
 - [x] F5 Win screen — totals count up, a line saying how you did it, and the achievements that run earned
-- [ ] F6 Floor transitions — a wipe rather than a hard cut
+- [x] F6 Floor transitions — the screen opens from dark with the floor's name; swap stays instant so no flow changes
 - [ ] F7 Lighting falloff — softer, less linear
 - [ ] F8 Fog rendering — volumetric rather than flat alpha
 - [ ] F9 Rain — depth layers and splash
@@ -146,3 +146,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F3 · per-theme loot shapes, same size and value; brightness asserted on lit samples, 5 assertions
 - 2026-09-03 · F4 · caughtHold ticks before update's early return; 5 assertions, plus the pre-existing card check now waits for the beat
 - 2026-09-03 · F5 · counted totals + run summary + earned-achievement chips; caught a regression where my own edit hid the TIME stat, 6 assertions
+- 2026-09-03 · F6 · 0.62s opening wipe on floor advance only, 7 assertions
