@@ -100,6 +100,14 @@
   #keyRow{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.2em;
     color:#ffd166;margin-top:5px}
   #keyRow:empty{display:none}
+  /* what you still have on this floor, while you can still lose it */
+  #cleanRow{display:flex;gap:5px;margin-top:6px;align-items:center}
+  #cleanRow:empty{display:none}
+  #cleanRow i{font-family:'Orbitron',monospace;font-style:normal;font-size:7.5px;
+    font-weight:700;letter-spacing:.16em;padding:2px 5px;border-radius:4px;
+    color:#3f3a55;border:1px solid rgba(120,110,170,.25);transition:color .3s ease,border-color .3s ease}
+  #cleanRow i.on{color:#9fe8c8;border-color:rgba(120,255,200,.45);
+    box-shadow:0 0 8px rgba(90,255,190,.16)}
   #alertRow{display:flex;gap:3px;margin-top:5px;align-items:center}
   #alertRow:empty{display:none}
   #alertRow i{width:12px;height:3px;border-radius:2px;background:rgba(255,90,90,.22)}
@@ -423,6 +431,7 @@
       <div id="battWrap"><i id="battFill"></i></div>
       <div id="flareRow"></div>
       <div id="keyRow"></div>
+      <div id="cleanRow"></div>
       <div id="alertRow"></div>
       <div id="dailyTag"></div>
       <div id="puRow"></div>
@@ -665,6 +674,9 @@ const T = {
      either met it or died trying. It opens at two thirds now, and the bonus is
      what you give up by walking out early. */
   EXIT_EARLY: 0.66,
+  /* Three ways to keep a floor clean, each already tracked and until now only
+     ever mentioned in an achievement long after the fact. */
+  CLEAN_EACH: 200, CLEAN_ALL: 400,
   /* memory: a fast bright trail over a slow faint survey. IN/OUT are per second,
      DRAW is the peak alpha each field contributes on screen. */
   GLOW_TRAIL_IN: 5.2, GLOW_TRAIL_OUT: 0.41, GLOW_TRAIL_DRAW: 0.30,
@@ -2412,6 +2424,13 @@ function updateBots(dt) {
 /* chase is hot, investigating or still wary is half, patrolling is cold. The
    sprite and the servo read the same number so they cannot drift apart. */
 function botHeat(b) { return b.state === 'chase' ? 1 : (b.state === 'invest' || b.wary > 0 ? 0.5 : 0); }
+/* One definition, read by the HUD while you play and by the payout when you
+   leave, so what you were shown and what you are paid cannot drift apart. */
+const CLEAN = [
+  { id: 'unseen', label: 'UNSEEN', held: () => !fSeen },
+  { id: 'unheard', label: 'UNHEARD', held: () => !fSprint },
+  { id: 'unlit', label: 'UNLIT', held: () => !fNoticed },
+];
 const sentryWake = () => T.SENTRY_WAKE * (1 + mapIdx * 0.035 + loop * 0.22);
 /* inverse-square-ish: full beside you, half a floor away is half as loud.
    Shared by anything positional so there is one distance model, not several. */
@@ -2762,6 +2781,16 @@ function nextMap() {
   const last = mapIdx >= MAPS.length - 1;
   /* you escaped either way; the bonus is what leaving early costs you */
   if (exitFull) score += T.CLEAR_BONUS;
+  /* and what you kept on the way through */
+  const kept = CLEAN.filter(c => c.held());
+  let cleanPay = kept.length * T.CLEAN_EACH;
+  /* the whole floor, taken without being seen, heard or noticed */
+  const ghost = kept.length === CLEAN.length && exitFull;
+  if (ghost) cleanPay += T.CLEAN_ALL;
+  if (cleanPay > 0) {
+    score += cleanPay;
+    toast((ghost ? 'GHOSTED THE FLOOR' : kept.map(c => c.label).join(' · ')) + ' — ' + cleanPay, 2.6);
+  }
   sfx.door();
   saveGhost();
   unlock('first');
@@ -5135,6 +5164,11 @@ function hud() {
   mapNameEl.textContent = (loop ? 'LOOP ' + (loop + 1) + ' · ' : '') + MAPS[mapIdx].name
     + (modIdx >= 0 && endless ? ' · ' + MODS[modIdx].name : '');
   whoEl.textContent = name || 'ANON';
+  /* the clean-floor marks, lit while you still hold them */
+  const cr = $('cleanRow');
+  if (cr) cr.innerHTML = mode === 'playing'
+    ? CLEAN.map(c => '<i class="' + (c.held() ? 'on' : '') + '">' + c.label + '</i>').join('')
+    : '';
   /* torch charge */
   const bw = $('battWrap'), bf = $('battFill');
   if (bw && bf) {
@@ -5579,6 +5613,9 @@ window.__fp = {
   resetAchs() { achs = {}; try { localStorage.setItem('flashpoint.achs', '{}'); } catch (e) {} renderAchs(); },
   unlock(id) { unlock(id); return !!achs[id]; },
   get floorFlags() { return { seen: fSeen, sprint: fSprint, noticed: fNoticed, emp: fEmp }; },
+  cleanHeld() { return CLEAN.filter(c => c.held()).map(c => c.id); },
+  cleanShown() { return [...$('cleanRow').querySelectorAll('i')].map(e => ({ label: e.textContent, on: e.classList.contains('on') })); },
+  cleanPay() { return { each: T.CLEAN_EACH, all: T.CLEAN_ALL }; },
   get trailLen() { return trail.length / 2; },
   get floorT() { return +floorT.toFixed(2); },
   get ghostLen() { return ghostPath ? ghostPath.length / 2 : 0; },

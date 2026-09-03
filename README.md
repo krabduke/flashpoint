@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Three marks you can keep or lose** — UNSEEN, UNHEARD, UNLIT sit in the
+  corner and go out one at a time as you give them away. Each is worth 200 on
+  the way out, and holding all three while taking every coin is worth 400 more.
 - **There is a safe on four of the floors** — worth 900, and it takes four and a
   half seconds of standing still while it broadcasts your position the entire
   time. Nothing needs it. That is the point.

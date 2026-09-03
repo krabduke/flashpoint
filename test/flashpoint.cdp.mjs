@@ -3916,12 +3916,16 @@ const early = JSON.parse(await evl(`(() => {
   o.atThreshold = { got: __fp.realCoins, open: __fp.exitOpen, full: __fp.exitFull,
                     tint: $('coins').classList.contains('canleave') };
   togglePause(); o.pauseEarly = $('pGoldLabel').textContent; togglePause();
+  /* K3 also pays at nextMap now, so scruff the floor first: this block is
+     measuring the CLEAR bonus, not everything the exit hands you. */
+  fSeen = true; fSprint = true; fNoticed = true;
   const b1 = score; nextMap(); o.earlyGain = score - b1;
   /* and the same floor taken clean */
   mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9;
   __fp.clearCoins(); hud();
   o.cleared = { open: __fp.exitOpen, full: __fp.exitFull, tint: $('coins').classList.contains('canleave') };
   togglePause(); o.pauseFull = $('pGoldLabel').textContent; togglePause();
+  fSeen = true; fSprint = true; fNoticed = true;
   const b2 = score; nextMap(); o.fullGain = score - b2;
   o.bonus = T.CLEAR_BONUS;
   o.mode = mode;
@@ -3945,7 +3949,7 @@ ok('the pause card names which of the three you are in',
   `${early.pauseEarly} / ${early.pauseFull}`);
 /* the whole point: you escaped either way, the bonus is what you gave up */
 ok('leaving early pays no clear bonus', early.earlyGain === 0, `gained=${early.earlyGain}`);
-ok('and taking the floor clean pays it', early.fullGain === early.bonus,
+ok('and taking every coin pays it', early.fullGain === early.bonus,
   `gained=${early.fullGain} of ${early.bonus}`);
 ok('the block measured a running game', early.mode === 'playing', early.mode);
 
@@ -4008,6 +4012,62 @@ ok('and it changes nothing about what the floor asks of you',
   saf.exitNeedAfter === saf.exitNeedBefore,
   `door still at ${saf.exitNeedAfter} of ${saf.coinsTotal}`);
 ok('the block measured a running game', saf.mode === 'playing', saf.mode);
+
+
+/* ---- keeping a floor clean, and being told while you still can ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const cln = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0; clearToast();
+  o.pay = __fp.cleanPay();
+  hud();
+  o.fresh = { held: __fp.cleanHeld(), shown: __fp.cleanShown() };
+  /* each mark goes out on its own, as you lose it */
+  fSprint = true; hud();
+  o.afterSprint = { held: __fp.cleanHeld(), lit: __fp.cleanShown().map(x => x.on) };
+  fSeen = true; hud();
+  o.afterSeen = __fp.cleanShown().map(x => x.on);
+  /* the whole floor, kept */
+  mapIdx = 0; loadMap(0); bots.length = 0; invuln = 9e9;
+  __fp.clearCoins();
+  const b1 = score; nextMap();
+  o.ghost = { gained: score - b1, want: T.CLEAR_BONUS + 3 * o.pay.each + o.pay.all };
+  /* kept clean, but walked out early: the marks pay, the two totals do not */
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9;
+  const real = coinList.filter(c => !c.bonus);
+  for (let i = 0; i < __fp.exitNeed(); i++) { const c = real.find(x => !x.got);
+    player.x = c.x; player.y = c.y; for (let k = 0; k < 3; k++) update(1 / 60); }
+  const b2 = score; nextMap();
+  o.earlyClean = { gained: score - b2, want: 3 * o.pay.each };
+  /* seen, heard and noticed: only the clear bonus */
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9;
+  __fp.clearCoins(); fSeen = true; fSprint = true; fNoticed = true;
+  const b3 = score; nextMap();
+  o.scruffy = { gained: score - b3, want: T.CLEAR_BONUS };
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+/* these were tracked all along and only ever mentioned in an achievement, long
+   after the floor they belonged to */
+ok('a fresh floor starts with all three marks lit',
+  cln.fresh.held.length === 3 && cln.fresh.shown.every(x => x.on)
+  && cln.fresh.shown.map(x => x.label).join(',') === 'UNSEEN,UNHEARD,UNLIT',
+  JSON.stringify(cln.fresh.shown.map(x => x.label)));
+ok('and each goes out on its own as you lose it',
+  JSON.stringify(cln.afterSprint.lit) === '[true,false,true]'
+  && JSON.stringify(cln.afterSeen) === '[false,false,true]',
+  `${JSON.stringify(cln.afterSprint.lit)} then ${JSON.stringify(cln.afterSeen)}`);
+ok('ghosting a whole floor pays every part of it',
+  cln.ghost.gained === cln.ghost.want, `${cln.ghost.gained} of ${cln.ghost.want}`);
+/* the marks are yours either way; the ghost bonus is not, and neither is K1's */
+ok('walking out early still pays for what you kept',
+  cln.earlyClean.gained === cln.earlyClean.want,
+  `${cln.earlyClean.gained} of ${cln.earlyClean.want}`);
+ok('and a floor you were seen, heard and noticed on pays neither',
+  cln.scruffy.gained === cln.scruffy.want, `${cln.scruffy.gained} of ${cln.scruffy.want}`);
+ok('the block measured a running game', cln.mode === 'playing', cln.mode);
 
 
 const clean = problems.length === 0;
