@@ -218,7 +218,8 @@ add bots and speed, and your best depth per device is kept.
 | Restart | `R`, or `Space` on the card | tap the button |
 
 Portrait works; landscape is the intended view. Touch devices get their own
-DPR cap and particle budgets automatically. Haptics fire where supported
+DPR cap and particle budgets automatically, rain included — it used to be
+switched off entirely on a phone, so a rainy floor arrived with no rain on it. Haptics fire where supported
 (Android) when a cone touches you and on capture.
 
 ## How it works
