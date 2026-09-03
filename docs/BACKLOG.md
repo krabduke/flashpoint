@@ -22,6 +22,14 @@ behaviour is assertable. Visual work gets a screenshot check instead.
    it, and each one changes how the game behaves.
 3. The AI overrules a bare `b.state = ...` on the very next update. Re-assert it
    every frame, or drive the real behaviour instead of forcing it.
+4. `PASS=0 FAIL=0` is not a pass. It means node never started — usually an
+   identifier collision with one of the ~140 names already in the harness. Run
+   `node --check test/flashpoint.cdp.mjs` before a three minute run, and grep
+   the name first.
+5. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+   target exponentially and never reaches it, so assert an inaudible floor
+   rather than `=== 0`, and give any rate you measure a window long enough that
+   rounding is not deciding the ratio.
 
 ---
 
@@ -97,7 +105,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 
 - [x] G1 Drone vocalisations — rising as a drone warms, falling as it cools, inverse-square volume; a drone giving up had been silent, which is the most useful thing audio can say
 - [x] G2 Room tone per theme — nine beds over hum pitch, beat rate and a filtered air layer the game never had; glides across on the stairs
-- [ ] G3 Chase stinger — music that rises with the meter
+- [x] G3 Chase stinger — a root climbing a fifth, a tritone held back until you are cornered, and the room bed ducking to make space; the bed got its own node so the duck and the theme cannot clobber each other
 - [ ] G4 Footstep material — carpet, concrete, water, grating
 - [ ] G5 Spatial panning — pan by x offset from the player
 - [ ] G6 Coin pitch ladder — rising pitch as a floor empties
@@ -168,3 +176,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F12 · pause becomes a briefing card, 13 assertions; one pins the control list against the item bar so the two cannot drift — **section F complete**
 - 2026-09-03 · G1 · servo chirps on every heat change, botHeat() shared with the sprite, 8 assertions; five runs, every failure in the test rather than the game
 - 2026-09-03 · G2 · nine room tones, server farm at 96Hz against the vault at 34Hz, 0.8s glide, 9 assertions
+- 2026-09-03 · G3 · chase swell over the heartbeat, tritone late, bed ducks to 45%, 9 assertions; the heartbeat itself is finally tested too
