@@ -2963,6 +2963,61 @@ ok('soft shoes quieten your own feet as well as theirs',
   ftm.shod.v < ftm.walk.v * 0.6 && ftm.shod.steps > 0, `${ftm.walk.v} -> ${ftm.shod.v}`);
 
 
+/* ---- sounds sit where the thing making them is ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const pnl = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 1; invuln = 9e9; meter = 0;
+  player.x = 560; player.y = 360;
+  o.hasPanner = !!(AC && AC.createStereoPanner);
+  o.curve = [-900, -420, -210, 0, 210, 420, 900].map(dx => __fp.panAt(560 + dx));
+  __fp.panClear(); sfx.crate({ x: 160, y: 360 }); o.left = __fp.panLog.map(e => e.pan);
+  __fp.panClear(); sfx.crate({ x: 960, y: 360 }); o.right = __fp.panLog.map(e => e.pan);
+  __fp.panClear(); sfx.crate({ x: 560, y: 360 }); o.onTop = __fp.panLog.map(e => e.pan);
+  /* the heartbeat, the interface and the moment you are caught are not in the
+     room with you - they should not move around the stereo field */
+  __fp.panClear(); sfx.beat(); sfx.ui(); sfx.caught(); sfx.siren(); sfx.blackout();
+  o.centred = __fp.panLog.length;
+  __fp.panClear();
+  const b = bots[0]; b.x = 120; b.y = 360;
+  sfx.servo(1, 1, 0.9, b);
+  o.droneLeft = __fp.panLog.map(e => e.pan);
+  b.x = 1000; __fp.panClear(); sfx.servo(-1, 1, 0.9, b);
+  o.droneRight = __fp.panLog.map(e => e.pan);
+  /* G1's distance curve and this share one function now */
+  o.dist = [0, 380, 1100].map(d => __fp.distVolAt(d));
+  o.servoStillMatches = [0, 380, 1100].map(d => __fp.servoVolAt(d));
+  /* the camera clamps at map edges, so screen position would put a drone in the
+     wrong ear every time you walked into a corner */
+  camNow.cx = 0; const a = __fp.panAt(160);
+  camNow.cx = 500; const c = __fp.panAt(160);
+  o.cameraProof = [a, c];
+  return JSON.stringify(o);
+})()`));
+ok('the browser gives us a stereo panner at all', pnl.hasPanner === true);
+ok('pan follows how far off to one side a thing is',
+  pnl.curve[3] === 0 && pnl.curve[2] < 0 && pnl.curve[4] > 0
+  && Math.abs(pnl.curve[2]) === Math.abs(pnl.curve[4]), JSON.stringify(pnl.curve));
+ok('and stops short of one ear entirely',
+  pnl.curve[0] === -0.85 && pnl.curve[6] === 0.85, JSON.stringify(pnl.curve));
+ok('a crate breaking to your left is on your left',
+  pnl.left.length > 0 && pnl.left.every(v => v < -0.5)
+  && pnl.right.length > 0 && pnl.right.every(v => v > 0.5),
+  `left=${JSON.stringify(pnl.left)} right=${JSON.stringify(pnl.right)}`);
+ok('one at your feet is in the middle', pnl.onTop.every(v => v === 0), JSON.stringify(pnl.onTop));
+ok('the heartbeat and the interface stay put', pnl.centred === 0, `panned=${pnl.centred}`);
+ok('a drone chirps from where it actually is',
+  pnl.droneLeft.every(v => v < -0.5) && pnl.droneRight.every(v => v > 0.5),
+  `left=${JSON.stringify(pnl.droneLeft)} right=${JSON.stringify(pnl.droneRight)}`);
+ok('there is one distance model, not one per feature',
+  JSON.stringify(pnl.dist) === JSON.stringify(pnl.servoStillMatches) && pnl.dist[0] === 1,
+  `${JSON.stringify(pnl.dist)} vs ${JSON.stringify(pnl.servoStillMatches)}`);
+ok('panning follows you, not the camera',
+  pnl.cameraProof[0] === pnl.cameraProof[1], JSON.stringify(pnl.cameraProof));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

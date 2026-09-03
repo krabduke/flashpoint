@@ -549,7 +549,7 @@ const T = {
      DRAW is the peak alpha each field contributes on screen. */
   GLOW_TRAIL_IN: 5.2, GLOW_TRAIL_OUT: 0.41, GLOW_TRAIL_DRAW: 0.30,
   GLOW_SURVEY_IN: 0.8, GLOW_SURVEY_OUT: 0.02, GLOW_SURVEY_DRAW: 0.12,
-  DARK: 0.5, SHAKE_CAP: 26, SERVO_HALF: 380, SERVO_GAP: 0.3,
+  DARK: 0.5, SHAKE_CAP: 26, SERVO_HALF: 380, SERVO_GAP: 0.3, PAN_HALF: 420, PAN_MAX: 0.85,
   STING_ON: 0.22, STING_LO: 110, STING_HI: 165, STING_V: 0.055,
   STING_TRI_ON: 0.45, STING_TRI_V: 0.03, STING_DUCK: 0.55,
 };
@@ -834,7 +834,7 @@ let mapIdx = 0, loop = 0, endless = false, runT = 0;
 let coins = 0, coinsTotal = 5, score = 0;
 let grid = null, spawnPt = { x: 0, y: 0 }, exitPt = { x: 0, y: 0 };
 let coinList = [], emitters = [], propsXY = [];
-let bots = [], noise = [], stepLog = [];
+let bots = [], noise = [], stepLog = [], panLog = [];
 let lasers = [], sirenT = 0, nextSiren = 1e9, fogT = 0, nextFog = 1e9, flScale = 1, botSpd = 1, blackoutMap = false;
 let rusty = [], cats = [], belts = [], surging = null, nextSurge = 1e9;
 let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
@@ -1038,16 +1038,30 @@ function initAudio() {
   stingB = AC.createOscillator(); stingB.type = 'triangle'; stingB.frequency.value = T.STING_LO * 1.414;
   stingA.connect(stingG); stingB.connect(stingBG); stingA.start(); stingB.start();
 }
-function tone(f1, f2, dur, vol, type, when) {
+/* Where a sound sits in the stereo field, relative to YOU rather than to the
+   screen - the camera clamps at the map edges, so screen position would put a
+   drone in the wrong ear whenever you walk into a corner. Nothing goes fully
+   into one ear: 0.85 keeps it playable on headphones. */
+function panFor(x) { return clamp((x - player.x) / T.PAN_HALF, -1, 1) * T.PAN_MAX; }
+function sinkAt(at) {
+  if (!at || !AC || !AC.createStereoPanner) return master;
+  const p = AC.createStereoPanner();
+  p.pan.value = panFor(at.x);
+  p.connect(master);
+  panLog.push({ pan: +p.pan.value.toFixed(3), x: Math.round(at.x) });
+  if (panLog.length > 32) panLog.shift();
+  return p;
+}
+function tone(f1, f2, dur, vol, type, when, at) {
   if (!AC || muted) return;
   const t = (when || AC.currentTime);
   const o = AC.createOscillator(), g = AC.createGain();
   o.type = type || 'sine'; o.frequency.setValueAtTime(Math.max(1, f1), t);
   o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t + dur);
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
+  o.connect(g); g.connect(sinkAt(at)); o.start(t); o.stop(t + dur + 0.05);
 }
-function noiseBurst(dur, vol, freq) {
+function noiseBurst(dur, vol, freq, at) {
   if (!AC || muted) return;
   const t = AC.currentTime, n = Math.floor(AC.sampleRate * dur);
   const b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0);
@@ -1055,7 +1069,7 @@ function noiseBurst(dur, vol, freq) {
   const s = AC.createBufferSource(); s.buffer = b;
   const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq || 900;
   const g = AC.createGain(); g.gain.value = vol;
-  s.connect(f); f.connect(g); g.connect(master); s.start(t);
+  s.connect(f); f.connect(g); g.connect(sinkAt(at)); s.start(t);
 }
 function setRain(on) {
   if (!AC) return;
@@ -1072,10 +1086,10 @@ function setRain(on) {
 const sfx = {
   pickup() { tone(980, 1400, 0.16, 0.2); tone(1400, 2100, 0.22, 0.08); },
   unlock() { tone(500, 500, 0.2, 0.18); tone(750, 750, 0.3, 0.16); tone(1000, 1000, 0.5, 0.14); },
-  alert() { tone(320, 620, 0.16, 0.3, 'square'); tone(320, 620, 0.16, 0.22, 'square', AC ? AC.currentTime + 0.18 : 0); },
-  notice() { tone(520, 640, 0.1, 0.1, 'triangle'); },
+  alert(at) { tone(320, 620, 0.16, 0.3, 'square', 0, at); tone(320, 620, 0.16, 0.22, 'square', AC ? AC.currentTime + 0.18 : 0, at); },
+  notice(at) { tone(520, 640, 0.1, 0.1, 'triangle', 0, at); },
   siren() { tone(480, 760, 0.4, 0.14, 'sawtooth'); tone(760, 480, 0.4, 0.12, 'sawtooth', AC ? AC.currentTime + 0.42 : 0); },
-  laser() { tone(1500, 220, 0.2, 0.2, 'square'); },
+  laser(at) { tone(1500, 220, 0.2, 0.2, 'square', 0, at); },
   step() { noiseBurst(0.05, 0.05, 420); },
   /* soft is you walking - quiet enough that it reads as your own feet rather
      than something a drone could have heard, which is exactly the difference */
@@ -1091,20 +1105,20 @@ const sfx = {
   blackout() { tone(700, 90, 0.4, 0.16, 'square'); noiseBurst(0.15, 0.1, 180); },
   door() { tone(600, 900, 0.3, 0.16); },
   beat() { tone(58, 42, 0.1, 0.25); },
-  flare() { noiseBurst(0.22, 0.22, 900); tone(420, 900, 0.3, 0.14); },
+  flare(at) { noiseBurst(0.22, 0.22, 900, at); tone(420, 900, 0.3, 0.14, 'sine', 0, at); },
   smoke() { noiseBurst(0.5, 0.12, 260); },
   splash() { noiseBurst(0.12, 0.09, 1400); tone(300, 180, 0.1, 0.05); },
-  crate() { noiseBurst(0.3, 0.3, 320); tone(180, 90, 0.24, 0.16, 'square'); },
-  emp() { tone(900, 60, 0.45, 0.22, 'square'); noiseBurst(0.3, 0.16, 140); },
-  decoy() { tone(1180, 1180, 0.05, 0.07, 'square'); },
+  crate(at) { noiseBurst(0.3, 0.3, 320, at); tone(180, 90, 0.24, 0.16, 'square', 0, at); },
+  emp(at) { tone(900, 60, 0.45, 0.22, 'square', 0, at); noiseBurst(0.3, 0.16, 140, at); },
+  decoy(at) { tone(1180, 1180, 0.05, 0.07, 'square', 0, at); },
   /* a drone's own servo, moving. Rising means it is getting interested,
      falling means it is losing you - which the game had no sound for at all. */
-  servo(dir, weight, vol) {
+  servo(dir, weight, vol, at) {
     const lo = 480, hi = lo * (1 + 1.15 * weight);
     const a = dir > 0 ? lo : hi, b = dir > 0 ? hi : lo;
-    tone(a, b, 0.07 + 0.05 * weight, 0.1 * vol, 'square');
-    tone(a * 2.01, b * 2.01, 0.05, 0.035 * vol, 'triangle');
-    noiseBurst(0.035, 0.05 * vol, 2200 + 900 * weight);
+    tone(a, b, 0.07 + 0.05 * weight, 0.1 * vol, 'square', 0, at);
+    tone(a * 2.01, b * 2.01, 0.05, 0.035 * vol, 'triangle', 0, at);
+    noiseBurst(0.035, 0.05 * vol, 2200 + 900 * weight, at);
   },
   ui() { tone(700, 900, 0.06, 0.08); }
 };
@@ -1790,7 +1804,7 @@ function update(dt) {
     const d = decoys[i];
     d.life -= dt;
     d.pulseT -= dt;
-    if (d.pulseT <= 0) { d.pulseT = T.DECOY_PULSE; makeNoise(d.x, d.y, T.DECOY_NOISE); sfx.decoy(); }
+    if (d.pulseT <= 0) { d.pulseT = T.DECOY_PULSE; makeNoise(d.x, d.y, T.DECOY_NOISE); sfx.decoy(d); }
     if (d.life <= 0) decoys.splice(i, 1);
   }
 
@@ -1853,7 +1867,7 @@ function update(dt) {
       l.zapped = true;
       meter = Math.min(1, meter + 0.45);
       makeNoise(player.x, player.y, 520);
-      sfx.laser();
+      sfx.laser({ x: player.x, y: player.y });
       redPulse = Math.max(redPulse, 0.65);
       /* you are standing on the beam, so push perpendicular to it rather than
          away from a contact point that is under your own feet */
@@ -1973,7 +1987,7 @@ function updateBots(dt) {
       b.state = 'chase'; b.stateT = 0;
       b.chaseT += dt;
       b.lastX = player.x; b.lastY = player.y;
-      if (b.eyeGlint <= 0 && b.alerted !== true) { b.alerted = true; sfx.alert(); }
+      if (b.eyeGlint <= 0 && b.alerted !== true) { b.alerted = true; sfx.alert(b); }
       /* aim at where you are heading, and do not re-path every single frame */
       b.repathT = (b.repathT || 0) - dt;
       if (fresh || b.repathT <= 0 || !b.path.length) {
@@ -1995,7 +2009,7 @@ function updateBots(dt) {
           b.state = 'invest'; b.stateT = 0;
           retarget(b, lit.x, lit.y);
           fNoticed = true;
-          if (b.eyeGlint <= 0) { b.eyeGlint = 1; sfx.notice(); }
+          if (b.eyeGlint <= 0) { b.eyeGlint = 1; sfx.notice(b); }
         }
       } else b.glow = Math.max(0, b.glow - dt * T.BEAM_FADE);
       if (b.state === 'chase') {
@@ -2079,9 +2093,9 @@ function updateBots(dt) {
     if (b.saidHeat === undefined) b.saidHeat = h;
     else if (h !== b.saidHeat && b.chirpT === 0 && mode === 'playing') {
       const d = Math.hypot(b.x - player.x, b.y - player.y);
-      const vol = servoVol(d);
+      const vol = distVol(d);
       const dir = h > b.saidHeat ? 1 : -1, weight = Math.abs(h - b.saidHeat) > 0.5 ? 1 : 0.5;
-      sfx.servo(dir, weight, vol);
+      sfx.servo(dir, weight, vol, b);
       servoLog.push({ dir, weight, vol: +vol.toFixed(3), d: Math.round(d), from: b.saidHeat, to: h, at: +time.toFixed(3) });
       if (servoLog.length > 24) servoLog.shift();
       b.saidHeat = h;
@@ -2092,8 +2106,9 @@ function updateBots(dt) {
 /* chase is hot, investigating or still wary is half, patrolling is cold. The
    sprite and the servo read the same number so they cannot drift apart. */
 function botHeat(b) { return b.state === 'chase' ? 1 : (b.state === 'invest' || b.wary > 0 ? 0.5 : 0); }
-/* inverse-square-ish: full beside you, half a floor away is half as loud */
-function servoVol(d) { const k = d / T.SERVO_HALF; return 1 / (1 + k * k); }
+/* inverse-square-ish: full beside you, half a floor away is half as loud.
+   Shared by anything positional so there is one distance model, not several. */
+function distVol(d) { const k = d / T.SERVO_HALF; return 1 / (1 + k * k); }
 /* A chasing drone gets faster the deeper you are, the more loops you've run, and
    the longer it has been on you - but never quite as fast as a sprint. */
 function chaseSpeed(b, sm) {
@@ -4094,7 +4109,7 @@ function breakCrate(cr) {
   renderMapCanvas();
   coinList.push({ x: cr.x, y: cr.y, ph: rand(0, TAU), got: false, seen: true, bonus: true });
   makeNoise(cr.x, cr.y, T.CRATE_NOISE);
-  sfx.crate();
+  sfx.crate(cr);
   burst(cr.x, cr.y, glowGoldS, 16, 190);
   addShake('crate', cr.x, cr.y);
   toast('CRATE OPEN — THAT WAS LOUD', 1.8);
@@ -4146,7 +4161,7 @@ function fireEmp() {
   empCharges--; fEmp = true;
   emps.push({ x: player.x, y: player.y, r: T.EMP_R, life: T.EMP_T });
   makeNoise(player.x, player.y, 300);
-  sfx.emp();
+  sfx.emp({ x: player.x, y: player.y });
   toast('EMP — THE GRID IS DOWN AROUND YOU', 2.4);
   hud();
   return true;
@@ -4195,7 +4210,7 @@ function throwFlare() {
   emitters.push({ x: fx, y: fy, r: T.FLARE_R, col: '#ffb347', flick: rand(0, 9),
     kind: 'flare', base: 1, life: T.FLARE_T });
   makeNoise(fx, fy, T.FLARE_NOISE);
-  sfx.flare(); burst(fx, fy, glowGoldS, 18, 210);
+  sfx.flare({ x: fx, y: fy }); burst(fx, fy, glowGoldS, 18, 210);
   hud();
   return true;
 }
@@ -4622,6 +4637,10 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  get panLog() { return panLog.map(e => ({ ...e })); },
+  panClear() { panLog = []; },
+  panAt(x) { return +panFor(x).toFixed(4); },
+  distVolAt(d) { return +distVol(d).toFixed(4); },
   get stepLog() { return stepLog.map(e => ({ ...e })); },
   stepClear() { stepLog = []; },
   surfaceAtXY(x, y) { return surfaceAt(x, y); },
@@ -4649,7 +4668,7 @@ window.__fp = {
   get servoLog() { return servoLog.map(e => ({ ...e })); },
   servoClear() { servoLog = []; },
   botHeats() { return bots.map(b => botHeat(b)); },
-  servoVolAt(d) { return +servoVol(d).toFixed(4); },
+  servoVolAt(d) { return +distVol(d).toFixed(4); },
   get botChirpT() { return bots.map(b => +(b.chirpT || 0).toFixed(2)); },
   get shakeN() { return shakes.length; },
   get shakeMag() { const o = shakeOffset(); return +Math.hypot(o.x, o.y).toFixed(3); },

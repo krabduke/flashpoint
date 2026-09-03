@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Sound comes from where the thing is** — a crate going off to your left is on
+  your left, and a drone chirps from its own position. The heartbeat, the swell
+  and the interface stay in the middle, because they are not in the room.
 - **You can hear what you are walking on** — carpet in the house, lino in the
   ward, stone in the museum, steel on the docks, a rattle over a vent grille and
   a splash through water. Walking is for your ears only: the drones still hear
