@@ -75,7 +75,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] F6 Floor transitions — the screen opens from dark with the floor's name; swap stays instant so no flow changes
 - [x] F7 Lighting falloff — one shared curve for every light: hot core, quick mid drop, long tail
 - [x] F8 Fog rendering — 14 drifting banks tied to the beam choke; fog had no visual at all before this
-- [ ] F9 Rain — depth layers and splash
+- [x] F9 Rain — three depth bands, splashes where drops land, real-time motion, and it now runs on touch
 - [ ] F10 Memory afterglow — warmer, longer, more legible
 - [ ] F11 Screen shake — tune per event, currently uniform
 - [ ] F12 Pause screen — currently bare
@@ -149,3 +149,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F6 · 0.62s opening wipe on floor advance only, 7 assertions
 - 2026-09-03 · F7 · FALLOFF applied to torch, bubble, lamps, searchlights and warm wash; lamp centre 264 vs rim 65, 6 assertions
 - 2026-09-03 · F8 · fog banks roll through the room, screen brightness 67 clear vs 108 thick, 5 assertions
+- 2026-09-03 · F9 · 96 drops across 3 bands, splash rings, fixed a frame-rate-dependent 0.03 step, 7 assertions

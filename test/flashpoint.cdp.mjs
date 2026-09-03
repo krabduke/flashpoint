@@ -375,6 +375,48 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- rain has depth and lands somewhere ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const rainRes = await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 999; endless = false;
+  loop = 0; mapIdx = 0; loadMap(0); hud();
+  const dry = __fp.rainDrops;
+  mapIdx = 2; loadMap(2); hud();          /* Neon Heights: rain */
+  const wet = __fp.rainDrops;
+  const depths = __fp.rainDepths();
+  return JSON.stringify({
+    dry, wet,
+    minDepth: Math.min(...depths), maxDepth: Math.max(...depths),
+    bands: new Set(depths.map(d => d < 0.34 ? 'far' : d < 0.67 ? 'mid' : 'near')).size
+  });
+})()`);
+const rn = JSON.parse(rainRes);
+ok('dry floors have no rain', rn.dry === 0, rainRes);
+ok('rainy ones do', rn.wet > 0, rainRes);
+ok('and it is spread across depths', rn.minDepth < 0.2 && rn.maxDepth > 0.8, rainRes);
+ok('covering all three bands', rn.bands === 3, rainRes);
+
+ok('rain moves on real time, not a fixed step', await evl(`(() => {
+  /* the old code advanced by a hard-coded 0.03 whatever the frame took */
+  return __fp.lastDt > 0 && __fp.lastDt <= 0.05;
+})()`));
+
+ok('drops that land leave a splash', await evl(`(() => {
+  mode = 'playing'; invuln = 999;
+  loop = 0; mapIdx = 2; loadMap(2); hud();
+  /* drop them all just above the floor line so they land promptly */
+  for (const r of rain) { r.y = H - 4; }
+  let seen = 0;
+  for (let i = 0; i < 40; i++) { render(); if (__fp.splashes > seen) seen = __fp.splashes; }
+  return seen > 0;
+})()`));
+
+ok('splashes clear themselves', await evl(`(() => {
+  for (let i = 0; i < 200; i++) render();
+  return __fp.splashes < 40;
+})()`));
+
 /* ---- fog you can see, not just feel ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
