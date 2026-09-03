@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **You pick what you take in** — three of the eight before a run, rather than
+  being handed the same four every time. Everything else still has to be found
+  on the floor.
 - **A jammer, on J** — the EMP takes their sight in a radius; this takes their
   hearing. Crack a safe inside one and the screaming reaches nobody. It will not
   stop a listener feeling you through the floor, though.

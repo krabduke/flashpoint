@@ -219,6 +219,26 @@
   .stat{display:flex;flex-direction:column;gap:5px;align-items:center}
   .stat b{font-family:'Orbitron',monospace;font-size:clamp(20px,5vw,26px);font-weight:900;color:#eef0ff;font-variant-numeric:tabular-nums}
   .stat span{font-size:9px;letter-spacing:.26em;color:#5e5679}
+  /* ---- loadout ---- */
+  #kitPanel{width:100%;max-width:430px;margin:2px auto 0}
+  #kitGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  .kitchip{
+    pointer-events:auto;cursor:pointer;-webkit-appearance:none;appearance:none;
+    display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 3px 6px;
+    border-radius:9px;background:rgba(18,13,38,.72);border:1px solid rgba(120,110,170,.22);
+    font-family:'Orbitron',monospace;color:#5b5478;
+    transition:border-color .16s ease,color .16s ease,background .16s ease;
+  }
+  .kitchip b{font-size:8px;font-weight:700;letter-spacing:.12em}
+  .kitchip s{text-decoration:none;font-size:7px;letter-spacing:.14em;color:#443e5e}
+  .kitchip:hover{border-color:rgba(160,150,220,.55);color:#a79ecc}
+  .kitchip.on{color:#ffe9a8;border-color:rgba(255,209,102,.55);
+    background:linear-gradient(180deg,rgba(58,42,16,.6),rgba(24,16,42,.7));
+    box-shadow:0 0 12px rgba(255,190,80,.18)}
+  .kitchip.on s{color:#c8a86a}
+  .kitchip:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
+  #kitCount{color:#ffd166}
+
   /* ---- settings ---- */
   #settingsOv{z-index:8}
   .setcard{gap:0;min-width:min(390px,86vw)}
@@ -478,6 +498,10 @@
       <dl id="statRow"></dl>
       <div id="achGrid"></div>
     </div>
+    <div id="kitPanel">
+      <p class="floor-eyebrow">What you take in &mdash; <span id="kitCount">0/3</span></p>
+      <div id="kitGrid" role="group" aria-label="Loadout"></div>
+    </div>
     <div class="namerow">
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
     </div>
@@ -667,6 +691,7 @@ const T = {
   /* the kit you start a run with, and the most you can carry of each */
   /* water: you cannot cross a puddle quietly, not even in soft shoes */
   WATER_MULT: 1.4, WATER_STEP: 0.34, WALK_STEP: 0.44,
+  LOADOUT_MAX: 3,
   KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, wire: 1, hush: 1, jam: 0 },
   CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, wire: 3, hush: 2, jam: 2 },
   /* The EMP's opposite number. That one takes their sight away in a radius;
@@ -1171,6 +1196,28 @@ try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
 /* Settings were scattered: difficulty was a button on the menu, volume did not
    exist at all beyond mute, and reduced motion was read straight off the media
    query with no way to disagree with it. */
+/* One list of what you can carry. The item bar and the pause reference remain
+   their own markup, so an assertion checks all three agree rather than a
+   refactor putting the lot at risk. */
+const GADGETS = [
+  { id: 'flare', label: 'FLARE',  key: 'Q', btn: 'itFlare' },
+  { id: 'smoke', label: 'SMOKE',  key: 'X', btn: 'itSmoke' },
+  { id: 'emp',   label: 'EMP',    key: 'C', btn: 'itEmp' },
+  { id: 'decoy', label: 'DECOY',  key: 'V', btn: 'itDecoy' },
+  { id: 'mag',   label: 'MAGNET', key: 'G', btn: 'itMag' },
+  { id: 'wire',  label: 'WIRE',   key: 'T', btn: 'itWire' },
+  { id: 'hush',  label: 'MUFFLE', key: 'B', btn: 'itHush' },
+  { id: 'jam',   label: 'JAMMER', key: 'J', btn: 'itJam' },
+];
+let loadout = (() => {
+  try {
+    const v = JSON.parse(localStorage.getItem('flashpoint.loadout') || 'null');
+    if (Array.isArray(v)) { const ok = v.filter(id => GADGETS.some(g => g.id === id)); if (ok.length) return ok.slice(0, 3); }
+  } catch (e) {}
+  return ['flare', 'smoke', 'wire'];
+})();
+function saveLoadout() { try { localStorage.setItem('flashpoint.loadout', JSON.stringify(loadout)); } catch (e) {} }
+
 const SET0 = { vol: 0.55, motion: 'auto', minimap: true, cb: false };
 const colourblind = () => settings.cb === true;
 let settings = (() => {
@@ -4812,15 +4859,18 @@ function resetKit() {
   runUnlocks = [];
   const k = D().kit;
   if (dailyOn) seedDaily();   /* same day, same building, every time */
-  const kv = (n) => Math.max(0, n + k);
-  flares = kv(T.KIT.flare);
-  smokePellets = kv(T.KIT.smoke);
-  empCharges = Math.max(0, T.KIT.emp + Math.max(0, k));
-  decoyCharges = Math.max(0, T.KIT.decoy + Math.max(0, k));
-  wireCharges = kv(T.KIT.wire);
-  hushCharges = kv(T.KIT.hush);
-  jamCharges = Math.max(0, T.KIT.jam + Math.max(0, k));
-  magCharges = Math.max(0, T.KIT.mag + Math.max(0, k));
+  /* You used to be handed the same four every run, which left half the kit as
+     something that only ever turned up as litter. You bring what you picked;
+     everything else still has to be found on the floor. */
+  const kv = (id) => Math.max(0, (loadout.includes(id) ? 1 : 0) + k);
+  flares = kv('flare');
+  smokePellets = kv('smoke');
+  empCharges = kv('emp');
+  decoyCharges = kv('decoy');
+  wireCharges = kv('wire');
+  hushCharges = kv('hush');
+  jamCharges = kv('jam');
+  magCharges = kv('mag');
 }
 
 const coinValue = () => Math.round((MOD().coin || 1) * D().score * T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
@@ -5110,6 +5160,30 @@ function renderAchs() {
   if (c) c.textContent = got + ' / ' + ACHS.length + ' UNLOCKED';
 }
 
+function renderKit() {
+  const g = $('kitGrid');
+  if (!g) return;
+  g.innerHTML = GADGETS.map(x =>
+    '<button class="kitchip' + (loadout.includes(x.id) ? ' on' : '') + '" type="button" data-kit="' + x.id + '">'
+    + '<b>' + x.label + '</b><s>' + x.key + '</s></button>').join('');
+  const c = $('kitCount');
+  if (c) c.textContent = loadout.length + '/' + T.LOADOUT_MAX;
+}
+function toggleKit(id) {
+  if (!GADGETS.some(x => x.id === id)) return false;
+  const i = loadout.indexOf(id);
+  if (i >= 0) {
+    if (loadout.length <= 1) { sfx.ui(); return false; }   /* take something */
+    loadout.splice(i, 1);
+  } else {
+    /* the newest choice pushes out the oldest, so a full grid never dead-ends */
+    if (loadout.length >= T.LOADOUT_MAX) loadout.shift();
+    loadout.push(id);
+  }
+  saveLoadout(); renderKit(); sfx.ui();
+  return true;
+}
+
 function renderDiff() {
   const b = $('diffBtn');
   if (!b) return;
@@ -5228,6 +5302,7 @@ function toMenu() {
   renderDaily();
   renderAchs();
   renderDiff();
+  renderKit();
 }
 /* R starts a whole new run, not the floor again - label it for what it does */
 const CONTROLS = [
@@ -5483,6 +5558,10 @@ $('cbSeg').addEventListener('click', e => {
   settings.cb = b.dataset.cb === 'on';
   saveSettings(); renderSettings(); sfx.ui();
 });
+$('kitGrid').addEventListener('click', e => {
+  const b = e.target.closest('button[data-kit]');
+  if (b) toggleKit(b.dataset.kit);
+});
 $('miniSeg').addEventListener('click', e => {
   const b = e.target.closest('button[data-mini]');
   if (!b) return;
@@ -5549,6 +5628,7 @@ renderStats();
 renderDaily();
 renderAchs();
 renderDiff();
+renderKit();
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
 
 let last = performance.now();
@@ -5568,6 +5648,13 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  gadgets() { return GADGETS.map(g => ({ ...g })); },
+  get loadout() { return loadout.slice(); },
+  setLoadout(ids) { loadout = ids.filter(id => GADGETS.some(g => g.id === id)).slice(0, T.LOADOUT_MAX); saveLoadout(); renderKit(); return loadout.slice(); },
+  toggleKitNow(id) { return toggleKit(id); },
+  kitShown() { return [...$('kitGrid').querySelectorAll('.kitchip')].map(e => ({ id: e.dataset.kit, on: e.classList.contains('on') })); },
+  charges() { return { flare: flares, smoke: smokePellets, emp: empCharges, decoy: decoyCharges,
+    mag: magCharges, wire: wireCharges, hush: hushCharges, jam: jamCharges }; },
   botKinds() { return bots.map(b => b.kind); },
   listenerCount() { return bots.filter(b => b.kind === 'listen').length; },
   sentryCount() { return bots.filter(b => b.kind === 'sentry').length; },

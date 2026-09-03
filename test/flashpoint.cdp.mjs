@@ -4144,6 +4144,8 @@ await sleep(2400);
 const hsh = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  /* N1 made the kit a choice, so a block about the muffle has to pack one */
+  __fp.setLoadout(['hush', 'flare', 'wire']);
   startGame(); mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; clearToast();
   o.charges = __fp.hushCharges;
   coins = 0; o.empty = __fp.haulNoiseNow();
@@ -4168,10 +4170,11 @@ const hsh = JSON.parse(await evl(`(() => {
   togglePause();
   o.inControls = [...$('pKeys').querySelectorAll('.key')].map(e => e.textContent.trim()).includes('B');
   togglePause();
+  __fp.setLoadout(['flare', 'smoke', 'wire']);
   o.mode = mode;
   return JSON.stringify(o);
 })()`));
-ok('you set out with one', hsh.charges === 1 && hsh.used === true, `charges=${hsh.charges}`);
+ok('you set out with one you packed', hsh.charges === 1 && hsh.used === true, `charges=${hsh.charges}`);
 ok('with empty pockets there is nothing for it to buy back', hsh.empty === 1, `haul=${hsh.empty}`);
 /* D2 made a full haul 1.55x louder, which is what makes the walk back tense */
 ok('a full haul is markedly louder to carry', hsh.loaded > 1.5, `haul=${hsh.loaded}`);
@@ -4278,6 +4281,63 @@ ok('which is what makes it the answer to a safe',
   `4.6s of screaming reached ears ${jam.safeHeardBy} times jammed against ${jam.safeHeardBare} not`);
 ok('it lapses', jam.lapsed.jams === 0 && jam.lapsed.anyJammed === false, JSON.stringify(jam.lapsed));
 ok('the block measured a running game', jam.mode === 'playing', jam.mode);
+
+
+/* ---- the loadout: choosing what you carry ---- */
+await send('Page.navigate', { url: FILE + '?name=TESTY' });
+await sleep(2400);
+const kit = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  o.gadgets = __fp.gadgets().map(g => g.id);
+  o.max = T.LOADOUT_MAX;
+  /* three lists describe the kit: GADGETS, T.KIT and the item bar markup */
+  o.missingFromKit = o.gadgets.filter(id => !(id in T.KIT));
+  o.orphanInKit = Object.keys(T.KIT).filter(id => !o.gadgets.includes(id));
+  o.missingButtons = __fp.gadgets().filter(g => !document.getElementById(g.btn)).map(g => g.id);
+  /* and the pause reference has to name the same keys */
+  const ctlKeys = CONTROLS.map(c => c[1][0]);
+  o.keysNotInControls = __fp.gadgets().filter(g => !ctlKeys.includes(g.key)).map(g => g.id);
+  /* you start with what you picked, and nothing else */
+  __fp.setLoadout(['jam', 'decoy', 'mag']);
+  o.chosen = __fp.loadout;
+  o.lit = __fp.kitShown().filter(x => x.on).map(x => x.id);
+  startGame();
+  o.gotChosen = __fp.charges();
+  toMenu(); __fp.setLoadout(['flare', 'smoke', 'wire']); startGame();
+  o.gotDefault = __fp.charges();
+  /* a fourth pick pushes the oldest out rather than refusing */
+  toMenu(); __fp.setLoadout(['flare']);
+  __fp.toggleKitNow('smoke'); __fp.toggleKitNow('emp'); __fp.toggleKitNow('jam');
+  o.pushedOut = __fp.loadout;
+  /* and you cannot walk in with nothing */
+  __fp.setLoadout(['flare']);
+  o.lastOne = { removed: __fp.toggleKitNow('flare'), loadout: __fp.loadout };
+  /* the choice survives a reload */
+  __fp.setLoadout(['emp', 'hush']);
+  o.stored = JSON.parse(localStorage.getItem('flashpoint.loadout') || '[]');
+  __fp.setLoadout(['flare', 'smoke', 'wire']);
+  return JSON.stringify(o);
+})()`));
+const only = (c, ids) => Object.entries(c).every(([k, v]) => ids.includes(k) ? v === 1 : v === 0);
+ok('all eight gadgets are described in one place', kit.gadgets.length === 8 && kit.max === 3,
+  `${kit.gadgets.length} gadgets, pick ${kit.max}`);
+/* GADGETS, T.KIT, the item bar and the pause reference all describe this kit */
+ok('and the other three lists agree with it',
+  kit.missingFromKit.length === 0 && kit.orphanInKit.length === 0
+  && kit.missingButtons.length === 0 && kit.keysNotInControls.length === 0,
+  `kit=${JSON.stringify(kit.missingFromKit)} orphan=${JSON.stringify(kit.orphanInKit)} btns=${JSON.stringify(kit.missingButtons)} ctl=${JSON.stringify(kit.keysNotInControls)}`);
+/* the same four used to be handed over every run, leaving half the kit as litter */
+ok('you set out with exactly what you picked',
+  only(kit.gotChosen, ['jam', 'decoy', 'mag']), JSON.stringify(kit.gotChosen));
+ok('and a different pick gives a different run',
+  only(kit.gotDefault, ['flare', 'smoke', 'wire']), JSON.stringify(kit.gotDefault));
+ok('the grid is lit to match', kit.lit.sort().join(',') === 'decoy,jam,mag', JSON.stringify(kit.lit));
+ok('a fourth choice pushes the oldest out instead of refusing',
+  kit.pushedOut.length === 3 && !kit.pushedOut.includes('flare'), JSON.stringify(kit.pushedOut));
+ok('but you can never walk in carrying nothing',
+  kit.lastOne.removed === false && kit.lastOne.loadout.length === 1, JSON.stringify(kit.lastOne));
+ok('and the choice is remembered', kit.stored.join(',') === 'emp,hush', JSON.stringify(kit.stored));
 
 
 const clean = problems.length === 0;

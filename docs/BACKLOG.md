@@ -265,6 +265,34 @@ written.
 
 ---
 
+# S · Mobile, properly
+
+Asked directly whether it works on a phone, and measured rather than answered.
+It does not. Rendered at 390x844 with real DPR and touch emulation:
+
+- **The map fills 40% of the screen.** `Z = min(W,H)/620` gives 0.629 on a phone,
+  so the visible world is 620x1342 while the map is 720 tall — it sits in a band
+  at the top with 390px of dead blue beneath it.
+- **The item bar runs off the right edge.** It starts at x=251 and is 196 wide on
+  a 390 viewport, so COIN, MAGNET and everything after are unreachable.
+- **Every item button is 46x20.** Ten of them, all under the 44px touch minimum.
+- **The left HUD column is clipped**, the alert row cut off mid-word.
+- **The tutorial says "WASD TO MOVE · THE MOUSE AIMS YOUR BEAM"** on a touch
+  device.
+- **The start screen overflows**: 886px of content in an 844px viewport.
+
+- [ ] S1 Fill the screen — zoom so the map covers the viewport in either
+      orientation, without changing desktop
+- [ ] S2 The bar shows what you carry — N1 means you hold three gadgets, not
+      nine, so stop drawing buttons for things you have none of
+- [ ] S3 Touch targets that can be hit — 44px minimum on anything tappable
+- [ ] S4 The HUD fits the width it has
+- [ ] S5 Say the right thing on a phone — the tutorial and any copy naming keys
+- [ ] S6 The menu fits, or scrolls like it means to
+- [ ] S7 A mobile block in the harness, so this cannot rot again
+
+---
+
 ## Log
 
 Append one line per completed item: `date · id · commit · note`.
