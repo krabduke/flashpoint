@@ -77,7 +77,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] F8 Fog rendering — 14 drifting banks tied to the beam choke; fog had no visual at all before this
 - [x] F9 Rain — three depth bands, splashes where drops land, real-time motion, and it now runs on touch
 - [x] F10 Memory afterglow — a fast warm trail over a slow amber survey; the old one froze at alpha 0.12 forever because 8-bit canvas alpha cannot take the last step down
-- [ ] F11 Screen shake — tune per event, currently uniform
+- [x] F11 Screen shake — per-event amplitude, frequency, decay and push direction; found the caught shake never decayed at all because the decay sat behind update()'s early return
 - [ ] F12 Pause screen — currently bare
 
 ## G · Sound
@@ -151,3 +151,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F8 · fog banks roll through the room, screen brightness 67 clear vs 108 thick, 5 assertions
 - 2026-09-03 · F9 · 96 drops across 3 bands, splash rings, fixed a frame-rate-dependent 0.03 step, 7 assertions
 - 2026-09-03 · F10 · two float fields replace the canvas, trail half-life 1.7s over a survey at 34s; found the afterglow had been jamming at 0.12 and never fading, 9 assertions
+- 2026-09-03 · F11 · four events, four textures (laser 30 crossings to caught's 8), directional push, reduced-motion respected on the canvas at last, 10 assertions
