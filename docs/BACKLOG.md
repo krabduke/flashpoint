@@ -45,7 +45,11 @@ behaviour is assertable. Visual work gets a screenshot check instead.
    the counts, and wrap a long evaluate in try/catch returning
    `e.message + e.stack.split('\n')[1]` — that named the file and line in one
    run instead of a bisect.
-9. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+9. Per-floor arrays must be cleared BEFORE the tile loop that fills them.
+   `safes = []` sat with the other resets further down `loadMap` and wiped every
+   safe the tiles had just created — which reads exactly like the feature not
+   working. Check where a new array's reset lands relative to line ~1426.
+10. Web Audio does not settle where you think. `setTargetAtTime` approaches its
    target exponentially and never reaches it, so assert an inaudible floor
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
@@ -179,7 +183,7 @@ only to attract something that hunts by sight.
 - [x] K1 The exit opens early at a price — the door unlocks at two thirds and the
       clear bonus is what you forfeit by walking out. Asserted that every floor
       leaves something on the table, since ceil(n*0.66)==n for tiny floors.
-- [ ] K2 `$` safe — a big score for a long, loud crack
+- [x] K2 `$` safe — 900 for 4.6s of standing still while it broadcasts your position every half second; optional, and asserted not to change what the floor asks
 - [ ] K3 Clean-floor bonus — unseen, unheard, every coin: say so and pay for it
 
 ## L · More to carry
@@ -269,3 +273,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · J4 · units spread across all twelve floors, glint and tutorial fixed for coneless units, empty route guarded against taking the frame loop down, 9 assertions
 - 2026-09-03 · J5 · listeners call drones in on a 6.5s cooldown without raising the building, 8 assertions — **section J complete**
 - 2026-09-03 · K1 · door at two thirds, clear bonus forfeited by leaving early, amber counter and pause label as tells, 8 assertions
+- 2026-09-03 · K2 · safes on four floors, loud throughout, flinch slips and leaving resets, 9 assertions; placement now runs validateMaps' own flood fill before accepting a tile
