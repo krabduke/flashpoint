@@ -78,7 +78,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] F9 Rain — three depth bands, splashes where drops land, real-time motion, and it now runs on touch
 - [x] F10 Memory afterglow — a fast warm trail over a slow amber survey; the old one froze at alpha 0.12 forever because 8-bit canvas alpha cannot take the last step down
 - [x] F11 Screen shake — per-event amplitude, frequency, decay and push direction; found the caught shake never decayed at all because the decay sat behind update()'s early return
-- [ ] F12 Pause screen — currently bare
+- [x] F12 Pause screen — run state, torch, alert, this floor's hazards and a full control reference; RESUME outranks ABANDON now instead of matching it
 
 ## G · Sound
 
@@ -152,3 +152,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · F9 · 96 drops across 3 bands, splash rings, fixed a frame-rate-dependent 0.03 step, 7 assertions
 - 2026-09-03 · F10 · two float fields replace the canvas, trail half-life 1.7s over a survey at 34s; found the afterglow had been jamming at 0.12 and never fading, 9 assertions
 - 2026-09-03 · F11 · four events, four textures (laser 30 crossings to caught's 8), directional push, reduced-motion respected on the canvas at last, 10 assertions
+- 2026-09-03 · F12 · pause becomes a briefing card, 13 assertions; one pins the control list against the item bar so the two cannot drift — **section F complete**
