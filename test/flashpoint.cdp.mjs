@@ -3950,6 +3950,66 @@ ok('and taking the floor clean pays it', early.fullGain === early.bonus,
 ok('the block measured a running game', early.mode === 'playing', early.mode);
 
 
+/* ---- the safe: a long loud crack for a big number ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const saf = JSON.parse(await evl(`(() => {
+  const o = { valid: __fp.mapCheck, perFloor: [] };
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  for (let i = 0; i < MAPS.length; i++) { mapIdx = i; loadMap(i); o.perFloor.push(__fp.safeCount()); }
+  mapIdx = 6; loop = 0; loadMap(6); bots.length = 0; invuln = 9e9; meter = 0; clearToast();
+  o.need = __fp.safeNeed();
+  o.exitNeedBefore = __fp.exitNeed(); o.coinsTotal = coinsTotal;
+  const f = __fp.safeState()[0];
+  player.x = f.x - 30; player.y = f.y; noise = [];
+  let heard = 0;
+  const hold = n => { for (let i = 0; i < n; i++) { update(1 / 60); heard = Math.max(heard, noise.length); } };
+  hold(60);
+  o.partway = { t: __fp.safeT, cracked: __fp.safeState()[0].cracked };
+  o.loudWhileWorking = heard > 0;
+  /* a flinch inside the radius slips it; walking off resets it */
+  const was = __fp.safeT;
+  for (let i = 0; i < 6; i++) { keys.left = true; update(1 / 60); }
+  const slipped = __fp.safeT;
+  for (let i = 0; i < 40; i++) { keys.left = true; update(1 / 60); }
+  keys.left = false;
+  o.flinch = { was, slipped, gone: __fp.safeT, radius: T.SAFE_R };
+  /* back to it and see it through */
+  player.x = f.x - 30; player.y = f.y;
+  const before = score;
+  hold(400);
+  o.done = { cracked: __fp.safeState()[0].cracked, gained: score - before, worth: T.SAFE_SCORE };
+  const after = score; hold(150);
+  o.again = score - after;
+  o.exitNeedAfter = __fp.exitNeed();
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+const withSafes = saf.perFloor.filter(n => n > 0).length;
+ok('the maps still validate with a safe bolted into them', saf.valid === 'ok', saf.valid);
+ok('a few floors have one, and the early ones do not',
+  withSafes === 4 && saf.perFloor.slice(0, 4).every(n => n === 0),
+  JSON.stringify(saf.perFloor));
+ok('it takes real time standing at it',
+  saf.need > 3 && saf.partway.t > 0.8 && saf.partway.cracked === false,
+  `${saf.partway.t}s of ${saf.need}s`);
+/* the whole cost of it: you are making noise the entire time you are working */
+ok('and it is loud the whole way, not just at the end', saf.loudWhileWorking === true);
+ok('a flinch loses ground rather than everything',
+  saf.flinch.slipped < saf.flinch.was && saf.flinch.slipped > 0,
+  `${saf.flinch.was} -> ${saf.flinch.slipped}`);
+ok('but walking away from it starts again', saf.flinch.gone === 0,
+  `left the ${saf.flinch.radius}px radius -> ${saf.flinch.gone}`);
+ok('cracking it pays, once',
+  saf.done.cracked === true && saf.done.gained === saf.done.worth && saf.again === 0,
+  `gained=${saf.done.gained} then ${saf.again}`);
+/* it is a choice to weigh against leaving, so it must not become an obligation */
+ok('and it changes nothing about what the floor asks of you',
+  saf.exitNeedAfter === saf.exitNeedBefore,
+  `door still at ${saf.exitNeedAfter} of ${saf.coinsTotal}`);
+ok('the block measured a running game', saf.mode === 'playing', saf.mode);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

@@ -631,6 +631,9 @@ const T = {
   MAG_N: 1, MAG_T: 8, MAG_R: 96, MAG_PULL: 132,
   /* doors: a keycard is the fast way through, picking is the exposed way */
   PICK_T: 1.5, DOOR_R: 40, KEY_R: 22, DOOR_NOISE: 250,
+  /* The safe is the lockpick's verb held down for three times as long, and it
+     screams the whole way. Nothing on the floor requires it. */
+  SAFE_T: 4.6, SAFE_R: 46, SAFE_SCORE: 900, SAFE_NOISE: 640, SAFE_TICK: 0.5,
   FLANK_R: 2.6,   /* tiles out from you that a radioed drone aims for */
   SEARCH_PTS: 5, SEARCH_R0: 1.6, SEARCH_RSTEP: 1.3, SEARCH_T: 9,
   PEEK_T: 1.25, PEEK_COOL: 5.5, PEEK_ARC: 1.15,
@@ -799,7 +802,7 @@ const MAPS = [
     '#....####..####..####c.....#',
     '#....####C.####..####......#',
     '#....####..M###..####......#',
-    '#...m.........!R...........#',
+    '#...m.........!R.$.........#',
     '#....####..####..####......#',
     '#....####..####..####..S...#',
     '#.c..####c.####.c####....c.#',
@@ -836,7 +839,7 @@ const MAPS = [
   ], routes: [[[3,1],[24,1],[24,4],[3,4],[3,1]],[[3,8],[24,8],[24,12],[3,12],[3,8]],[[3,16],[24,16],[24,13],[15,13],[15,16],[3,16]]] },
   { name: 'THE BANK VAULT', depth: 'BANK', theme: 'bank', coins: 10, bots: 3, spd: 1.1, siren: true, rows: [
     '############################',
-    '#.P............!...........#',
+    '#.P............!.....$.....#',
     '#.#######..#######..######.#',
     '#.#....c#..#....c#..#...c#.#',
     '#.#.....#..#.KI..#..#....#.#',
@@ -891,7 +894,7 @@ const MAPS = [
     '#...####............###M...#',
     '#...####....O.......####...#',
     '#...####............####..c#',
-    '#c........c..S....c..!....E#',
+    '#c....$...c..S....c..!....E#',
     '############################'
   ], routes: [[[1,1],[26,1],[26,16],[1,16],[1,1]],[[9,5],[18,5],[18,12],[9,12],[9,5]],[[4,8],[4,16],[13,16],[13,12],[8,12],[8,8],[4,8]]] },
   { name: 'THE GALLERY', depth: 'GALLERY', theme: 'museum', coins: 12, bots: 3, spd: 1.28, siren: true, rows: [
@@ -943,7 +946,7 @@ const MAPS = [
     '#.....####.##.####.#########',
     '#.....##.....C####B#########',
     '########......##...L.#######',
-    '########.......#.....#######',
+    '########......$#.....#######',
     '########....C..#....c##.c..#',
     '########.!..c.!#.....##....#',
     '#c....#####VM..#G######....#',
@@ -978,6 +981,7 @@ let emps = [], empCharges = 1;
 let decoys = [], decoyCharges = 1;
 let magT = 0, magCharges = 1;
 let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
+let safes = [], safeT = 0, safeOn = null, safeTick = 0;
 let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
 let waterAt = new Uint8Array(T.COLS * T.ROWS);
@@ -1390,7 +1394,7 @@ function loadMap(idx) {
   mirrors = []; mirrorBeam = null;
   crates = []; crateT = 0; crateOn = null;
   ventAt = new Uint8Array(T.COLS * T.ROWS);
-  listenPts = []; sentryPts = [];
+  listenPts = []; sentryPts = []; safes = [];   /* before the tile loop fills them, not after */
   glassAt = new Uint8Array(T.COLS * T.ROWS);
   waterAt = new Uint8Array(T.COLS * T.ROWS);
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
@@ -1419,6 +1423,7 @@ function loadMap(idx) {
     if (ch === 'V') ventAt[y * T.COLS + x] = 1;
     if (ch === 'H') listenPts.push({ x: cx, y: cy, gx: x, gy: y });
     if (ch === 'Y') sentryPts.push({ x: cx, y: cy, gx: x, gy: y });
+    if (ch === '$') { grid[y * T.COLS + x] = 1; safes.push({ gx: x, gy: y, x: cx, y: cy, cracked: false, flash: 0 }); }
     if (ch === 'D') { grid[y * T.COLS + x] = 1; doors.push({ gx: x, gy: y, x: cx, y: cy, open: false }); }
     if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
     if (ch === 'B') powerups.push({ x: cx, y: cy, kind: 'B', got: false, ph: rand(0, TAU) });
@@ -1492,6 +1497,7 @@ function loadMap(idx) {
   /* live objects clear with the floor; what you are carrying does not */
   smokes = []; emps = []; decoys = []; magT = 0;
   hasKey = false; pickT = 0; pickOn = null;
+  safeT = 0; safeOn = null; safeTick = 0;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -1595,7 +1601,7 @@ function validateMaps() {
       if (M.rows[y].length !== T.COLS) return 'map ' + m + ' row ' + y + ' width ' + M.rows[y].length;
       for (let x = 0; x < T.COLS; x++) {
         const ch = M.rows[y][x];
-        if (ch === '#' || ch === 'G') g[y * T.COLS + x] = 1;   /* glass stops bodies */
+        if (ch === '#' || ch === 'G' || ch === '$') g[y * T.COLS + x] = 1;   /* glass and steel both stop bodies */
         if (ch === 'P') P = y * T.COLS + x;
         if (ch === 'E') E = y * T.COLS + x;
         if (ch === 'c') cs.push(y * T.COLS + x);
@@ -2004,6 +2010,38 @@ function update(dt) {
     toast('KEYCARD — ONE DOOR, NO WAITING', 2.2);
     hud();
   }
+
+  /* Cracking a safe: the same verb as a lock, held three times as long, and
+     loud from the first turn of the dial. Nothing needs it - it is there to be
+     weighed against walking out with what you already have. */
+  const nearSafe = safes.find(f => !f.cracked && Math.hypot(f.x - player.x, f.y - player.y) < T.SAFE_R);
+  if (!nearSafe) { if (safeT !== 0) { safeT = 0; safeOn = null; } }
+  else {
+    if (safeOn !== nearSafe) { safeOn = nearSafe; safeT = 0; }
+    if (Math.hypot(player.vx, player.vy) > 6) {
+      /* it slips rather than resetting: four and a half seconds is long enough
+         that a flinch losing everything would just stop anyone trying */
+      safeT = Math.max(0, safeT - dt * 2);
+      safeTick = 0;
+    } else {
+      safeT += dt;
+      safeTick -= dt;
+      if (safeTick <= 0) { safeTick = T.SAFE_TICK; makeNoise(nearSafe.x, nearSafe.y, T.SAFE_NOISE); sfx.crate(nearSafe); }
+      if (safeT >= T.SAFE_T) {
+        nearSafe.cracked = true; nearSafe.flash = 1;
+        score += T.SAFE_SCORE;
+        safeT = 0; safeOn = null;
+        renderMapCanvas();
+        burst(nearSafe.x, nearSafe.y, glowGoldS, 26, 240);
+        addShake('crate', nearSafe.x, nearSafe.y);
+        makeNoise(nearSafe.x, nearSafe.y, T.SAFE_NOISE);
+        sfx.unlock();
+        toast('SAFE CRACKED — ' + T.SAFE_SCORE, 2.4);
+        hud();
+      }
+    }
+  }
+  for (const f of safes) if (f.flash > 0) f.flash = Math.max(0, f.flash - dt * 1.4);
 
   /* doors: a card opens one instantly, otherwise you stand still and pick it */
   const shut = nearestShutDoor();
@@ -3289,6 +3327,7 @@ function render() {
   for (let i = 0; i < waterAt.length; i++) if (waterAt[i]) drawWater(i);
   for (const pl of plates) drawPlate(pl);
   for (const cr of crates) if (!cr.broken) drawCrate(cr);
+  for (const f of safes) drawSafe(f);
   for (const m of mirrors) drawMirror(m);
   for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
   for (const d of doors) drawDoor(d);
@@ -3780,6 +3819,40 @@ function coinLight(c) {
      straight past gold in a room you are standing in */
   if (Math.hypot(c.x - player.x, c.y - player.y) < T.COIN_NEAR && losClear(player.x, player.y, c.x, c.y)) return 'near';
   return 'dark';
+}
+
+/* Shut it is a slab of steel with a dial, which reads as worth something. Open
+   it is an empty box you have already been paid for, so a glance says "done"
+   rather than making you walk back over to check. */
+function drawSafe(f) {
+  const S = T.TILE, px = f.gx * S, py = f.gy * S;
+  ctx.save();
+  const g = ctx.createLinearGradient(px, py, px, py + S);
+  g.addColorStop(0, f.cracked ? '#241f2c' : '#3b3a48');
+  g.addColorStop(1, f.cracked ? '#141119' : '#232231');
+  ctx.fillStyle = g;
+  ctx.fillRect(px + 2, py + 2, S - 4, S - 4);
+  ctx.strokeStyle = 'rgba(10,8,14,.9)'; ctx.lineWidth = 1.6;
+  ctx.strokeRect(px + 2, py + 2, S - 4, S - 4);
+  ctx.strokeStyle = f.cracked ? 'rgba(120,110,150,.35)' : 'rgba(210,180,110,.6)';
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(px + 6, py + 6, S - 12, S - 12);
+  if (f.cracked) {
+    /* the door hanging off it, and nothing inside */
+    ctx.fillStyle = '#0b0910';
+    ctx.fillRect(px + 8, py + 8, S - 16, S - 16);
+    ctx.strokeStyle = 'rgba(150,140,180,.5)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(px + S - 8, py + 8); ctx.lineTo(px + S - 2, py + 4);
+    ctx.moveTo(px + S - 8, py + S - 8); ctx.lineTo(px + S - 2, py + S - 4); ctx.stroke();
+  } else {
+    ctx.strokeStyle = 'rgba(230,200,130,.85)'; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(px + S / 2, py + S / 2, 7, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,225,160,.9)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(px + S / 2, py + S / 2); ctx.lineTo(px + S / 2 + 5, py + S / 2 - 5); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,225,160,.9)';
+    ctx.beginPath(); ctx.arc(px + S / 2, py + S / 2, 1.8, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawCrate(cr) {
@@ -4369,7 +4442,7 @@ function drawPlayer() {
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 
   /* picking a lock: a ring that fills while you stand still */
-  const workT = pickT > 0 ? pickT / T.PICK_T : (crateT > 0 ? crateT / T.CRATE_T : 0);
+  const workT = pickT > 0 ? pickT / T.PICK_T : (crateT > 0 ? crateT / T.CRATE_T : (safeT > 0 ? safeT / T.SAFE_T : 0));
   if (workT > 0) {
     ctx.save(); ctx.rotate(-a);
     ctx.globalAlpha = 0.9;
@@ -5664,6 +5737,10 @@ window.__fp = {
   get doorsShut() { return doors.filter(d => !d.open).length; },
   get hasKey() { return hasKey; },
   get pickT() { return +pickT.toFixed(2); },
+  get safeT() { return +safeT.toFixed(2); },
+  safeCount() { return safes.length; },
+  safeState() { return safes.map(f => ({ cracked: f.cracked, x: Math.round(f.x), y: Math.round(f.y) })); },
+  safeNeed() { return T.SAFE_T; },
   doorPoints() { return doors.map(d => ({ x: d.x, y: d.y, open: d.open })); },
   keyPoints() { return keycards.filter(k => !k.got).map(k => ({ x: k.x, y: k.y })); },
   resetKit() { resetKit(); hud(); },

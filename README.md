@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **There is a safe on four of the floors** — worth 900, and it takes four and a
+  half seconds of standing still while it broadcasts your position the entire
+  time. Nothing needs it. That is the point.
 - **You can walk out early** — the door opens at two thirds of the floor's gold.
   Leave with what you have and keep it, or stay for the rest and earn the clear
   bonus. The counter turns amber the moment it becomes your call.
