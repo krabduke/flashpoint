@@ -176,8 +176,9 @@ only to attract something that hunts by sight.
 
 ## K · Risk against reward
 
-- [ ] K1 The exit opens early at a price — leave with what you have, score what
-      you carried, or stay for the rest
+- [x] K1 The exit opens early at a price — the door unlocks at two thirds and the
+      clear bonus is what you forfeit by walking out. Asserted that every floor
+      leaves something on the table, since ceil(n*0.66)==n for tiny floors.
 - [ ] K2 `$` safe — a big score for a long, loud crack
 - [ ] K3 Clean-floor bonus — unseen, unheard, every coin: say so and pay for it
 
@@ -267,3 +268,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · J3 · sentries on the vault, alarms open the whole floor for 9s, 10 assertions; fixed alarms being handed to something bolted down and sentries eating flank slots in the radio net
 - 2026-09-03 · J4 · units spread across all twelve floors, glint and tutorial fixed for coneless units, empty route guarded against taking the frame loop down, 9 assertions
 - 2026-09-03 · J5 · listeners call drones in on a 6.5s cooldown without raising the building, 8 assertions — **section J complete**
+- 2026-09-03 · K1 · door at two thirds, clear bonus forfeited by leaving early, amber counter and pause label as tells, 8 assertions
