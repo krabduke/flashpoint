@@ -156,6 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **You can hear what you are walking on** — carpet in the house, lino in the
+  ward, stone in the museum, steel on the docks, a rattle over a vent grille and
+  a splash through water. Walking is for your ears only: the drones still hear
+  nothing but a sprint.
 - **Being hunted has a sound** — as the meter fills, a low tone climbs a fifth
   and a second one turns up a tritone above it, while the room bed drops away to
   make space. Get out of sight and all of it recedes and the room comes back,

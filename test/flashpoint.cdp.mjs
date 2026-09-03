@@ -2905,6 +2905,64 @@ ok('the heartbeat still races as the meter fills',
 ok('being caught cuts the swell', cut.t === 0 && cut.mode === 'caught', JSON.stringify(cut));
 
 
+/* ---- footsteps take after the floor ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const ftm = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  o.mats = __fp.materialNames();
+  o.floors = __fp.floorMaterials();
+  o.missing = Object.keys(THEMES).filter(t => !o.floors[t]);
+  o.orphan = Object.values(o.floors).filter(m => !o.mats.includes(m));
+  o.distinct = new Set(Object.values(o.floors)).size;
+  const xy = i => ({ x: (i % T.COLS) * T.TILE + 20, y: ((i / T.COLS) | 0) * T.TILE + 20 });
+  const firstOf = arr => { for (let i = 0; i < arr.length; i++) if (arr[i]) return i; return -1; };
+  /* the docks have water; the warehouse has vents. Water wins over the theme,
+     grating wins over the theme, and the theme covers everything else. */
+  mapIdx = 7; loadMap(7);
+  const w = firstOf(waterAt);
+  o.onWater = w >= 0 ? __fp.surfaceAtXY(xy(w).x, xy(w).y) : 'no water tiles';
+  o.docksFloor = __fp.surfaceAtXY(spawnPt.x, spawnPt.y);
+  mapIdx = 1; loadMap(1);
+  const v = firstOf(ventAt);
+  o.onVent = v >= 0 ? __fp.surfaceAtXY(xy(v).x, xy(v).y) : 'no vent tiles';
+  o.warehouseFloor = __fp.surfaceAtXY(spawnPt.x, spawnPt.y);
+  /* walking is for you, sprinting is for them */
+  mapIdx = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0;
+  const move = (n, sprint) => {
+    __fp.stepClear(); noise = [];
+    let heard = 0;
+    for (let i = 0; i < n; i++) { keys.right = true; keys.sprint = !!sprint; update(1/60); heard = Math.max(heard, noise.length); }
+    keys.right = false; keys.sprint = false;
+    return { steps: __fp.stepLog.length, heard, mat: __fp.stepLog[0] && __fp.stepLog[0].mat, v: __fp.stepLog[0] && __fp.stepLog[0].v };
+  };
+  o.walk = move(150, false);
+  o.sprint = move(150, true);
+  puShoe = 9e9; o.shod = move(150, false); puShoe = 0;
+  return JSON.stringify(o);
+})()`));
+ok('every theme has a floor and every floor is a real material',
+  ftm.missing.length === 0 && ftm.orphan.length === 0,
+  `missing=${JSON.stringify(ftm.missing)} orphan=${JSON.stringify(ftm.orphan)}`);
+ok('the floors are not all the same underfoot', ftm.distinct >= 4,
+  `${ftm.distinct} distinct across ${Object.keys(ftm.floors).length} themes`);
+ok('water is heard over whatever the floor is made of',
+  ftm.onWater === 'water' && ftm.docksFloor === 'steel', `${ftm.onWater} / ${ftm.docksFloor}`);
+ok('so is a vent grille', ftm.onVent === 'grating' && ftm.warehouseFloor === 'concrete',
+  `${ftm.onVent} / ${ftm.warehouseFloor}`);
+/* walking was silent outright before this - no sound at all, on any surface */
+ok('walking is audible to you now', ftm.walk.steps > 0 && ftm.walk.mat === 'carpet',
+  JSON.stringify(ftm.walk));
+ok('but the drones still cannot hear you walk',
+  ftm.walk.heard === 0 && ftm.sprint.heard > 0,
+  `walk=${ftm.walk.heard} sprint=${ftm.sprint.heard}`);
+ok('and a sprint lands harder than a walk', ftm.sprint.v > ftm.walk.v * 2,
+  `walk=${ftm.walk.v} sprint=${ftm.sprint.v}`);
+ok('soft shoes quieten your own feet as well as theirs',
+  ftm.shod.v < ftm.walk.v * 0.6 && ftm.shod.steps > 0, `${ftm.walk.v} -> ${ftm.shod.v}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

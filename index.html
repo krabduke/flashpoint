@@ -538,7 +538,7 @@ const T = {
   MIRROR_LOSS: 0.82,
   /* the kit you start a run with, and the most you can carry of each */
   /* water: you cannot cross a puddle quietly, not even in soft shoes */
-  WATER_MULT: 1.4, WATER_STEP: 0.34,
+  WATER_MULT: 1.4, WATER_STEP: 0.34, WALK_STEP: 0.44,
   KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0 },
   CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2 },
   ITEM_R: 22,
@@ -834,7 +834,7 @@ let mapIdx = 0, loop = 0, endless = false, runT = 0;
 let coins = 0, coinsTotal = 5, score = 0;
 let grid = null, spawnPt = { x: 0, y: 0 }, exitPt = { x: 0, y: 0 };
 let coinList = [], emitters = [], propsXY = [];
-let bots = [], noise = [];
+let bots = [], noise = [], stepLog = [];
 let lasers = [], sirenT = 0, nextSiren = 1e9, fogT = 0, nextFog = 1e9, flScale = 1, botSpd = 1, blackoutMap = false;
 let rusty = [], cats = [], belts = [], surging = null, nextSurge = 1e9;
 let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
@@ -1077,6 +1077,16 @@ const sfx = {
   siren() { tone(480, 760, 0.4, 0.14, 'sawtooth'); tone(760, 480, 0.4, 0.12, 'sawtooth', AC ? AC.currentTime + 0.42 : 0); },
   laser() { tone(1500, 220, 0.2, 0.2, 'square'); },
   step() { noiseBurst(0.05, 0.05, 420); },
+  /* soft is you walking - quiet enough that it reads as your own feet rather
+     than something a drone could have heard, which is exactly the difference */
+  foot(mat, hard) {
+    const M = MATERIAL[mat] || MATERIAL.concrete;
+    const k = (hard ? 1 : 0.42) * (puShoe > 0 ? 0.45 : 1);
+    noiseBurst(M.dur, M.v * k, M.f);
+    if (M.ring) tone(M.ring, M.ring * 0.72, M.dur * 1.6, M.v * k * 0.35, 'triangle');
+    stepLog.push({ mat, hard, v: +(M.v * k).toFixed(4) });
+    if (stepLog.length > 24) stepLog.shift();
+  },
   caught() { noiseBurst(0.5, 0.5, 220); tone(220, 40, 0.9, 0.5, 'sawtooth'); tone(110, 30, 1.4, 0.4); },
   blackout() { tone(700, 90, 0.4, 0.16, 'square'); noiseBurst(0.15, 0.1, 180); },
   door() { tone(600, 900, 0.3, 0.16); },
@@ -1099,6 +1109,32 @@ const sfx = {
   ui() { tone(700, 900, 0.06, 0.08); }
 };
 function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
+
+/* ---------- what you are standing on ----------
+   Sprinting played one 420Hz burst on every floor of the game, and walking made
+   no sound whatsoever. Three of the four materials in the brief simply did not
+   exist. Nothing here needs a new tile: water is already `~`, the vents you
+   crawl through are already metal grating, and the theme says what the rest of
+   the floor is made of. */
+const MATERIAL = {
+  carpet:   { f: 240,  dur: 0.045, v: 0.030, ring: 0 },
+  wood:     { f: 380,  dur: 0.050, v: 0.045, ring: 0 },
+  concrete: { f: 430,  dur: 0.050, v: 0.048, ring: 0 },
+  lino:     { f: 900,  dur: 0.035, v: 0.038, ring: 0 },
+  stone:    { f: 720,  dur: 0.055, v: 0.055, ring: 1180 },
+  steel:    { f: 1500, dur: 0.070, v: 0.050, ring: 2100 },
+  grating:  { f: 1900, dur: 0.060, v: 0.055, ring: 2900 },
+};
+const THEME_FLOOR = {
+  house: 'carpet', warehouse: 'concrete', city: 'concrete', ward: 'lino',
+  museum: 'stone', server: 'steel', bank: 'concrete', docks: 'steel', core: 'steel',
+};
+function surfaceAt(x, y) {
+  const i = cellOf(x, y).i;
+  if (waterAt[i]) return 'water';
+  if (ventAt[i]) return 'grating';
+  return THEME_FLOOR[MAPS[mapIdx].theme] || 'concrete';
+}
 
 /* ---------- room tone ----------
    One bed per theme, because every floor sounded identical: two sines at 43 and
@@ -1267,7 +1303,7 @@ function loadMap(idx) {
 
   coinsTotal = coinList.length; coins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
-  meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false;
+  meter = 0; seenTimer = 0; exitOpen = false; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
   /* a wipe left over from the previous floor would darken the new one */
   if (mode !== 'playing') wipeT = 0;
@@ -1600,7 +1636,17 @@ function update(dt) {
   } else if (sprinting && spd > 0) {
     stepT -= dt;
     fSprint = true;
-    if (stepT <= 0) { stepT = T.NOISE_SPRINT; if (puShoe <= 0) makeNoise(player.x, player.y, T.STEP_R * haulNoise()); sfx.step(); }
+    if (stepT <= 0) {
+      stepT = T.NOISE_SPRINT;
+      if (puShoe <= 0) makeNoise(player.x, player.y, T.STEP_R * haulNoise());
+      sfx.foot(surfaceAt(player.x, player.y), true);
+    }
+  } else if (spd > 0) {
+    /* You hear your own feet; the drones do not - no makeNoise here on purpose.
+       Walking used to be completely silent, which left ordinary movement with no
+       feedback at all and made the floor you were crossing unknowable. */
+    stepT -= dt;
+    if (stepT <= 0) { stepT = T.WALK_STEP; sfx.foot(surfaceAt(player.x, player.y), false); }
   } else stepT = 0;
 
   /* flashlight hits + memory */
@@ -4576,6 +4622,11 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  get stepLog() { return stepLog.map(e => ({ ...e })); },
+  stepClear() { stepLog = []; },
+  surfaceAtXY(x, y) { return surfaceAt(x, y); },
+  floorMaterials() { return { ...THEME_FLOOR }; },
+  materialNames() { return Object.keys(MATERIAL); },
   get tension() { return +tension.toFixed(4); },
   get beatN() { return beatN; },
   beatReset() { beatN = 0; beatT = 0; },
