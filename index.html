@@ -456,6 +456,7 @@
         <button class="item" id="itEmp"   type="button"><b>EMP</b><s>C</s></button>
         <button class="item" id="itDecoy" type="button"><b>DECOY</b><s>V</s></button>
         <button class="item" id="itMag"   type="button"><b>MAGNET</b><s>G</s></button>
+        <button class="item" id="itWire"  type="button"><b>WIRE</b><s>T</s></button>
       </div>
     </div>
   </div>
@@ -664,8 +665,11 @@ const T = {
   /* the kit you start a run with, and the most you can carry of each */
   /* water: you cannot cross a puddle quietly, not even in soft shoes */
   WATER_MULT: 1.4, WATER_STEP: 0.34, WALK_STEP: 0.44,
-  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0 },
-  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2 },
+  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, wire: 1 },
+  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, wire: 3 },
+  /* Every other gadget acts on them. This one acts on what you know: it makes
+     no noise, draws nothing to it, and only ever tells YOU. */
+  WIRE_R: 54, WIRE_ARM: 0.6,
   ITEM_R: 22,
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
@@ -991,6 +995,7 @@ let flares = 2;
 let smokes = [], smokePellets = 1;
 let emps = [], empCharges = 1;
 let decoys = [], decoyCharges = 1;
+let wires = [], wireCharges = 1;
 let magT = 0, magCharges = 1;
 let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 let safes = [], safeT = 0, safeOn = null, safeTick = 0;
@@ -1124,6 +1129,7 @@ const PU = {
   d: { label: 'DECOY', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
   e: { label: 'EMP', glow: null, col: '#9fd8ff', ring: 'rgba(159,216,255,.9)' },
   s: { label: 'SMOKE', glow: null, col: '#b0b0c4', ring: 'rgba(176,176,196,.9)' },
+  w: { label: 'WIRE', glow: null, col: '#8fe8d8', ring: 'rgba(143,232,216,.9)' },
   f: { label: 'FLARE', glow: null, col: '#ffb347', ring: 'rgba(255,179,71,.9)' },
   Z: { label: 'SHOES', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
   I: { label: 'GHOST', glow: null, col: '#d8b6ff', ring: 'rgba(216,182,255,.9)' }
@@ -1423,7 +1429,7 @@ function loadMap(idx) {
        applies to one - the alarm, an EMP killing it, smoke breaking its line -
        applies here for free. It only needs pointing somewhere useful. */
     if (ch === 'C') emitters.push({ x: cx, y: cy, r: 205, col: '#ffe0c0', flick: 0, kind: 'search', cam: true, ang: 0, spin: 0, rays: new Float32Array(17) });
-    if ('fsedm'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
+    if ('fsedmw'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
     /* Glass is deliberately NOT a wall in the grid. That is what lets sight
        through it for free - losClear and both cones read the grid, so they need
        no changes at all. Only bodies are stopped, and only where bodies move. */
@@ -1507,7 +1513,7 @@ function loadMap(idx) {
   fSeen = false; fSprint = false; fNoticed = false; fEmp = false;
   trail = []; trailT = 0; floorT = 0; loadGhost();
   /* live objects clear with the floor; what you are carrying does not */
-  smokes = []; emps = []; decoys = []; magT = 0;
+  smokes = []; emps = []; decoys = []; wires = []; magT = 0;
   hasKey = false; pickT = 0; pickOn = null;
   safeT = 0; safeOn = null; safeTick = 0;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
@@ -1979,6 +1985,7 @@ function update(dt) {
     if (u.kind === 's') { smokePellets = Math.min(T.CAP.smoke, smokePellets + 1); toast('SMOKE PELLET STOWED', 1.8); }
     if (u.kind === 'e') { empCharges = Math.min(T.CAP.emp, empCharges + 1); toast('EMP CHARGE STOWED', 1.8); }
     if (u.kind === 'd') { decoyCharges = Math.min(T.CAP.decoy, decoyCharges + 1); toast('DECOY STOWED', 1.8); }
+    if (u.kind === 'w') { wireCharges = Math.min(T.CAP.wire, wireCharges + 1); toast('WIRE STOWED', 1.8); }
     if (u.kind === 'm') { magCharges = Math.min(T.CAP.mag, magCharges + 1); toast('MAGNET STOWED', 1.8); }
     hud();
   }
@@ -2724,6 +2731,7 @@ function updateMeter(dt) {
   if (meter > 0.28) { beatT -= dt; if (beatT <= 0) { sfx.beat(); beatN++; beatT = lerp(0.9, 0.32, meter); } }
   else beatT = 0;
   updateSting(dt);
+  updateWires(dt);
   updateTutor(dt);
   vibrateFor(meter);
 }
@@ -2926,6 +2934,7 @@ PU.m.glow = makeGlow('255,154,213');
 PU.d.glow = makeGlow('125,255,196');
 PU.e.glow = makeGlow('159,216,255');
 PU.s.glow = makeGlow('176,176,196');
+PU.w.glow = makeGlow('143,232,216');
 PU.f.glow = makeGlow('255,179,71');
 PU.Z.glow = makeGlow('125,255,196');
 PU.I.glow = makeGlow('216,182,255');
@@ -3357,6 +3366,7 @@ function render() {
   for (const pl of plates) drawPlate(pl);
   for (const cr of crates) if (!cr.broken) drawCrate(cr);
   for (const f of safes) drawSafe(f);
+  for (const w of wires) drawWire(w);
   for (const m of mirrors) drawMirror(m);
   for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
   for (const d of doors) drawDoor(d);
@@ -3853,6 +3863,25 @@ function coinLight(c) {
 /* Shut it is a slab of steel with a dial, which reads as worth something. Open
    it is an empty box you have already been paid for, so a glance says "done"
    rather than making you walk back over to check. */
+/* Drawn faint and flat on the floor. It is not a threat and not a light - it is
+   a note to yourself, and it should never read as either. */
+function drawWire(w) {
+  ctx.save();
+  ctx.translate(w.x, w.y);
+  const hit = w.fired > 0;
+  const k = hit ? w.fired / 1.2 : 1;
+  ctx.globalAlpha = hit ? 0.25 + 0.6 * k : (w.arm > 0 ? 0.2 : 0.34);
+  ctx.strokeStyle = hit ? '#9fffe0' : '#8fe8d8';
+  ctx.lineWidth = hit ? 2 : 1.2;
+  ctx.setLineDash([4, 5]);
+  ctx.lineDashOffset = -time * 12;
+  ctx.beginPath(); ctx.arc(0, 0, T.WIRE_R * (hit ? 1 + (1 - k) * 0.5 : 1), 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = hit ? 0.5 + 0.5 * k : 0.5;
+  ctx.beginPath(); ctx.arc(0, 0, 2.6, 0, TAU); ctx.fillStyle = '#8fe8d8'; ctx.fill();
+  ctx.restore();
+}
+
 function drawSafe(f) {
   const S = T.TILE, px = f.gx * S, py = f.gy * S;
   ctx.save();
@@ -4743,6 +4772,7 @@ function resetKit() {
   smokePellets = kv(T.KIT.smoke);
   empCharges = Math.max(0, T.KIT.emp + Math.max(0, k));
   decoyCharges = Math.max(0, T.KIT.decoy + Math.max(0, k));
+  wireCharges = kv(T.KIT.wire);
   magCharges = Math.max(0, T.KIT.mag + Math.max(0, k));
 }
 
@@ -4858,6 +4888,37 @@ function dropDecoy() {
   toast('DECOY SET — IT WILL KEEP TALKING', 2.4);
   hud();
   return true;
+}
+
+/* A wire tells you something walked through here. It does not tell them
+   anything: no makeNoise, nothing added to the world they can react to. The
+   whole value of it is knowing what you could not see. */
+function dropWire() {
+  if (mode !== 'playing' || wireCharges <= 0) { sfx.ui(); return false; }
+  wireCharges--;
+  wires.push({ x: player.x, y: player.y, arm: T.WIRE_ARM, fired: 0, ph: rand(0, TAU) });
+  sfx.ui();
+  toast('WIRE SET — IT WILL TELL YOU', 2.2);
+  hud();
+  return true;
+}
+
+function updateWires(dt) {
+  for (let i = wires.length - 1; i >= 0; i--) {
+    const w = wires[i];
+    if (w.fired > 0) { w.fired -= dt; if (w.fired <= 0) wires.splice(i, 1); continue; }
+    /* a moment to arm, so setting one at your feet does not trip on you */
+    if (w.arm > 0) { w.arm = Math.max(0, w.arm - dt); continue; }
+    for (const b of bots) {
+      if (b.kind === 'sentry') continue;          /* it never goes anywhere */
+      if (Math.hypot(b.x - w.x, b.y - w.y) > T.WIRE_R) continue;
+      w.fired = 1.2;
+      sfx.notice(w);
+      toast('WIRE TRIPPED — SOMETHING CAME THROUGH', 2.4);
+      if (navigator.vibrate) navigator.vibrate(26);
+      break;
+    }
+  }
 }
 
 function fireEmp() {
@@ -5101,7 +5162,8 @@ const CONTROLS = [
   ['FLARE', ['Q']], ['TOSS A COIN', ['E']],
   ['SMOKE', ['X']], ['EMP', ['C']],
   ['DECOY', ['V']], ['MAGNET', ['G']],
-  ['MUTE', ['M']], ['NEW RUN', ['R']],
+  ['TRIPWIRE', ['T']], ['MUTE', ['M']],
+  ['NEW RUN', ['R']],
 ];
 function renderPause() {
   const M = MAPS[mapIdx];
@@ -5195,6 +5257,7 @@ function hud() {
     set('itEmp', empCharges > 0);
     set('itDecoy', decoyCharges > 0);
     set('itMag', magCharges > 0, magT > 0);
+    set('itWire', wireCharges > 0, wires.some(w => w.fired <= 0));
   }
 
   const dt2 = $('dailyTag');
@@ -5268,6 +5331,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'x' || e.key === 'X') && mode === 'playing') { dropSmoke(); }
   if ((e.key === 'c' || e.key === 'C') && mode === 'playing') { fireEmp(); }
   if ((e.key === 'v' || e.key === 'V') && mode === 'playing') { dropDecoy(); }
+  if ((e.key === 't' || e.key === 'T') && mode === 'playing') { dropWire(); }
   if ((e.key === 'g' || e.key === 'G') && mode === 'playing') { runMagnet(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if (e.key === 'Escape' && settingsOpen()) { closeSettings(); return; }
@@ -5368,6 +5432,7 @@ bindBtn('itSmoke', dropSmoke);
 bindBtn('itEmp', fireEmp);
 bindBtn('itDecoy', dropDecoy);
 bindBtn('itMag', runMagnet);
+bindBtn('itWire', dropWire);
 ['nameInput', 'nameInput2', 'nameInput3'].forEach((id, i) => {
   const el = $(id);
   el.value = name;
@@ -5774,6 +5839,10 @@ window.__fp = {
   get doorsShut() { return doors.filter(d => !d.open).length; },
   get hasKey() { return hasKey; },
   get pickT() { return +pickT.toFixed(2); },
+  wireCount() { return wires.length; },
+  get wireCharges() { return wireCharges; },
+  wireState() { return wires.map(w => ({ armed: w.arm <= 0, fired: +w.fired.toFixed(2), x: Math.round(w.x), y: Math.round(w.y) })); },
+  dropWireNow() { return dropWire(); },
   get safeT() { return +safeT.toFixed(2); },
   safeCount() { return safes.length; },
   safeState() { return safes.map(f => ({ cracked: f.cracked, x: Math.round(f.x), y: Math.round(f.y) })); },
