@@ -2850,6 +2850,61 @@ ok('mute silences the bed and unmute brings it back',
   rmMute.off === 0 && rmMute.restored === true && rmMute.muted === false, JSON.stringify(rmMute));
 
 
+/* ---- chase stinger: it rises with the meter, and it resolves ----
+   Paused throughout the sweep on purpose: the live loop drains the meter
+   between evaluates, so an unpaused read measures a decaying value rather than
+   the steady state it claims to. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+await evl('mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0; paused = true;');
+const stingAt = async m => { await evl(`__fp.stingStep(${m})`); await sleep(560);
+  return JSON.parse(await evl('JSON.stringify({ t: __fp.tension, ...__fp.stingLive() })')); };
+const stg = {};
+for (const m of [0, 0.22, 0.5, 0.8, 0.95]) stg['m' + String(m).replace('.', '')] = await stingAt(m);
+/* while ducked, a theme change must move the bed and leave the duck alone */
+const duckedBefore = JSON.parse(await evl('JSON.stringify({ room: __fp.roomLive(), sting: __fp.stingLive() })'));
+await evl("setRoomTone('server')"); await sleep(950);
+const duckedAfter = JSON.parse(await evl('JSON.stringify({ room: __fp.roomLive(), sting: __fp.stingLive() })'));
+/* and it has to come all the way back down */
+const rest = await stingAt(0);
+/* the heartbeat still tightens: drive updateMeter with the meter pinned */
+const beats = JSON.parse(await evl(`(() => {
+  const run = (m, n) => { __fp.beatReset(); for (let i = 0; i < n; i++) { meter = m; updateMeter(1/60); } return __fp.beatN; };
+  return JSON.stringify({ calm: run(0.35, 600), panic: run(0.95, 600), quiet: run(0.1, 600) });
+})()`));
+const cut = JSON.parse(await evl(`(() => { paused = false; meter = 0.9; __fp.stingStep(0.9); caught(); return JSON.stringify({ t: __fp.tension, mode }); })()`));
+ok('nothing plays until the meter is worth worrying about',
+  stg.m0.rootV === 0 && stg.m022.rootV === 0 && stg.m022.t === 0,
+  `at0=${stg.m0.rootV} at.22=${stg.m022.rootV}`);
+ok('it climbs with the meter, in pitch and in level',
+  stg.m05.root > stg.m022.root && stg.m08.root > stg.m05.root && stg.m095.root > stg.m08.root
+  && stg.m05.rootV > stg.m022.rootV && stg.m08.rootV > stg.m05.rootV && stg.m095.rootV > stg.m08.rootV,
+  `roots=${[stg.m022, stg.m05, stg.m08, stg.m095].map(v => v.root)} gains=${[stg.m022, stg.m05, stg.m08, stg.m095].map(v => v.rootV)}`);
+ok('and reaches a fifth above where it started',
+  Math.abs(stg.m095.root - 165) < 6 && Math.abs(stg.m095.tri / stg.m095.root - 1.414) < 0.01,
+  `root=${stg.m095.root} ratio=${(stg.m095.tri / stg.m095.root).toFixed(3)}`);
+/* the wrong-sounding interval is held back for when you are actually cornered */
+ok('the tritone stays out of it until late',
+  stg.m05.triV === 0 && stg.m08.triV > 0 && stg.m095.triV > stg.m08.triV,
+  `.5=${stg.m05.triV} .8=${stg.m08.triV} .95=${stg.m095.triV}`);
+ok('the room makes way for it',
+  stg.m095.duck < 0.5 && stg.m05.duck < stg.m022.duck && stg.m022.duck > 0.99,
+  `duck .22=${stg.m022.duck} .5=${stg.m05.duck} .95=${stg.m095.duck}`);
+/* setRoomTone owns the theme levels, the chase owns the multiplier */
+ok('changing theme mid-duck moves the bed without touching the duck',
+  duckedAfter.room.hum === 96 && duckedAfter.room.air === 2600
+  && Math.abs(duckedAfter.sting.duck - duckedBefore.sting.duck) < 0.02,
+  `bed ${duckedBefore.room.hum}->${duckedAfter.room.hum} duck ${duckedBefore.sting.duck}->${duckedAfter.sting.duck}`);
+/* setTargetAtTime approaches its target exponentially and never actually
+   arrives, so rest is an inaudible floor rather than a hard zero */
+ok('getting away is audible: it all comes back to rest',
+  rest.t === 0 && rest.rootV < 0.001 && rest.triV < 0.001 && rest.duck > 0.99, JSON.stringify(rest));
+ok('the heartbeat still races as the meter fills',
+  beats.quiet === 0 && beats.panic > beats.calm * 1.7 && beats.calm > 0,
+  `quiet=${beats.quiet} calm=${beats.calm} panic=${beats.panic} ratio=${(beats.panic / beats.calm).toFixed(2)}`);
+ok('being caught cuts the swell', cut.t === 0 && cut.mode === 'caught', JSON.stringify(cut));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

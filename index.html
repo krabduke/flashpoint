@@ -550,6 +550,8 @@ const T = {
   GLOW_TRAIL_IN: 5.2, GLOW_TRAIL_OUT: 0.41, GLOW_TRAIL_DRAW: 0.30,
   GLOW_SURVEY_IN: 0.8, GLOW_SURVEY_OUT: 0.02, GLOW_SURVEY_DRAW: 0.12,
   DARK: 0.5, SHAKE_CAP: 26, SERVO_HALF: 380, SERVO_GAP: 0.3,
+  STING_ON: 0.22, STING_LO: 110, STING_HI: 165, STING_V: 0.055,
+  STING_TRI_ON: 0.45, STING_TRI_V: 0.03, STING_DUCK: 0.55,
 };
 
 /* ---------- dom ---------- */
@@ -1002,7 +1004,8 @@ let mapCv, mapCtx, darkCv, darkCtx, losGrid;
 
 /* ---------- audio ---------- */
 let AC = null, master = null, droneO = null, droneO2 = null, droneG = null, rainN = null, airN = null, airF = null, airG = null, muted = false;
-let roomTone = null;
+let roomTone = null, bedG = null, stingG = null, stingA = null, stingB = null, stingBG = null;
+let tension = 0, stingT = 0;
 try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
 function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
@@ -1010,7 +1013,12 @@ function initAudio() {
   AC = new C();
   master = AC.createGain(); master.gain.value = muted ? 0 : 0.55; master.connect(AC.destination);
   const R = roomTone || ROOM.house;
-  droneG = AC.createGain(); droneG.gain.value = R.humV; droneG.connect(master);
+  /* The bed feeds a duck node rather than master. setRoomTone owns the theme
+     levels, the chase owns this multiplier, and neither writes the other's
+     parameter - which is the whole reason a floor change mid-chase does not
+     undo the duck. */
+  bedG = AC.createGain(); bedG.gain.value = 1; bedG.connect(master);
+  droneG = AC.createGain(); droneG.gain.value = R.humV; droneG.connect(bedG);
   droneO = AC.createOscillator(); droneO.type = 'sine'; droneO.frequency.value = R.hum;
   droneO2 = AC.createOscillator(); droneO2.type = 'sine'; droneO2.frequency.value = R.hum + R.beat;
   droneO.connect(droneG); droneO2.connect(droneG); droneO.start(); droneO2.start();
@@ -1021,7 +1029,14 @@ function initAudio() {
   airF = AC.createBiquadFilter(); airF.type = 'lowpass';
   airF.frequency.value = R.air; airF.Q.value = 0.7;
   airG = AC.createGain(); airG.gain.value = R.airV;
-  airN.connect(airF); airF.connect(airG); airG.connect(master); airN.start();
+  airN.connect(airF); airF.connect(airG); airG.connect(bedG); airN.start();
+  /* the chase itself: a root that climbs, and a tritone that only turns up when
+     you are genuinely in trouble */
+  stingG = AC.createGain(); stingG.gain.value = 0; stingG.connect(master);
+  stingBG = AC.createGain(); stingBG.gain.value = 0; stingBG.connect(master);
+  stingA = AC.createOscillator(); stingA.type = 'triangle'; stingA.frequency.value = T.STING_LO;
+  stingB = AC.createOscillator(); stingB.type = 'triangle'; stingB.frequency.value = T.STING_LO * 1.414;
+  stingA.connect(stingG); stingB.connect(stingBG); stingA.start(); stingB.start();
 }
 function tone(f1, f2, dur, vol, type, when) {
   if (!AC || muted) return;
@@ -1285,6 +1300,7 @@ function loadMap(idx) {
   }
   setRain(!!TH.rain);
   setRoomTone(MAPS[idx].theme);
+  killSting();
 }
 
 function spawnBots() {
@@ -1456,7 +1472,7 @@ function pathFind(sx, sy, tx, ty) {
 }
 
 /* ================= update ================= */
-let beatT = 0;
+let beatT = 0, beatN = 0;
 
 /* Gold is heavy and it jingles. A full run home is louder than an empty walk in,
    which is what makes the last stretch of a floor the frightening one. */
@@ -2248,9 +2264,39 @@ function updateMeter(dt) {
     if (seenTimer > T.GRACE) meter = Math.max(0, meter - T.METER_DRAIN * dt);
     if (meter === 0) for (const b of bots) b.alerted = false;
   }
-  if (meter > 0.28) { beatT -= dt; if (beatT <= 0) { sfx.beat(); beatT = lerp(0.9, 0.32, meter); } }
+  if (meter > 0.28) { beatT -= dt; if (beatT <= 0) { sfx.beat(); beatN++; beatT = lerp(0.9, 0.32, meter); } }
   else beatT = 0;
+  updateSting(dt);
   vibrateFor(meter);
+}
+/* The heartbeat was the only thing that answered the meter. This is the swell
+   under it: a root that climbs a fifth as you are cornered, a tritone that only
+   arrives once you are actually in trouble, and the room bed pulled down to make
+   room for both - so escaping is audible as the room coming back. */
+function updateSting(dt) {
+  tension = clamp((meter - T.STING_ON) / (1 - T.STING_ON), 0, 1);
+  tension = Math.pow(tension, 1.4);
+  if (!AC || !stingG) return;
+  /* scheduling sixty parameter events a second is pointless for a swell */
+  stingT -= dt;
+  if (stingT > 0) return;
+  stingT = 0.1;
+  const t = AC.currentTime, tau = 0.09;
+  const tri = clamp((tension - T.STING_TRI_ON) / (1 - T.STING_TRI_ON), 0, 1);
+  const root = lerp(T.STING_LO, T.STING_HI, tension);
+  stingA.frequency.setTargetAtTime(root, t, tau);
+  stingB.frequency.setTargetAtTime(root * 1.414, t, tau);
+  stingG.gain.setTargetAtTime(tension * T.STING_V, t, tau);
+  stingBG.gain.setTargetAtTime(tri * T.STING_TRI_V, t, tau);
+  bedG.gain.setTargetAtTime(1 - T.STING_DUCK * tension, t, tau);
+}
+function killSting() {
+  tension = 0; stingT = 0;
+  if (!AC || !stingG) return;
+  const t = AC.currentTime;
+  stingG.gain.setTargetAtTime(0, t, 0.05);
+  stingBG.gain.setTargetAtTime(0, t, 0.05);
+  bedG.gain.setTargetAtTime(1, t, 0.25);
 }
 let vibT = 0;
 function vibrateFor(m) { if (m > 0.55 && navigator.vibrate) { vibT -= 0.016; if (vibT <= 0) { navigator.vibrate(12); vibT = lerp(0.9, 0.25, m); } } }
@@ -2258,7 +2304,7 @@ function vibrateFor(m) { if (m > 0.55 && navigator.vibrate) { vibT -= 0.016; if 
 function caught() {
   if (mode !== 'playing') return;
   mode = 'caught'; freeze = 0.15;
-  sfx.caught(); noiseBurst(0.6, 0.4, 400);
+  sfx.caught(); noiseBurst(0.6, 0.4, 400); killSting();
   let hunter = null, hd = 1e9;
   for (const b of bots) { const d = Math.hypot(b.x - player.x, b.y - player.y); if (d < hd) { hd = d; hunter = b; } }
   addShake('caught', hunter ? hunter.x : undefined, hunter ? hunter.y : undefined);
@@ -4530,6 +4576,16 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  get tension() { return +tension.toFixed(4); },
+  get beatN() { return beatN; },
+  beatReset() { beatN = 0; beatT = 0; },
+  stingLive() {
+    if (!AC || !stingG) return null;
+    return { root: +stingA.frequency.value.toFixed(1), tri: +stingB.frequency.value.toFixed(1),
+             rootV: +stingG.gain.value.toFixed(5), triV: +stingBG.gain.value.toFixed(5),
+             duck: +bedG.gain.value.toFixed(4) };
+  },
+  stingStep(m, seconds) { meter = m; stingT = 0; updateSting(seconds === undefined ? 0.1 : seconds); },
   get roomTone() { return roomTone ? { ...roomTone } : null; },
   roomToneFor(theme) { return ROOM[theme] ? { ...ROOM[theme] } : null; },
   roomThemes() { return Object.keys(ROOM); },
