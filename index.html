@@ -673,6 +673,7 @@ const T = {
      wide, hears nothing, and asleep until somebody trips an alarm. */
   SENTRY_HALF: 15.5 * 2.6 * Math.PI / 180, SENTRY_RANGE: 235,
   SENTRY_WAKE: 9, SENTRY_OPEN: 0.55,
+  LISTEN_CALL_COOL: 6.5,
   STING_ON: 0.22, STING_LO: 110, STING_HI: 165, STING_V: 0.055,
   STING_TRI_ON: 0.45, STING_TRI_V: 0.03, STING_DUCK: 0.55,
 };
@@ -957,7 +958,7 @@ let mapIdx = 0, loop = 0, endless = false, runT = 0;
 let coins = 0, realCoins = 0, coinsTotal = 5, score = 0;
 let grid = null, spawnPt = { x: 0, y: 0 }, exitPt = { x: 0, y: 0 };
 let coinList = [], emitters = [], propsXY = [];
-let bots = [], noise = [], stepLog = [], panLog = [], listenLock = false;
+let bots = [], noise = [], stepLog = [], panLog = [], listenLock = false, listenLockBy = null;
 let lasers = [], sirenT = 0, nextSiren = 1e9, fogT = 0, nextFog = 1e9, flScale = 1, botSpd = 1, blackoutMap = false;
 let rusty = [], cats = [], belts = [], surging = null, nextSurge = 1e9;
 let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
@@ -1548,7 +1549,7 @@ function spawnBots() {
       range: 0, half: 0, rays: new Array(T.BOT_RAYS + 1),
       sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, chirpT: 0,
       saidHeat: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [],
-      wary: 0, radioT: 0, heard: 0, pingT: rand(0, 2), pingFlash: 0,
+      wary: 0, radioT: 0, heard: 0, callT: 0, pingT: rand(0, 2), pingFlash: 0,
       sweepK: rand(0.7, 1.4), paceK: rand(0.9, 1.12), peekK: rand(0.7, 1.5),
       dwellK: rand(0, 1), dwellT: 0
     });
@@ -2308,6 +2309,7 @@ function updateBots(dt) {
     if (b.radioT > 0) b.radioT = Math.max(0, b.radioT - dt);
     if (b.heard > 0) b.heard = Math.max(0, b.heard - dt * 1.6);
     if (b.kind === 'listen') {
+      if (b.callT > 0) b.callT = Math.max(0, b.callT - dt);
       /* Posture: it has no cone to point, so turning toward what it heard is the
          only aim it can show you. Only while it is standing still, though - when
          it is walking, the path steering already turns it where it is going, and
@@ -2604,7 +2606,7 @@ function updateMeter(dt) {
       if (Math.hypot(b.x - player.x, b.y - player.y) > T.LISTEN_R) continue;
       if (Math.hypot(player.vx, player.vy) < T.LISTEN_STILL) continue;
       if (!losClear(b.x, b.y, player.x, player.y)) continue;
-      anySees = true; listenLock = true; break;
+      anySees = true; listenLock = true; listenLockBy = b; break;
     }
     if (!anySees) for (const e of emitters) {
       if (e.kind === 'search' && !e.dead && inFan(player.x, player.y, e.x, e.y, e.ang, 0.13, e.r, e.rays, 16) && !smokeAcross(e.x, e.y, player.x, player.y)) { anySees = true; searchOnly = true; break; }
@@ -2618,7 +2620,22 @@ function updateMeter(dt) {
     raiseAlarm(player.x, player.y, 620, 'SPOTLIGHT — YOU ARE LIT');
   } else if (!searchOnly) searchLit = false;
 
-  if (!anySees) listenLock = false;
+  if (!anySees) { listenLock = false; listenLockBy = null; }
+  /* A blind hunter that could only ever catch you itself would be a cul-de-sac.
+     What it is really for is pointing: the moment it has you it puts your
+     position out to every drone in radio range. Break away before the meter
+     fills and you are still not clear - they are already on their way.
+
+     Deliberately NOT raiseAlarm, which bumps the run alert level, wakes every
+     sentry on the floor and screams. This is one unit making one report. */
+  if (listenLockBy && (listenLockBy.callT || 0) <= 0) {
+    listenLockBy.callT = T.LISTEN_CALL_COOL;
+    listenLockBy.state = 'chase';
+    listenLockBy.lastX = player.x; listenLockBy.lastY = player.y;
+    const told = radio(listenLockBy);
+    sfx.ping(1, listenLockBy);
+    if (told > 0) toast('IT HAS CALLED YOU IN', 2.2);
+  }
   if (anySees) {
     seenTimer = 0;
     let mult = searchOnly ? 0.7 : 1;
@@ -5297,6 +5314,10 @@ window.__fp = {
     return { d: Math.round(d), drawn: d <= T.LISTEN_R * T.LISTEN_SHOW, r: T.LISTEN_R };
   },
   get listenLock() { return listenLock; },
+  listenCallT() { return bots.filter(b => b.kind === 'listen').map(b => +(b.callT || 0).toFixed(2)); },
+  droneOrders() { return bots.filter(b => b.kind === 'drone').map(b => ({
+    state: b.state, flank: b.flankX === undefined ? null : [Math.round(b.flankX), Math.round(b.flankY)],
+    path: b.path.length })); },
   hearReachFor(i) { return Math.round(hearR(bots[i])); },
   stickResponse(raw) {
     return raw <= T.STICK_DEAD ? 0 : +Math.min(1, (raw - T.STICK_DEAD) / (1 - T.STICK_DEAD)).toFixed(4);

@@ -3838,6 +3838,62 @@ ok('and the cone lesson waits for something that has a cone',
   `listener=${mix.afterListener} drone=${mix.afterDrone}`);
 
 
+/* ---- the blind one points, and the ones with eyes come ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const cal = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  mapIdx = 8; loop = 0; loadMap(8); meter = 0; invuln = 9e9; clearToast();
+  const L = bots.find(b => b.kind === 'listen');
+  const drones = bots.filter(b => b.kind === 'drone');
+  const park = () => drones.forEach((d, i) => { d.x = L.x + 180 + i * 40; d.y = L.y + 120;
+    d.state = 'patrol'; d.path = []; d.flankX = undefined; d.radioT = 0; });
+  const ordered = () => __fp.droneOrders().filter(d => d.state !== 'patrol').length;
+  park();
+  o.alertBefore = alertLvl;
+  o.orderedBefore = ordered();
+  /* freezing beside it keeps you off the air entirely */
+  player.x = L.x + 40; player.y = L.y; invuln = 0; meter = 0;
+  for (let i = 0; i < 60; i++) { player.vx = 0; player.vy = 0; updateMeter(1 / 60); }
+  o.still = { ordered: ordered(), callT: __fp.listenCallT()[0], meter: +meter.toFixed(2) };
+  /* moving, it has you - and it tells them */
+  meter = 0;
+  for (let i = 0; i < 20; i++) { player.vx = 90; player.vy = 0; updateMeter(1 / 60); }
+  o.called = { ordered: ordered(), callT: __fp.listenCallT()[0], lock: __fp.listenLock,
+               listenerState: L.state, distinctFlanks: new Set(__fp.droneOrders()
+                 .filter(d => d.flank).map(d => d.flank.join(','))).size };
+  o.alertAfter = alertLvl;
+  o.sentriesWoken = __fp.sentryState().filter(x => x.awake > 0).length;
+  o.said = __fp.toastList().includes('IT HAS CALLED YOU IN');
+  /* holding the lock must not put it on the air every frame */
+  park();
+  for (let i = 0; i < 30; i++) { player.vx = 90; player.vy = 0; meter = 0; updateMeter(1 / 60); }
+  o.repeat = { ordered: ordered(), callT: __fp.listenCallT()[0] };
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+ok('nothing is on the air to begin with',
+  cal.orderedBefore === 0 && cal.alertBefore === 0, `ordered=${cal.orderedBefore}`);
+/* freezing already saved you from being caught; it saves you from being reported */
+ok('standing still keeps you off the air',
+  cal.still.ordered === 0 && cal.still.callT === 0 && cal.still.meter === 0, JSON.stringify(cal.still));
+ok('but the moment it has you, the drones are given your position',
+  cal.called.ordered >= 2 && cal.called.lock === true && cal.called.listenerState === 'chase',
+  JSON.stringify(cal.called));
+ok('and they are spread out rather than sent to one spot',
+  cal.called.distinctFlanks >= 2, `${cal.called.distinctFlanks} distinct flank points`);
+/* deliberately not raiseAlarm: one unit reporting, not the building screaming */
+ok('a report is not a building-wide alarm',
+  cal.alertAfter === cal.alertBefore && cal.sentriesWoken === 0,
+  `alert ${cal.alertBefore}->${cal.alertAfter}, sentries woken=${cal.sentriesWoken}`);
+ok('it tells you it has done it', cal.said === true, JSON.stringify(cal.said));
+ok('and holding the lock does not put it on the air every frame',
+  cal.repeat.ordered === 0 && cal.repeat.callT > 0,
+  `re-ordered=${cal.repeat.ordered} cooldown=${cal.repeat.callT}s`);
+ok('the block measured a running game', cal.mode === 'playing', cal.mode);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

@@ -156,6 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **The blind one points** — when a listener has you it puts your position out
+  to every drone in range, so breaking away before the meter fills no longer
+  means you are clear. Standing still keeps you off the air as well as out of
+  its grip.
 - **The floors get stranger as you go** — drones alone for the first three, a
   listener from the fourth, sentries from the sixth, and the Core fields all
   three at once.
