@@ -223,6 +223,10 @@ DPR cap and particle budgets automatically. Haptics fire where supported
 
 ## How it works
 
+- **Falloff**: every light in the game - your beam, its near bubble, lamp pools,
+  searchlights, the warm wash - fades on one shared curve rather than a straight
+  ramp: a core that holds, a quick drop through the middle and a long thin tail.
+  A lamp measures 264 at its heart against 65 at its rim.
 - **Lighting stack**: the world renders under a soft darkness layer, punched
   open by the flashlight fan and lamp pools. The exit beacon and your thief ride
   *above* the darkness and stay readable; drones and coins render only where

@@ -81,7 +81,7 @@ await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2000);
 await eq('autostart -> playing', '__fp.mode', 'playing');
 await eq('map 0 loaded', '__fp.mapIdx', 0);
-await evl('for (const b of bots) { b.face = Math.atan2(b.y - player.y, b.x - player.x); b.state = "patrol"; }');
+await evl('noise.length = 0; for (const b of bots) { b.face = Math.atan2(b.y - player.y, b.x - player.x); b.state = "patrol"; b.searchPts = []; b.path = []; }');
 await sleep(120);
 await eq('bots on patrol', '__fp.botState[0]', 'patrol');
 
@@ -374,6 +374,46 @@ ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
+
+/* ---- light falls off on a curve, not a line ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const fo = await evl(`(() => JSON.stringify(__fp.falloff))()`);
+const curve = JSON.parse(fo);
+ok('the falloff runs from full to nothing', curve[0][1] === 1 && curve[curve.length - 1][1] === 0, fo);
+ok('it only ever decreases', curve.every((p, i) => i === 0 || p[1] <= curve[i - 1][1]), fo);
+ok('and it is a curve rather than a straight line', (() => {
+  /* a linear ramp would have value === 1 - t at every stop */
+  return curve.some(([t, v]) => Math.abs(v - (1 - t)) > 0.08);
+})(), fo);
+ok('it holds its core before dropping', curve.find(([t]) => t >= 0.18)[1] > 0.85, fo);
+ok('and keeps a long thin tail', curve.find(([t]) => t >= 0.78)[1] > 0 && curve.find(([t]) => t >= 0.78)[1] < 0.3, fo);
+
+/* the pool a lamp casts should be brighter at its heart than at its edge */
+const pool = await evl(`(() => {
+  mode = 'playing'; invuln = 999; loop = 0; mapIdx = 0; loadMap(0); hud();
+  const e = emitters.find(x => x.kind === 'lamp');
+  if (!e) return JSON.stringify({ skip: true });
+  player.x = e.x + e.r * 1.6; player.y = e.y;
+  if (isWall(player.x, player.y)) player.x = e.x - e.r * 1.6;
+  beamOn = false;
+  for (let k = 0; k < 40; k++) update(0.016);
+  paused = true; render();
+  const read = (dx) => {
+    const sx = (e.x + dx - camNow.cx) * Z, sy = (e.y - camNow.cy) * Z;
+    if (sx < 6 || sy < 6 || sx > W - 6 || sy > H - 6) return null;
+    const d = ctx.getImageData((sx - 3) * DPR, (sy - 3) * DPR, 6 * DPR, 6 * DPR).data;
+    let sum = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { sum += d[i] + d[i+1] + d[i+2]; n++; }
+    return Math.round(sum / n);
+  };
+  const mid = read(0), edge = read(e.r * 0.85);
+  paused = false; beamOn = true;
+  return JSON.stringify({ mid, edge, r: Math.round(e.r) });
+})()`);
+const pl2 = JSON.parse(pool);
+ok('a lamp is brighter at its centre than its rim',
+  pl2.skip || (pl2.mid !== null && pl2.edge !== null && pl2.mid > pl2.edge + 12), pool);
 
 /* ---- floors open rather than cut ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

@@ -2409,13 +2409,13 @@ function render() {
   /* flashlight hole */
   if (flHits.length) {
     const gr = darkCtx.createRadialGradient(player.x, player.y, 10, player.x, player.y, flRange());
-    gr.addColorStop(0, 'rgba(0,0,0,0.82)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    rampBlack(gr, 0.82);
     fanPath(darkCtx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, flRange(), player.aim);
     if (mirrorBeam) fanPath(darkCtx, mirrorBeam.x, mirrorBeam.y, mirrorBeam.hits, T.FL_RAYS, T.FL_HALF, mirrorBeam.range, mirrorBeam.ang);
     darkCtx.fillStyle = gr; darkCtx.fill();
     /* bubble */
     const gb = darkCtx.createRadialGradient(player.x, player.y, 2, player.x, player.y, T.FL_BUBBLE);
-    gb.addColorStop(0, 'rgba(0,0,0,0.7)'); gb.addColorStop(1, 'rgba(0,0,0,0)');
+    rampBlack(gb, 0.7);
     darkCtx.fillStyle = gb; darkCtx.beginPath(); darkCtx.arc(player.x, player.y, T.FL_BUBBLE, 0, TAU); darkCtx.fill();
   }
   /* lamp holes */
@@ -2425,13 +2425,13 @@ function render() {
     const a = flick(e);
     if (e.kind === 'search') {
       const gsf = darkCtx.createRadialGradient(e.x, e.y, 4, e.x, e.y, e.r);
-      gsf.addColorStop(0, 'rgba(0,0,0,' + 0.7 * a + ')'); gsf.addColorStop(1, 'rgba(0,0,0,0)');
+      rampBlack(gsf, 0.7 * a);
       fanPath(darkCtx, e.x, e.y, e.rays, 16, 0.13, e.r, e.ang);
       darkCtx.fillStyle = gsf; darkCtx.fill();
       continue;
     }
     const gr2 = darkCtx.createRadialGradient(e.x, e.y, 4, e.x, e.y, e.r);
-    gr2.addColorStop(0, 'rgba(0,0,0,' + 0.62 * a + ')'); gr2.addColorStop(1, 'rgba(0,0,0,0)');
+    rampBlack(gr2, 0.62 * a);
     darkCtx.fillStyle = gr2; darkCtx.beginPath(); darkCtx.arc(e.x, e.y, e.r, 0, TAU); darkCtx.fill();
   }
   darkCtx.globalCompositeOperation = 'source-over';
@@ -2541,7 +2541,7 @@ function render() {
   ctx.globalCompositeOperation = 'lighter';
   if (flHits.length) {
     const gr = ctx.createRadialGradient(player.x, player.y, 8, player.x, player.y, flRange());
-    gr.addColorStop(0, 'rgba(255,236,190,0.11)'); gr.addColorStop(1, 'rgba(255,236,190,0)');
+    rampTint(gr, '255,236,190', 0.11);
     fanPath(ctx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, flRange(), player.aim);
     if (mirrorBeam) fanPath(ctx, mirrorBeam.x, mirrorBeam.y, mirrorBeam.hits, T.FL_RAYS, T.FL_HALF, mirrorBeam.range, mirrorBeam.ang);
     ctx.fillStyle = gr; ctx.fill();
@@ -3408,6 +3408,19 @@ function drawPlayer() {
 
 /* The floor does not cut, it opens: a shutter lifting off the new place with its
    name on it. The swap itself already happened, so nothing about the flow moves. */
+/* Light does not fade in a straight line. A hot core, a quick drop through the
+   middle and a long thin tail reads as a real pool rather than a flat disc, and
+   one curve for every light keeps them consistent. */
+const FALLOFF = [[0, 1], [0.18, 0.94], [0.38, 0.74], [0.58, 0.46], [0.78, 0.2], [1, 0]];
+function rampBlack(g, peak) {
+  for (const [t, v] of FALLOFF) g.addColorStop(t, 'rgba(0,0,0,' + (peak * v).toFixed(4) + ')');
+  return g;
+}
+function rampTint(g, rgb, peak) {
+  for (const [t, v] of FALLOFF) g.addColorStop(t, 'rgba(' + rgb + ',' + (peak * v).toFixed(4) + ')');
+  return g;
+}
+
 function drawFloorWipe() {
   if (wipeT <= 0) return;
   const k = 1 - wipeT / T.WIPE_T;             /* 0 just arrived, 1 fully open */
@@ -4161,6 +4174,7 @@ window.__fp = {
   get alertLvl() { return alertLvl; },
   get caughtHold() { return +caughtHold.toFixed(3); },
   get wipeT() { return +wipeT.toFixed(3); },
+  get falloff() { return FALLOFF.map(f => f.slice()); },
   get wipeName() { return wipeName; },
   get runUnlocks() { return runUnlocks.slice(); },
   get achs() { return JSON.parse(JSON.stringify(achs)); },
