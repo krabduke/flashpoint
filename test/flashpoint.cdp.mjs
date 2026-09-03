@@ -3163,6 +3163,62 @@ ok('and this block puts the machine back as it found it',
   stn.restored.vol === 0.55 && stn.restored.motion === 'auto', JSON.stringify(stn.restored));
 
 
+/* ---- minimap: the swept area and nothing else ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const mm = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0;
+  clearMemory(); render();
+  o.fresh = { seen: __fp.miniSeen(), lit: __fp.miniPixels() };
+  const px = player.x, py = player.y;
+  for (let k = 0; k < 40; k++) {
+    __fp.aimAt(px + Math.cos(k * 0.157) * 400, py + Math.sin(k * 0.157) * 400);
+    for (let i = 0; i < 12; i++) update(1 / 60);
+  }
+  render();
+  o.swept = { seen: __fp.miniSeen(), lit: __fp.miniPixels() };
+  /* a drone standing in the dark must leave no mark on it */
+  const before = __fp.miniPixels();
+  spawnBots();
+  for (const b of bots) { b.x = 1040; b.y = 660; }
+  render();
+  o.withDrones = { lit: __fp.miniPixels(), same: __fp.miniPixels() === before, n: bots.length };
+  bots.length = 0;
+  /* the exit is hidden until you have laid eyes on it, then it shows */
+  o.exitBefore = __fp.miniExitVisible();
+  const litBefore = __fp.miniPixels();
+  const ei = ((exitPt.y / 20) | 0) * 56 + ((exitPt.x / 20) | 0);
+  surveyG[ei] = 1; surveyG[ei + 1] = 1; surveyG[ei - 1] = 1;
+  render();
+  o.exitAfter = { visible: __fp.miniExitVisible(), lit: __fp.miniPixels(), grew: __fp.miniPixels() > litBefore };
+  /* turning it off in settings */
+  const seg = v => [...$('miniSeg').children].find(b => b.dataset.mini === v);
+  seg('off').click(); render(); o.off = { shown: __fp.miniShown(), setting: settings.minimap };
+  seg('on').click(); render(); o.on = { shown: __fp.miniShown(), setting: settings.minimap };
+  toMenu(); render(); o.inMenu = __fp.miniShown();
+  return JSON.stringify(o);
+})()`));
+ok('a fresh floor has nothing on the map but you',
+  mm.fresh.seen === 0 && mm.fresh.lit > 0 && mm.fresh.lit < 60,
+  `cells=${mm.fresh.seen} px=${mm.fresh.lit}`);
+ok('sweeping the room fills it in',
+  mm.swept.seen > 100 && mm.swept.lit > mm.fresh.lit * 10,
+  `cells=${mm.swept.seen} px=${mm.swept.lit}`);
+/* the whole defence of having a minimap at all: it adds no information the
+   afterglow on the main canvas was not already showing */
+ok('a drone in the dark puts nothing on it',
+  mm.withDrones.n > 0 && mm.withDrones.same === true, JSON.stringify(mm.withDrones));
+ok('the way out stays hidden until you have lit it',
+  mm.exitBefore === false && mm.exitAfter.visible === true && mm.exitAfter.grew === true,
+  `${mm.exitBefore} -> ${JSON.stringify(mm.exitAfter)}`);
+ok('settings can turn it off and back on',
+  mm.off.shown === false && mm.off.setting === false && mm.on.shown === true && mm.on.setting === true,
+  `${JSON.stringify(mm.off)} ${JSON.stringify(mm.on)}`);
+ok('and it is not on the menu', mm.inMenu === false);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

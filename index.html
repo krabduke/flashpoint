@@ -19,6 +19,21 @@
   #game{position:fixed;inset:0;touch-action:none}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
 
+  /* Bottom left, and deliberately pointer-events:none - the touch sticks are
+     bound on window, so this never sits between a thumb and the game. */
+  #minimap{
+    position:absolute;z-index:4;pointer-events:none;
+    left:calc(14px + env(safe-area-inset-left));
+    bottom:calc(14px + env(safe-area-inset-bottom));
+    width:132px;height:85px;border-radius:7px;
+    border:1px solid rgba(140,130,200,.26);
+    background:rgba(6,4,14,.55);
+    box-shadow:0 6px 22px rgba(0,0,0,.45);
+    opacity:.85;transition:opacity .25s ease;
+  }
+  #minimap.hidden{display:none}
+  @media (max-width:430px){#minimap{width:96px;height:62px}}
+
   #hud{
     position:absolute;top:0;left:0;right:0;z-index:4;pointer-events:none;
     display:flex;justify-content:space-between;align-items:flex-start;
@@ -377,6 +392,7 @@
 <div id="game">
   <canvas id="c"></canvas>
 
+  <canvas id="minimap" aria-hidden="true"></canvas>
   <div id="hud">
     <div class="hud-block">
       <div class="hud-label">COINS</div>
@@ -492,6 +508,13 @@
       <div class="set-row">
         <span class="set-label"><b>DIFFICULTY</b><span id="diffNote">Drone speed, meter fill, torch drain</span></span>
         <button class="btn ghost" id="diffBtn" type="button" style="padding:9px 16px;font-size:10px">STANDARD</button>
+      </div>
+      <div class="set-row">
+        <span class="set-label"><b>MINIMAP</b><span>Only what your beam has already lit</span></span>
+        <div class="seg" id="miniSeg" role="group" aria-label="Minimap">
+          <button type="button" data-mini="on">ON</button>
+          <button type="button" data-mini="off">OFF</button>
+        </div>
       </div>
       <div class="set-row">
         <span class="set-label"><b>MOTION</b><span>Screen shake, floor wipes, particle bursts</span></span>
@@ -1072,7 +1095,7 @@ try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
 /* Settings were scattered: difficulty was a button on the menu, volume did not
    exist at all beyond mute, and reduced motion was read straight off the media
    query with no way to disagree with it. */
-const SET0 = { vol: 0.55, motion: 'auto' };
+const SET0 = { vol: 0.55, motion: 'auto', minimap: true };
 let settings = (() => {
   try { return Object.assign({}, SET0, JSON.parse(localStorage.getItem('flashpoint.settings') || '{}')); }
   catch (e) { return Object.assign({}, SET0); }
@@ -2838,6 +2861,52 @@ function stampMemory(dt) {
 
 /* fresh light is nearer white, old memory settles into amber, and the blend
    between them is what tells you at a glance which is which */
+/* The minimap shows the survey layer and nothing else: no drones, no uncollected
+   gold, no geometry you have not lit. Everything on it is already visible on the
+   main canvas as amber afterglow - this only makes it legible at a glance, which
+   is why it does not undercut the dark. */
+let miniCv = null, miniCtx = null, miniImg = null;
+const MINI_SEEN = 0.06;
+function drawMinimap() {
+  const el = $('minimap');
+  if (!el) return;
+  const on = mode === 'playing' && settings.minimap !== false;
+  el.classList.toggle('hidden', !on);
+  if (!on) return;
+  if (!miniCv) {
+    miniCv = document.createElement('canvas'); miniCv.width = GW; miniCv.height = GH;
+    miniCtx = miniCv.getContext('2d'); miniImg = miniCtx.createImageData(GW, GH);
+  }
+  const d = miniImg.data;
+  for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
+    const i = gy * GW + gx, o = i * 4;
+    const seen = surveyG[i];
+    if (seen < MINI_SEEN) { d[o] = 0; d[o + 1] = 0; d[o + 2] = 0; d[o + 3] = 0; continue; }
+    /* the grid is tile-resolution, the survey is half-tile */
+    const wall = grid[((gy * GC / T.TILE) | 0) * T.COLS + ((gx * GC / T.TILE) | 0)];
+    const k = Math.min(1, seen / 0.55);
+    if (wall) { d[o] = 96; d[o + 1] = 74; d[o + 2] = 52; d[o + 3] = 90 + 110 * k; }
+    else { d[o] = 243; d[o + 1] = 188; d[o + 2] = 120; d[o + 3] = 26 + 104 * k; }
+  }
+  miniCtx.putImageData(miniImg, 0, 0);
+  const w = el.clientWidth, h = el.clientHeight, dpr = Math.min(2, DPR);
+  if (el.width !== Math.round(w * dpr)) { el.width = Math.round(w * dpr); el.height = Math.round(h * dpr); }
+  const g = el.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  g.imageSmoothingEnabled = true;
+  g.drawImage(miniCv, 0, 0, GW, GH, 0, 0, w, h);
+  const sx = w / (T.COLS * T.TILE), sy = h / (T.ROWS * T.TILE);
+  /* the way out, but only once you have actually laid eyes on it */
+  const ei = ((exitPt.y / GC) | 0) * GW + ((exitPt.x / GC) | 0);
+  if (surveyG[ei] >= MINI_SEEN) {
+    g.fillStyle = exitOpen ? '#4dffb8' : 'rgba(77,255,184,.4)';
+    g.fillRect(exitPt.x * sx - 2, exitPt.y * sy - 2, 4, 4);
+  }
+  g.fillStyle = '#fff6da';
+  g.beginPath(); g.arc(player.x * sx, player.y * sy, 2.1, 0, TAU); g.fill();
+}
+
 function drawMemory(g) {
   if (!glowCv) {
     glowCv = document.createElement('canvas'); glowCv.width = GW; glowCv.height = GH;
@@ -3112,6 +3181,7 @@ function render() {
   drawExitArrow();
   if (TOUCH && mode === 'playing') drawSticks();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawMinimap();          /* its own canvas element, so it sits outside this ctx */
 }
 
 function revealed(b) {
@@ -4506,6 +4576,7 @@ function renderSettings() {
   $('diffBtn').textContent = D().name;
   $('diffNote').textContent = DIFF_NOTE[D().id] || 'Drone speed, meter fill, torch drain';
   for (const b of $('motionSeg').children) b.classList.toggle('on', b.dataset.motion === settings.motion);
+  for (const b of $('miniSeg').children) b.classList.toggle('on', (b.dataset.mini === 'on') === (settings.minimap !== false));
 }
 const DIFF_NOTE = {
   casual: 'Slower drones, a kinder meter, a longer torch',
@@ -4692,6 +4763,12 @@ $('volSlider').addEventListener('input', e => {
   $('volRead').textContent = Math.round(settings.vol * 100) + '%';
   applySettings(); saveSettings();
 });
+$('miniSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-mini]');
+  if (!b) return;
+  settings.minimap = b.dataset.mini === 'on';
+  saveSettings(); renderSettings(); sfx.ui();
+});
 $('motionSeg').addEventListener('click', e => {
   const b = e.target.closest('button[data-motion]');
   if (!b) return;
@@ -4768,6 +4845,15 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  miniShown() { const el = $('minimap'); return !el.classList.contains('hidden'); },
+  miniSeen() { let n = 0; for (let i = 0; i < surveyG.length; i++) if (surveyG[i] >= MINI_SEEN) n++; return n; },
+  miniExitVisible() { const i = ((exitPt.y / GC) | 0) * GW + ((exitPt.x / GC) | 0); return surveyG[i] >= MINI_SEEN; },
+  miniPixels() {
+    const el = $('minimap'), g = el.getContext('2d');
+    const d = g.getImageData(0, 0, el.width, el.height).data;
+    let lit = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) lit++;
+    return lit;
+  },
   get realCoins() { return realCoins; },
   coinRatioNow() { return +coinRatio().toFixed(5); },
   coinLadder() {

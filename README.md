@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **A map of what you have lit** — bottom left, and strictly the swept area: no
+  drones, no gold you have not found, no walls you have not shone a beam at. The
+  way out appears on it only once you have seen the door yourself.
 - **Settings in one place** — volume, difficulty and motion, reachable from the
   menu or from a paused run. Motion has three states: auto follows your system,
   the other two overrule it, and reduced means calmer shake, fewer particles and
