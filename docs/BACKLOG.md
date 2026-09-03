@@ -469,3 +469,17 @@ Append one line per completed item: `date · id · commit · note`.
     is for the new thing to stand down, never for the accessibility threshold to
     move. Any full-frame effect needs checking against the modes that exist to
     control colour.
+- 2026-09-03 · audio · distance now takes loudness AND brightness: 17000Hz at your feet, 1547Hz at 900px, floored at 0.16 so nothing is ever fully silent. Positional sound was panned but never attenuated, so a crate across the building was as loud as one at your elbow, 4 assertions
+- 2026-09-03 · visual · wake rings where you wade, light shafts from lamps, 2 assertions
+
+20. **A full-frame effect eats information, not just mood.** A multiply pass
+    darkens by scaling, so it compresses every difference in the frame
+    proportionally - the map-memory overlay's margin fell from 3 luminance units
+    to exactly 2 and landed on its threshold. The colour grade had already done
+    the same thing to colourblind mode. Fix by moving the character into the
+    additive pass, which adds without compressing, rather than by moving the
+    threshold. Neither regression would have been visible in a screenshot.
+21. **Grep for an identifier, do not guess its pattern.** `grep -c "const hear "`
+    cannot match `const hearing` - the trailing space makes a longer name
+    invisible - so a clean zero meant nothing and the run died on a collision.
+    Extract every declared name and test membership instead.

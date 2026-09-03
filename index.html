@@ -820,6 +820,7 @@ const T = {
   GLOW_TRAIL_IN: 5.2, GLOW_TRAIL_OUT: 0.41, GLOW_TRAIL_DRAW: 0.30,
   GLOW_SURVEY_IN: 0.8, GLOW_SURVEY_OUT: 0.02, GLOW_SURVEY_DRAW: 0.12,
   DARK: 0.5, SHAKE_CAP: 26, SERVO_HALF: 380, SERVO_GAP: 0.3, PAN_HALF: 420, PAN_MAX: 0.85,
+  FAR: 1150, FAR_MIN: 0.16, FAR_HZ: 780, NEAR_HZ: 17000, WAKE_T: 1.1,
   STICK_DEAD: 0.30, STICK_WALK: 0.50, STICK_SPRINT_ON: 0.85, STICK_SPRINT_OFF: 0.62,
   STICK_AIM_DEAD: 0.28,
   /* the listener: no eyes, sharper ears, and it only knows you are there if you
@@ -1618,13 +1619,26 @@ function initAudio() {
    drone in the wrong ear whenever you walk into a corner. Nothing goes fully
    into one ear: 0.85 keeps it playable on headphones. */
 function panFor(x) { return clamp((x - player.x) / T.PAN_HALF, -1, 1) * T.PAN_MAX; }
+const farK = (at) => {
+  const d = Math.hypot(at.x - player.x, at.y - player.y);
+  return clamp(1 - d / T.FAR, T.FAR_MIN, 1);
+};
 function sinkAt(at) {
-  if (!at || !AC || !AC.createStereoPanner) { if (conv && master) return master; return master; }
+  if (!at || !AC || !AC.createStereoPanner) return master;
+  const k = farK(at);
   const p = AC.createStereoPanner();
   p.pan.value = panFor(at.x);
-  p.connect(master);
-  if (conv) p.connect(conv);   /* dry to master, wet to the room */
-  panLog.push({ pan: +p.pan.value.toFixed(3), x: Math.round(at.x) });
+  /* air eats treble before it eats volume, so distance takes both - a muffled
+     thud reads as far away even at the same loudness */
+  const f = AC.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = T.FAR_HZ + (T.NEAR_HZ - T.FAR_HZ) * k * k;
+  const g = AC.createGain();
+  g.gain.value = k;
+  p.connect(f); f.connect(g); g.connect(master);
+  if (conv) g.connect(conv);   /* dry to master, wet to the room */
+  panLog.push({ pan: +p.pan.value.toFixed(3), x: Math.round(at.x),
+    k: +k.toFixed(3), hz: Math.round(f.frequency.value) });
   if (panLog.length > 32) panLog.shift();
   return p;
 }
@@ -1785,31 +1799,31 @@ function setRoomTone(theme) {
 
 /* ---------- themes ---------- */
 const THEMES = {
-  house: { grade: { sh: '#3a2412', hi: '#ffd9a0', a: 0.2, b: 0.06 }, floor: '#2a1f18', floor2: '#33261c', wall: '#4e3a2c', wallTop: '#6b5040', ink: '#0a0710',
+  house: { grade: { sh: '#3a2412', hi: '#ffd9a0', a: 0.124, b: 0.09 }, floor: '#2a1f18', floor2: '#33261c', wall: '#4e3a2c', wallTop: '#6b5040', ink: '#0a0710',
     lamp: '#ffcf8e', accent: '#ffd9a0', fog: 'rgba(10,7,16,' , dust: '#ffe9c8',
     props: ['sofa', 'plant', 'rug', 'tv'] },
-  warehouse: { grade: { sh: '#16202e', hi: '#cfe0ff', a: 0.24, b: 0.05 }, floor: '#1d2026', floor2: '#23272f', wall: '#39424e', wallTop: '#525f6f', ink: '#07080e',
+  warehouse: { grade: { sh: '#16202e', hi: '#cfe0ff', a: 0.149, b: 0.075 }, floor: '#1d2026', floor2: '#23272f', wall: '#39424e', wallTop: '#525f6f', ink: '#07080e',
     lamp: '#ffe9c0', accent: '#cfd8e8', fog: 'rgba(7,8,14,', dust: '#cfe0ee',
     props: ['crate', 'shelf', 'barrel', 'pallet'] },
-  city: { grade: { sh: '#241040', hi: '#7ef0ff', a: 0.26, b: 0.08 }, floor: '#14162a', floor2: '#181c33', wall: '#262b4a', wallTop: '#3b4270', ink: '#05060f',
+  city: { grade: { sh: '#241040', hi: '#7ef0ff', a: 0.161, b: 0.12 }, floor: '#14162a', floor2: '#181c33', wall: '#262b4a', wallTop: '#3b4270', ink: '#05060f',
     lamp: '#ff3e8f', accent: '#3ef0ff', fog: 'rgba(5,6,15,', dust: '#9fd8ff', rain: true,
     props: ['stall', 'ac', 'bench', 'holo'] },
-  ward: { grade: { sh: '#0f2418', hi: '#d6fff0', a: 0.22, b: 0.06 }, floor: '#18211e', floor2: '#1d2825', wall: '#2e423d', wallTop: '#455f58', ink: '#050a08',
+  ward: { grade: { sh: '#0f2418', hi: '#d6fff0', a: 0.136, b: 0.09 }, floor: '#18211e', floor2: '#1d2825', wall: '#2e423d', wallTop: '#455f58', ink: '#050a08',
     lamp: '#ff5040', accent: '#8fe8d8', fog: 'rgba(5,10,8,', dust: '#bfe8dd',
     props: ['gurney', 'chair', 'locker', 'glass'] },
-  museum: { grade: { sh: '#2a1c0c', hi: '#ffeccc', a: 0.2, b: 0.06 }, floor: '#2b2620', floor2: '#332d25', wall: '#5a5148', wallTop: '#7d7161', ink: '#0a0806',
+  museum: { grade: { sh: '#2a1c0c', hi: '#ffeccc', a: 0.124, b: 0.09 }, floor: '#2b2620', floor2: '#332d25', wall: '#5a5148', wallTop: '#7d7161', ink: '#0a0806',
     lamp: '#ffd9a0', accent: '#e8c877', fog: 'rgba(10,8,6,', dust: '#ffe9c8',
     props: ['plant', 'bench', 'rug', 'sofa'] },
-  server: { grade: { sh: '#04202a', hi: '#c8f4ff', a: 0.26, b: 0.07 }, floor: '#10161f', floor2: '#141c28', wall: '#1f2c3f', wallTop: '#31465f', ink: '#04070c',
+  server: { grade: { sh: '#04202a', hi: '#c8f4ff', a: 0.161, b: 0.105 }, floor: '#10161f', floor2: '#141c28', wall: '#1f2c3f', wallTop: '#31465f', ink: '#04070c',
     lamp: '#7df9ff', accent: '#3ef0ff', fog: 'rgba(4,7,12,', dust: '#9fd8ff',
     props: ['ac', 'crate', 'bench', 'holo'] },
-  bank: { grade: { sh: '#1a2410', hi: '#ffe6b0', a: 0.22, b: 0.06 }, floor: '#1c221e', floor2: '#222a24', wall: '#3d4a3f', wallTop: '#5a6f60', ink: '#06090a',
+  bank: { grade: { sh: '#1a2410', hi: '#ffe6b0', a: 0.136, b: 0.09 }, floor: '#1c221e', floor2: '#222a24', wall: '#3d4a3f', wallTop: '#5a6f60', ink: '#06090a',
     lamp: '#ffe9b0', accent: '#d8b45a', fog: 'rgba(6,9,10,', dust: '#ffe9c8',
     props: ['locker', 'crate', 'plant', 'pallet'] },
-  docks: { grade: { sh: '#08142a', hi: '#ffc98a', a: 0.26, b: 0.07 }, floor: '#171a20', floor2: '#1c2028', wall: '#2c333d', wallTop: '#465161', ink: '#050609',
+  docks: { grade: { sh: '#08142a', hi: '#ffc98a', a: 0.161, b: 0.105 }, floor: '#171a20', floor2: '#1c2028', wall: '#2c333d', wallTop: '#465161', ink: '#050609',
     lamp: '#ffc46e', accent: '#8fb6cc', fog: 'rgba(5,6,9,', dust: '#cfe0ee', rain: true,
     props: ['barrel', 'crate', 'pallet', 'bench'] },
-  core: { grade: { sh: '#2a0808', hi: '#ffb08a', a: 0.24, b: 0.08 }, floor: '#1e1214', floor2: '#251619', wall: '#4a2830', wallTop: '#6d3c46', ink: '#0a0406',
+  core: { grade: { sh: '#2a0808', hi: '#ffb08a', a: 0.149, b: 0.12 }, floor: '#1e1214', floor2: '#251619', wall: '#4a2830', wallTop: '#6d3c46', ink: '#0a0406',
     lamp: '#ff5040', accent: '#ff8a5c', fog: 'rgba(10,4,6,', dust: '#ffb8a8',
     props: ['locker', 'barrel', 'ac', 'gurney'] }
 };
@@ -2336,6 +2350,8 @@ function update(dt) {
       stepT = T.WATER_STEP;
       makeNoise(player.x, player.y, T.STEP_R * T.WATER_MULT * haulNoise() * (sprinting ? 1.25 : 1));
       sfx.splash();
+      wakes.push({ x: player.x, y: player.y, t: 0 });
+      if (wakes.length > 14) wakes.shift();
       for (let i = 0; i < 3; i++) parts.push({ x: player.x + rand(-6, 6), y: player.y + rand(-4, 4),
         vx: rand(-30, 30), vy: rand(-46, -14), life: rand(0.2, 0.4), max: 0.4, col: glowWhiteS, size: rand(1, 2) });
     }
@@ -3919,6 +3935,7 @@ function render() {
   for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) drawVent(i);
   if (ghostPath && mode === 'playing') drawGhost();
   for (let i = 0; i < waterAt.length; i++) if (waterAt[i]) drawWater(i);
+  drawWakes();
   for (const pl of plates) drawPlate(pl);
   for (const cr of crates) if (!cr.broken) drawCrate(cr);
   for (const f of safes) drawSafe(f);
@@ -3940,6 +3957,27 @@ function render() {
     ctx.globalAlpha = 0.30 + 0.28 * tw;
     ctx.drawImage(glowGoldS, c.x - 11, c.y - 11, 22, 22);
   }
+  /* Shafts: a lamp in a dusty room throws visible spokes. Very faint, turning
+     slowly, and only from real fixtures - the exit and searchlights already have
+     their own language and would only be muddied by this. */
+  if (motionFull()) {
+    ctx.globalCompositeOperation = 'lighter';
+    for (const e of emitters) {
+      if (e.dead || e.kind !== 'lamp') continue;
+      ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(time * 0.06 + e.flick);
+      ctx.fillStyle = e.col;
+      for (let k = 0; k < 5; k++) {
+        ctx.globalAlpha = 0.030 + 0.014 * Math.sin(time * 0.7 + k * 1.9 + e.flick);
+        ctx.beginPath(); ctx.moveTo(0, 0);
+        ctx.arc(0, 0, e.r * 0.92, k * 1.2566 - 0.10, k * 1.2566 + 0.10);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
   /* Bloom: the same sources again, wider and fainter. A bright thing bleeds
      into what surrounds it, and without that a lamp is only a pale circle. */
   for (const e of emitters) {
@@ -4634,6 +4672,26 @@ function drawGhost() {
   ctx.globalAlpha = 0.3;
   ctx.fillStyle = '#9fd0ff';
   ctx.beginPath(); ctx.arc(ghostPath[0], ghostPath[1], 2.4, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+/* The pool had ripples of its own but none of them were yours, so wading through
+   it looked exactly like standing beside it. */
+let wakes = [];
+function drawWakes() {
+  if (!wakes.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = wakes.length - 1; i >= 0; i--) {
+    const w = wakes[i];
+    w.t += lastDt || 0.016;
+    if (w.t > T.WAKE_T) { wakes.splice(i, 1); continue; }
+    const k = w.t / T.WAKE_T;
+    ctx.globalAlpha = (1 - k) * 0.22;
+    ctx.strokeStyle = '#bfe2ff';
+    ctx.lineWidth = 1.4 * (1 - k) + 0.4;
+    ctx.beginPath(); ctx.arc(w.x, w.y, 4 + k * 34, 0, TAU); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -6479,6 +6537,10 @@ window.__fp = {
   },
   playerScreen() { const { cx, cy } = camFit();
     return { x: Math.round((player.x - cx) * Z), y: Math.round((player.y - cy) * Z), H: Math.round(H) }; },
+  hearAt(x, y) { const k = farK({ x, y });
+    return { k: +k.toFixed(3), hz: Math.round(T.FAR_HZ + (T.NEAR_HZ - T.FAR_HZ) * k * k) }; },
+  wakes() { return wakes.length; },
+  shaftLamps() { return emitters.filter(e => e.kind === 'lamp' && !e.dead).length; },
   gradeApplied() { const cb = colourblind();
     return { warm: !!TH.grade && !cb, shadow: TH.grade ? +(TH.grade.a * (cb ? 0.6 : 1)).toFixed(3) : 0 }; },
   grade() { return TH.grade ? { sh: TH.grade.sh, hi: TH.grade.hi, a: TH.grade.a } : null; },

@@ -4424,6 +4424,40 @@ ok('the HUD does not overflow its own width either',
   ui.hudRight <= ui.vw + 1, `${ui.hudRight} of ${ui.vw}`);
 ok('and it goes back', ui.back === '1', ui.back);
 
+/* ---- distance is audible, not just placed in the stereo field ---- */
+const earshot = JSON.parse(await evl(`(() => {
+  mode = 'playing'; mapIdx = 0; loadMap(0); __fp.teleport(200, 200);
+  const at = (dx) => __fp.hearAt(200 + dx, 200);
+  return JSON.stringify({ here: at(0), close: at(200), far: at(900),
+    miles: at(4000), floor: T.FAR_MIN });
+})()`));
+ok('a sound at your feet is at full volume', earshot.here.k === 1, JSON.stringify(earshot.here));
+ok('and one across the building is not', earshot.far.k < 0.45,
+  `${earshot.far.k} at 900px`);
+ok('distance takes the treble before it takes the volume',
+  earshot.far.hz < earshot.here.hz * 0.4, `${earshot.here.hz}Hz here vs ${earshot.far.hz}Hz far`);
+ok('but nothing ever goes completely silent, or it stops being a cue',
+  earshot.miles.k === earshot.floor && earshot.floor > 0, `${earshot.miles.k}`);
+
+/* ---- the pool answers to you walking through it ---- */
+const wading = JSON.parse(await evl(`(() => {
+  mode = 'playing'; invuln = 9e9;
+  const wet = MAPS.findIndex(m => m.rows.join('').includes('~'));
+  mapIdx = wet; loadMap(wet); bots.length = 0;
+  let tile = null;
+  for (let i = 0; i < waterAt.length && !tile; i++) if (waterAt[i]) tile = i;
+  const gx = tile % T.COLS, gy = (tile - gx) / T.COLS;
+  const before = __fp.wakes();
+  __fp.teleport(gx * 40 + 20, gy * 40 + 20);
+  for (let i = 0; i < 90; i++) { keys.right = true; update(1 / 60); }
+  keys.right = false;
+  const during = __fp.wakes();
+  for (let i = 0; i < 140; i++) { update(1 / 60); render(); }
+  return JSON.stringify({ before, during, after: __fp.wakes(), floor: MAPS[wet].name });
+})()`));
+ok('wading leaves a wake', wading.during > wading.before, JSON.stringify(wading));
+ok('and the water settles again', wading.after === 0, `${wading.after} left on ${wading.floor}`);
+
 /* ---- nothing the interface draws may hide your own character ---- */
 const dodge = JSON.parse(await evl(`(() => {
   mode = 'playing'; paused = false; invuln = 9e9; meter = 0;
