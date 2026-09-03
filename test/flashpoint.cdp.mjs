@@ -3527,6 +3527,92 @@ ok('the sprint ring drawn on the stick is where sprint actually starts',
   stk.atRing === true && stk.insideRing === false, `ring=${stk.ring}`);
 
 
+/* ---- the listener: no eyes, sharper ears, and freezing beats hiding ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const lsn = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  o.mapsValid = __fp.mapCheck;
+  mapIdx = 3; loop = 0; loadMap(3); invuln = 9e9; meter = 0;
+  o.kinds = __fp.botKinds();
+  o.listeners = __fp.listenerCount();
+  const L = bots.find(b => b.kind === 'listen'), D = bots.find(b => b.kind === 'drone');
+  o.hearing = { listener: __fp.hearReachFor(bots.indexOf(L)), drone: __fp.hearReachFor(bots.indexOf(D)) };
+  /* point blank, fully lit, facing straight at it */
+  player.x = L.x + 40; player.y = L.y; L.face = Math.PI;
+  o.seesYou = botSees(L);
+  /* These runs fill the meter on purpose, so caught() fires and update() starts
+     returning early. Everything after would then measure a stopped game. */
+  const revive = () => { mode = 'playing'; paused = false; caughtHold = 0; meter = 0; invuln = 9e9; };
+  const run = (vx, frames) => { meter = 0; invuln = 0;
+    for (let i = 0; i < frames; i++) { player.vx = vx; player.vy = 0; updateMeter(1 / 60); }
+    const out = { meter: +meter.toFixed(3), lock: __fp.listenLock, mode };
+    revive();
+    return out; };
+  o.still = run(0, 60);
+  o.moving = run(90, 60);
+  player.x = L.x + 600;
+  o.far = run(90, 60);
+  /* light is nothing to it, so a blackout changes nothing either */
+  player.x = L.x + 40; blackout = 3;
+  o.inBlackout = run(90, 60);
+  blackout = 0;
+  /* And it paints no cone. Compare the SAME patch of floor with the listener
+     standing there against a drone standing there: two different spots on this
+     map differ in ambient light too, and the ward's lamp is red. */
+  revive();
+  const spot = { x: L.x, y: L.y }, look = Math.PI;
+  const redAt = (wx, wy) => {
+    const sx = (wx - camNow.cx) * Z, sy = (wy - camNow.cy) * Z, h = 46;
+    const d = ctx.getImageData((sx - h) * DPR, (sy - h) * DPR, h * 2 * DPR, h * 2 * DPR).data;
+    let r = 0, b2 = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; b2 += d[i + 2]; n++; }
+    return +((r - b2) / n).toFixed(2);
+  };
+  const parkAll = () => { for (const b of bots) { b.x = -900; b.y = -900; b.path = []; b.state = 'patrol'; } };
+  const settle = who => { parkAll(); who.x = spot.x; who.y = spot.y; who.face = look;
+    for (let i = 0; i < 4; i++) update(1 / 60); render(); };
+  settle(L); o.redNearListener = redAt(spot.x - 60, spot.y);
+  settle(D); o.redNearDrone = redAt(spot.x - 60, spot.y);
+  o.coneMode = mode;
+  L.x = spot.x; L.y = spot.y;
+  o.heardRing = (() => { revive(); L.heard = 0;
+    const before = __fp.listenHeard()[0];
+    makeNoise(L.x + 40, L.y, 400);
+    for (let i = 0; i < 3; i++) update(1 / 60);
+    return { before, after: __fp.listenHeard()[0], mode }; })();
+  return JSON.stringify(o);
+})()`));
+ok('the maps still validate with the new tile', lsn.mapsValid === 'ok', lsn.mapsValid);
+ok('the abandoned floor fields a listener alongside its drones',
+  lsn.listeners === 1 && lsn.kinds.filter(k => k === 'drone').length >= 2,
+  JSON.stringify(lsn.kinds));
+/* the point of it: light is irrelevant, so none of your usual cover applies */
+ok('it cannot see you at point blank in full light', lsn.seesYou === false);
+ok('it hears a great deal further than a drone',
+  lsn.hearing.listener > lsn.hearing.drone * 1.6,
+  `${lsn.hearing.listener} vs ${lsn.hearing.drone}`);
+/* freezing is a verb this game has never asked of you before */
+ok('standing still beside it does nothing at all',
+  lsn.still.meter === 0 && lsn.still.lock === false, JSON.stringify(lsn.still));
+ok('but moving beside it and it has you',
+  lsn.moving.meter > 0.5 && lsn.moving.lock === true, JSON.stringify(lsn.moving));
+ok('and it has to be close', lsn.far.meter === 0, JSON.stringify(lsn.far));
+ok('a blackout is no help against something that never used its eyes',
+  lsn.inBlackout.meter > 0.5, JSON.stringify(lsn.inBlackout));
+ok('it casts no cone where a drone would',
+  lsn.coneMode === 'playing' && lsn.redNearDrone > lsn.redNearListener + 4,
+  `same spot: listener=${lsn.redNearListener} drone=${lsn.redNearDrone} mode=${lsn.coneMode}`);
+ok('hearing something makes it flinch, which is the only tell it gives you',
+  lsn.heardRing.before === 0 && lsn.heardRing.after > 0.5, JSON.stringify(lsn.heardRing));
+/* the meter runs above fill on purpose and caught() freezes update(), so every
+   later measurement would quietly be of a stopped game */
+ok('and the block never measured a frozen game',
+  lsn.still.mode === 'playing' && lsn.moving.mode === 'caught' && lsn.heardRing.mode === 'playing',
+  `${lsn.still.mode} / ${lsn.moving.mode} / ${lsn.heardRing.mode}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

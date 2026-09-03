@@ -156,6 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Something down there has no eyes** — the listener casts no cone at all. It
+  cannot see you in full light, a blackout does nothing to it, and your torch is
+  irrelevant. It hears, nearly twice as far as a drone, and it knows you are
+  there only while you are moving. Stand perfectly still and it walks past.
 - **Thumbsticks that behave** — a dead zone you leave at a crawl rather than a
   jump, and a sprint that engages high and lets go low, so a thumb resting on
   the line cannot flicker you in and out of making noise.
