@@ -40,7 +40,12 @@ behaviour is assertable. Visual work gets a screenshot check instead.
    before theorising. A stall and a wander look identical in a single end-state
    reading and have completely different causes — J2 cost two wrong guesses and
    two full runs before a five-sample trail named it in one glance.
-8. Web Audio does not settle where you think. `setTargetAtTime` approaches its
+8. An exception thrown INSIDE a page evaluate does not reach `problems`, and the
+   run still prints `FAIL=0` next to a `FATAL`. Read the FATAL line, not just
+   the counts, and wrap a long evaluate in try/catch returning
+   `e.message + e.stack.split('\n')[1]` — that named the file and line in one
+   run instead of a bisect.
+9. Web Audio does not settle where you think. `setTargetAtTime` approaches its
    target exponentially and never reaches it, so assert an inaudible floor
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
@@ -161,13 +166,10 @@ only to attract something that hunts by sight.
       place one unseen; it turns to face what it heard. Found two real defects:
       two faceToward calls fighting, and an idle sweep on a thing with no cone.
 - [x] J3 `Y` sentry — bolted down, wide short cone, deaf, asleep until an alarm; every one on the floor opens for 9s, so an alarm costs more than the drone it sends
-- [ ] J4 Mixed floors — which floors get which, and a per-map enemy list rather
-      than a bare `bots:` count.
-      **Watch the shared `bots` array**: J3 found two places that assumed every
-      entry can walk — `raiseAlarm`'s nearest-bot pick, and `radio`'s net, where
-      a sentry was eating an E1 flank slot a drone should have had. Spreading
-      these across more floors will likely surface a third; grep for `of bots`
-      and check each one against a unit that cannot move.
+- [x] J4 Mixed floors — drones alone for three floors, a listener from four,
+      sentries from six, all three on the Core; sentry wake scales with depth.
+      The predicted third `of bots` defect was real: the red eye glint was being
+      drawn on listeners, handing you the very cue their design removes.
 - [ ] J5 They tell each other — a listener that hears you hands a position to the
       drones that can see
 
@@ -262,3 +264,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · J1 · the listener: no cone, hears 1.75x, caught by movement not by sight, 10 assertions; both failures were the caught-freeze and an unequal pixel comparison
 - 2026-09-03 · J2 · reach ring that answers your feet, panned sonar tick, lock-on posture, 6 assertions; fixed duelling faceToward calls and an idle sweep on a coneless thing
 - 2026-09-03 · J3 · sentries on the vault, alarms open the whole floor for 9s, 10 assertions; fixed alarms being handed to something bolted down and sentries eating flank slots in the radio net
+- 2026-09-03 · J4 · units spread across all twelve floors, glint and tutorial fixed for coneless units, empty route guarded against taking the frame loop down, 9 assertions
