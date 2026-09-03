@@ -312,7 +312,7 @@ add bots and speed, and your best depth per device is kept.
 | Mute / pause | `M` / `P` | HUD buttons |
 | Restart | `R`, or `Space` on the card | tap the button |
 
-Portrait works; landscape is the intended view. Touch devices get their own
+Portrait and landscape both fill the screen now — the camera zooms to cover the viewport and follows you, rather than fitting the whole floor and leaving half the screen empty. Touch devices get their own
 DPR cap and particle budgets automatically, rain included — it used to be
 switched off entirely on a phone, so a rainy floor arrived with no rain on it. Haptics fire where supported
 (Android) when a cone touches you and on capture.

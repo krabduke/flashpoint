@@ -219,6 +219,30 @@
   .stat{display:flex;flex-direction:column;gap:5px;align-items:center}
   .stat b{font-family:'Orbitron',monospace;font-size:clamp(20px,5vw,26px);font-weight:900;color:#eef0ff;font-variant-numeric:tabular-nums}
   .stat span{font-size:9px;letter-spacing:.26em;color:#5e5679}
+  /* ---- touch: things you have to hit with a thumb ---- */
+  @media (pointer: coarse) {
+    .item{min-height:46px;padding:8px 3px}
+    .item b{font-size:9px}
+    .item s{font-size:8px}
+    .kitchip{min-height:48px}
+    .floor{min-height:44px}
+    .ibtn{min-height:44px;min-width:44px}
+    .seg button{min-height:44px;padding:8px 14px}
+  }
+  @media (max-width: 460px) {
+    #itemBar{width:min(240px,58vw)}
+    #hud{gap:6px}
+    .hud-block.mid{min-width:0}
+    .hud-block{min-width:0}
+  }
+  /* a menu taller than the screen has to scroll from the top, or the first
+     thing on it is unreachable */
+  .overlay{overflow-y:auto}
+  @media (max-height: 860px) {
+    .overlay{justify-content:flex-start}
+    .card{margin:auto 0}
+  }
+
   /* ---- loadout ---- */
   #kitPanel{width:100%;max-width:430px;margin:2px auto 0}
   #kitGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
@@ -2738,7 +2762,8 @@ function botSees(b) {
    important one clears by DOING it rather than by a timer: the sweep step ends
    when your beam actually lands on gold. */
 const TUTOR = [
-  { msg: 'WASD TO MOVE · THE MOUSE AIMS YOUR BEAM', secs: 7,
+  { msg: () => TOUCH ? 'LEFT THUMB MOVES · RIGHT THUMB AIMS THE BEAM'
+                     : 'WASD TO MOVE · THE MOUSE AIMS YOUR BEAM', secs: 7,
     ready: () => true, clear: () => tutorMoved },
   { msg: 'GOLD IS INVISIBLE UNLIT — SWEEP THE BEAM ACROSS THE ROOM', secs: 9,
     ready: () => true, clear: () => tutorLitGold },
@@ -2761,7 +2786,7 @@ function updateTutor(dt) {
   const step = TUTOR[tutorStep];
   if (!step) { tutorStep = -1; return; }
   if (!step.ready()) return;
-  if (!tutorShown) { toast(step.msg, step.secs); tutorShown = true; tutorT = 0; }
+  if (!tutorShown) { toast(typeof step.msg === 'function' ? step.msg() : step.msg, step.secs); tutorShown = true; tutorT = 0; }
   tutorT += dt;
   /* a step that is already satisfied when it appears still gets read */
   if (tutorT > 1.4 && step.clear()) { tutorStep++; tutorShown = false; tutorT = 0; }
@@ -5346,6 +5371,8 @@ function togglePause() {
   if (paused) renderPause();
   $('pausedOv').classList.toggle('hidden', !paused);
 }
+const __gadgetCharges = (id) => ({ flare: flares, smoke: smokePellets, emp: empCharges,
+  decoy: decoyCharges, mag: magCharges, hush: hushCharges, jam: jamCharges }[id] || 0);
 function hud() {
   coinsEl.textContent = coins + '/' + coinsTotal;
   /* amber the moment walking out becomes a choice, so you know without having
@@ -5379,6 +5406,12 @@ function hud() {
       el.classList.toggle('on', !!active);
       el.disabled = !avail;
     };
+    /* N1 means you hold three of these, not nine. A button for something you
+       neither packed nor found is a button that cannot do anything. */
+    for (const g of GADGETS) {
+      const el = $(g.btn);
+      if (el) el.style.display = (loadout.includes(g.id) || __gadgetCharges(g.id) > 0) ? '' : 'none';
+    }
     set('itTorch', !battDead, beamOn);
     set('itFlare', flares > 0);
     set('itCoin', coins > 0);
@@ -5585,7 +5618,13 @@ function resize() {
   W = window.innerWidth; H = window.innerHeight;
   canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  Z = clamp(Math.min(W, H) / 620, 0.52, 1.3);
+  /* Min(W,H)/620 gave 0.629 on a phone, so the visible world was 620x1342 while
+     the map is 720 tall - it sat in a band at the top with 390px of dead blue
+     under it. Zoom in far enough to cover the viewport in whichever direction
+     would otherwise run out of map. Desktop is unaffected: 980x700 wants 1.129
+     either way. */
+  const fillZ = Math.max(H / (T.ROWS * T.TILE), W / (T.COLS * T.TILE));
+  Z = clamp(Math.max(Math.min(W, H) / 620, fillZ), 0.52, 1.45);
   darkCv = darkCv || document.createElement('canvas');
   darkCv.width = canvas.width; darkCv.height = canvas.height;
   darkCtx = darkCv.getContext('2d');
@@ -5623,6 +5662,31 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  layout() {
+    const el = id => { const e = document.getElementById(id); if (!e) return null;
+      const b = e.getBoundingClientRect();
+      return { w: Math.round(b.width), h: Math.round(b.height), left: Math.round(b.left),
+               right: Math.round(b.right), bottom: Math.round(b.bottom) }; };
+    const items = [...document.querySelectorAll('#itemBar .item')].filter(e => e.offsetParent !== null);
+    const tap = [...document.querySelectorAll('#itemBar .item, .kitchip, .ibtn, .floor')]
+      .filter(e => e.offsetParent !== null)
+      .map(e => { const b = e.getBoundingClientRect(); return { w: Math.round(b.width), h: Math.round(b.height) }; });
+    return {
+      view: { w: innerWidth, h: innerHeight },
+      zoom: +Z.toFixed(3),
+      worldSeen: { w: Math.round(W / Z), h: Math.round(H / Z) },
+      mapPx: { w: T.COLS * T.TILE, h: T.ROWS * T.TILE },
+      deadSpace: { x: Math.max(0, Math.round(W / Z - T.COLS * T.TILE)),
+                   y: Math.max(0, Math.round(H / Z - T.ROWS * T.TILE)) },
+      itemsShown: items.length,
+      barRight: el('itemBar') ? el('itemBar').right : null,
+      overflowsRight: el('itemBar') ? el('itemBar').right > innerWidth + 1 : false,
+      tooSmallToTap: tap.filter(t => t.h < 44).length,
+      tapTotal: tap.length,
+      startScrolls: (() => { const o = document.getElementById('start');
+        return { content: o.scrollHeight, view: innerHeight, canScroll: getComputedStyle(o).overflowY === 'auto' }; })(),
+    };
+  },
   moveProfile() {
     return { speed: Math.round(Math.hypot(player.vx, player.vy)),
              loud: fSprint, walk: T.WALK, sprint: T.SPRINT };
@@ -5692,7 +5756,7 @@ window.__fp = {
   conePalette() { return colourblind() ? { ...CONE.on } : { ...CONE.off }; },
   tutorState() {
     return { on: tutorOn(), step: tutorStep, shown: tutorShown,
-             msg: tutorStep >= 0 && TUTOR[tutorStep] ? TUTOR[tutorStep].msg : null,
+             msg: tutorStep >= 0 && TUTOR[tutorStep] ? (typeof TUTOR[tutorStep].msg === 'function' ? TUTOR[tutorStep].msg() : TUTOR[tutorStep].msg) : null,
              moved: tutorMoved, litGold: tutorLitGold, sawDrone: tutorSawDrone,
              steps: TUTOR.length };
   },

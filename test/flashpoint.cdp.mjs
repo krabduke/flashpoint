@@ -4341,6 +4341,58 @@ ok('standing still is still standing still',
   mvp.idle.speed === 0 && mvp.idle.loud === false && mvp.idle.heard === 0, JSON.stringify(mvp.idle));
 
 
+/* ---- it has to work on a phone ----
+   Everything above runs at 980x700 with a mouse, which is how this went
+   unnoticed: at 390x844 the map filled 40% of the screen, three gadget buttons
+   sat off the right edge, and every tappable thing was 20px tall. */
+await send('Emulation.setDeviceMetricsOverride', {
+  width: 390, height: 844, deviceScaleFactor: 3, mobile: true,
+  screenOrientation: { type: 'portraitPrimary', angle: 0 } });
+await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+await send('Page.navigate', { url: FILE + '?name=TESTY' });
+await sleep(2500);
+const mbl = JSON.parse(await evl(`(() => {
+  const o = { menu: __fp.layout() };
+  TOUCH = true; resize(); startGame(); hud();
+  o.play = __fp.layout();
+  o.tutorSaysThumbs = (() => { completedLevels = []; startGame();
+    for (let i = 0; i < 20; i++) update(1 / 60);
+    const m = __fp.tutorState().msg || ''; return /THUMB/.test(m); })();
+  return JSON.stringify(o);
+})()`));
+await send('Emulation.setDeviceMetricsOverride', {
+  width: 844, height: 390, deviceScaleFactor: 3, mobile: true,
+  screenOrientation: { type: 'landscapePrimary', angle: 90 } });
+const land = JSON.parse(await evl('(() => { resize(); return JSON.stringify(__fp.layout()); })()'));
+/* hand the viewport back, in case anything is ever appended after this */
+await send('Emulation.clearDeviceMetricsOverride');
+await send('Emulation.setTouchEmulationEnabled', { enabled: false });
+await evl('TOUCH = false; resize();');
+
+/* the map used to sit in a band at the top with 390px of dead blue beneath it */
+ok('the map fills a portrait phone',
+  mbl.play.deadSpace.x === 0 && mbl.play.deadSpace.y === 0 && mbl.play.zoom > 1,
+  `zoom ${mbl.play.zoom}, world seen ${mbl.play.worldSeen.w}x${mbl.play.worldSeen.h}, dead ${JSON.stringify(mbl.play.deadSpace)}`);
+ok('and a landscape one', land.deadSpace.x === 0 && land.deadSpace.y === 0,
+  `zoom ${land.zoom}, dead ${JSON.stringify(land.deadSpace)}`);
+/* COIN, MAGNET and everything after them used to be off the right edge */
+ok('the item bar stays on the screen',
+  mbl.play.overflowsRight === false && mbl.play.barRight <= mbl.play.view.w,
+  `right edge ${mbl.play.barRight} of ${mbl.play.view.w}`);
+/* N1 means you carry three, so a button for the other five can do nothing */
+ok('and only shows what you are actually carrying',
+  mbl.play.itemsShown > 2 && mbl.play.itemsShown < 8, `${mbl.play.itemsShown} buttons`);
+/* every one of them was 46x20 */
+ok('everything you have to hit with a thumb is big enough to hit',
+  mbl.play.tooSmallToTap === 0 && mbl.play.tapTotal > 3,
+  `${mbl.play.tooSmallToTap} of ${mbl.play.tapTotal} under 44px`);
+ok('the menu scrolls rather than hiding its own top',
+  mbl.menu.startScrolls.canScroll === true && mbl.menu.tooSmallToTap === 0,
+  `content ${mbl.menu.startScrolls.content} in ${mbl.menu.startScrolls.view}, ${mbl.menu.tooSmallToTap} small targets`);
+/* it used to open a touch device with "WASD TO MOVE - THE MOUSE AIMS YOUR BEAM" */
+ok('and the tutorial talks about thumbs, not a mouse', mbl.tutorSaysThumbs === true);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);
