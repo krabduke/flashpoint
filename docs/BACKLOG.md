@@ -232,11 +232,11 @@ written.
 
 ## N · What you bring
 
-- [ ] N1 Loadout — pick three of the eight before a run, rather than being handed
+- [x] N1 Loadout — pick three of the eight before a run, rather than being handed
       four. The kit tables and the item bar already exist; this is the choice.
 - [ ] N2 Loadout has a cost — better kit for a harder building, so picking is a
       trade rather than a wishlist
-- [ ] N3 The menu says what each one is for, since half of them are now only
+- [x] N3 The menu says what each one is for, since half of them are now only
       meaningful against a specific hunter
 
 ## P · A building that is not the same twice
@@ -251,17 +251,17 @@ written.
 
 ## Q · What the run was
 
-- [ ] Q1 The escape screen tells the story: floors ghosted, safes cracked, gold
+- [x] Q1 The escape screen tells the story: floors ghosted, safes cracked, gold
       left behind, conditions survived
-- [ ] Q2 Per-floor breakdown, since a twelve floor run currently collapses to
+- [x] Q2 Per-floor breakdown, since a twelve floor run currently collapses to
       three numbers
-- [ ] Q3 The caught screen should say what got you — which kind, and on what
+- [x] Q3 The caught screen should say what got you — which kind, and on what
 
 ## R · Reach
 
-- [ ] R1 Hold-to-crack as an alternative to stand-still, for anyone who cannot
+- [x] R1 Hold-to-crack as an alternative to stand-still, for anyone who cannot
       hold a stick perfectly steady for four and a half seconds
-- [ ] R2 Interface scale, since the HUD is 9px type on a phone
+- [x] R2 Interface scale, since the HUD is 9px type on a phone
 
 ---
 
@@ -281,17 +281,26 @@ It does not. Rendered at 390x844 with real DPR and touch emulation:
   device.
 - **The start screen overflows**: 886px of content in an 844px viewport.
 
-- [ ] S1 Fill the screen — zoom so the map covers the viewport in either
+- [x] S1 Fill the screen — zoom so the map covers the viewport in either
       orientation, without changing desktop
-- [ ] S2 The bar shows what you carry — N1 means you hold three gadgets, not
+- [x] S2 The bar shows what you carry — N1 means you hold three gadgets, not
       nine, so stop drawing buttons for things you have none of
-- [ ] S3 Touch targets that can be hit — 44px minimum on anything tappable
-- [ ] S4 The HUD fits the width it has
-- [ ] S5 Say the right thing on a phone — the tutorial and any copy naming keys
-- [ ] S6 The menu fits, or scrolls like it means to
-- [ ] S7 A mobile block in the harness, so this cannot rot again
+- [x] S3 Touch targets that can be hit — 44px minimum on anything tappable
+- [x] S4 The HUD fits the width it has
+- [x] S5 Say the right thing on a phone — the tutorial and any copy naming keys
+- [x] S6 The menu fits, or scrolls like it means to
+- [x] S7 A mobile block in the harness, so this cannot rot again
 
 ---
+
+
+## T · Five more floors
+
+- [x] T1 Floor 13 · THE ATRIUM — museum, 14 coins, glass walls you must walk around
+- [x] T2 Floor 14 · THE SUBLEVEL — server, 15 coins, vents the drones cannot use
+- [x] T3 Floor 15 · THE CISTERN — docks, 15 coins, fog over water that gives you away
+- [x] T4 Floor 16 · THE ARCHIVE — bank, 16 coins, two safes, three sentries, a siren
+- [x] T5 Floor 17 · THE ROOST — city, 16 coins, blackout and three listeners
 
 ## Log
 
@@ -369,3 +378,44 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · L1 · tripwire on T, silent to them and spent when it speaks, 8 assertions; F12's anti-drift check caught the pause reference missing it
 - 2026-09-03 · L2 · muffle cancels the weight penalty for a floor, 806 to 520 sprint radius, 9 assertions; all four gadget touchpoints done in one edit this time
 - 2026-09-03 · L3 · jammer deafens in a radius, pairs with the safe, 7 assertions — **section L complete**
+
+13. **Check the whole loop before calling a tile dead.** I read the first forty
+    lines of `loadMap`'s tile loop, saw no branch for `f`, `d` or `m`, and wrote
+    that THE PENTHOUSE carried three meaningless characters. Line 1654 handles
+    all seven of them - `'fsedmhj'.includes(ch)` - and they are the gadget drops.
+    The five new floors then shipped with none, because I had "corrected" them
+    out of the alphabet. Grep the whole function, not the part you sampled.
+14. **Reachability is not one question, it is three.** The pillar pass checked that
+    coins and the exit stayed reachable and still broke eleven assertions, because
+    patrol waypoints live in `routes` and never appear in `rows` — so a "bare floor
+    only" check cannot see them. Validate against everything the game requires of a
+    cell, not against the things that happen to be visible in the grid.
+
+15. **A hook that already exists silently wins, and blames the harness.** I added
+    `safeT() { return safeT; }` to `__fp` without checking; `get safeT()` was
+    already defined further down the same literal, and the later key won. Every
+    existing test kept passing, because they read `__fp.safeT` as a property -
+    only my new `__fp.safeT()` threw, and the failure surfaced as
+    `FATAL :: "undefined" is not valid JSON`, which reads like a broken
+    assertion rather than a duplicate key. Grep for the hook name before adding
+    one, and remember an evaluate that throws returns undefined rather than
+    reporting anything.
+16. **A FATAL stops the run where it stands.** The suite died at assertion 627 of
+    ~660, so the entire mobile block never executed and the run said nothing
+    about the thing it was added to check. A green count is not coverage - check
+    the run reached the end.
+17. **A hidden element measures 0x0, and every layout assertion against it
+    passes.** Two of the fourteen mobile checks went green while looking at
+    nothing: the caught card is held hidden by `caughtHold`, and `#kitWhat`
+    lives on the start overlay, which is hidden mid-run. `right: 0 <= 390` is
+    true, and so is `0 > 0 + 1` being false, so "fits the phone" and "not
+    clipped" both passed on a box that was never rendered. The tell is a zero
+    in the reported numbers. Any assertion on geometry needs a control that the
+    thing had a size at all - and it is worth reading the numbers a passing
+    assertion prints, not just its colour.
+- 2026-09-03 · T1-T5 · five floors via tools/floorgen.py, campaign now 17; each one built around a single structural idea, 19 assertions. Fixed three count-coupled assertions and a spawn-clearance break where static listeners sat 89px from the player
+- 2026-09-03 · Q1-Q3 · runLog per floor, the escape card lists all seventeen with ghost marks, the caught card names what got you and how far from the exit, 11 assertions
+- 2026-09-03 · N3 · every gadget says what it does, checked against the code rather than its toast; one shared line so a tap describes as well as picks, 6 assertions
+- 2026-09-03 · R1 · hold-to-crack on Z, movement no longer slips progress; disabled on touch so a desktop preference cannot brick a phone safe, 6 assertions
+- 2026-09-03 · R2 · interface scale 100/125/150% via zoom on the HUD, default unchanged, 4 assertions
+- 2026-09-03 · mobile · 16 assertions inside the 390x844 phone block covering all five features. Two of them first passed while measuring hidden 0x0 elements; both now reveal the element and carry a control that it had a size at all

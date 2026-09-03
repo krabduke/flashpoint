@@ -35,7 +35,9 @@
   @media (max-width:430px){#minimap{width:96px;height:62px}}
 
   #hud{
-    position:absolute;top:0;left:0;right:0;z-index:4;pointer-events:none;
+    position:absolute;top:0;left:0;right:auto;width:calc(100% / var(--ui, 1));
+    zoom:var(--ui, 1);
+    z-index:4;pointer-events:none;
     display:flex;justify-content:space-between;align-items:flex-start;
     padding:calc(12px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 22px calc(16px + env(safe-area-inset-left));
     background:linear-gradient(180deg,rgba(4,3,10,.72),transparent);
@@ -262,6 +264,11 @@
   .kitchip.on s{color:#c8a86a}
   .kitchip:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
   #kitCount{color:#ffd166}
+  /* one shared line rather than seven cramped ones: the chips are 8px type and
+     a description inside them would not survive a phone */
+  #kitWhat{min-height:2.1em;margin:7px 2px 0;font-size:9.5px;line-height:1.5;
+    letter-spacing:.06em;color:#6a6190;text-align:center;transition:color .16s ease}
+  #kitWhat.named{color:#a79ecc}
 
   /* ---- settings ---- */
   #settingsOv{z-index:8}
@@ -341,6 +348,23 @@
     font-variant-numeric:tabular-nums}
   .rrow .rmeta{grid-column:2 / -1;font-size:9.5px;letter-spacing:.08em;color:#6a6190;
     font-variant-numeric:tabular-nums}
+  .floorlog{margin:10px 0 2px;width:min(330px,84vw)}
+  .floorlog .rtitle{display:block;font-size:9px;letter-spacing:.3em;color:#5e5679;
+    padding:8px 0 6px;text-align:center}
+  .frow{display:grid;grid-template-columns:16px 1fr auto auto;align-items:baseline;
+    gap:10px;padding:5px 2px;border-top:1px solid rgba(120,100,180,.14);text-align:left}
+  .frow .fk{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;color:#5e5679;
+    font-variant-numeric:tabular-nums}
+  .frow .fn{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:.08em;color:#c9bfe8;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .frow .fc,.frow .ft{font-family:'Orbitron',monospace;font-size:10px;color:#6a6190;
+    font-variant-numeric:tabular-nums}
+  .frow .fc.full{color:#e6dffb}
+  /* a ghosted floor is the run's best sentence, so it is the one thing that is gold */
+  .frow.ghost .fn,.frow.ghost .fk{color:#ffd166}
+  .frow.ghost .fn::after{content:'  GHOSTED';font-size:8px;letter-spacing:.2em;opacity:.75}
+  #cCause{margin-bottom:2px}
+  #cWhere{font-size:10px;letter-spacing:.1em;color:#6a6190;margin:2px 0 0}
   .rrow.top .rk,.rrow.top .rs{color:#ffd166}
   .rrow.mine{background:linear-gradient(90deg,rgba(255,209,102,.11),transparent 78%);
     border-radius:6px}
@@ -524,6 +548,7 @@
     <div id="kitPanel">
       <p class="floor-eyebrow">What you take in &mdash; <span id="kitCount">0/3</span></p>
       <div id="kitGrid" role="group" aria-label="Loadout"></div>
+      <p id="kitWhat" aria-live="polite">three of seven — take what the building calls for</p>
     </div>
     <div class="namerow">
       <input class="namefield" id="nameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
@@ -541,7 +566,8 @@
   <div id="caught" class="overlay hidden">
     <div class="card">
       <h1 class="red" style="font-size:clamp(34px,8vw,64px)">CAUGHT</h1>
-      <h2 class="glitch">THE LIGHT TOUCHED YOU</h2>
+      <h2 class="glitch" id="cCause">THE LIGHT TOUCHED YOU</h2>
+      <p id="cWhere"></p>
       <div class="stats">
         <div class="stat"><b id="cCoins">0</b><span>COINS</span></div>
         <div class="stat"><b id="cScore">0</b><span>SCORE</span></div>
@@ -567,6 +593,7 @@
         <div class="stat"><b id="eTime">0:00</b><span>TIME</span></div>
       </div>
       <p id="escSummary"></p>
+      <div class="floorlog" id="escFloors"></div>
       <div id="escAchs"></div>
       <div class="records" id="recEsc"></div>
       <div class="namerow" style="margin-top:6px">
@@ -601,6 +628,21 @@
         <div class="seg" id="miniSeg" role="group" aria-label="Minimap">
           <button type="button" data-mini="on">ON</button>
           <button type="button" data-mini="off">OFF</button>
+        </div>
+      </div>
+      <div class="set-row" id="crackRow">
+        <span class="set-label"><b>CRACKING</b><span id="crackNote">Stand still to work a safe or a crate</span></span>
+        <div class="seg" id="crackSeg" role="group" aria-label="Cracking">
+          <button type="button" data-crack="still">STAND STILL</button>
+          <button type="button" data-crack="hold">HOLD <span class="key">Z</span></button>
+        </div>
+      </div>
+      <div class="set-row">
+        <span class="set-label"><b>INTERFACE</b><span>Size of the HUD, the item bar and messages</span></span>
+        <div class="seg" id="uiSeg" role="group" aria-label="Interface scale">
+          <button type="button" data-ui="1">100%</button>
+          <button type="button" data-ui="1.25">125%</button>
+          <button type="button" data-ui="1.5">150%</button>
         </div>
       </div>
       <div class="set-row">
@@ -828,22 +870,22 @@ const MAPS = [
   ], routes: [[[3,3],[24,3],[24,9],[3,9],[3,13],[24,13],[24,15],[3,15],[3,3]]] },
   { name: 'NEON HEIGHTS', depth: 'CITY', theme: 'city', coins: 7, bots: 2, rows: [
     '############################',
-    '#.Pc..............L.......c#',
+    '#.Pc..........#...L.......c#',
     '#.d.######..#####..#######.#',
     '#...######..#####..#######.#',
     '#...######..####M..#######.#',
-    '#...N......c.........x....N#',
-    '#L....x..........f.........#',
+    '#...N......c..#......x....N#',
+    '#L....x.......#..f.........#',
+    '#...######.######..#######.#',
     '#...######..#####..#######.#',
-    '#...######..#####..#######.#',
-    '#...######..#####..#######.#',
-    '#c........N...x...R.......c#',
-    '#.....................x..L.#',
+    '##.########.##############.#',
+    '#c........N..#x...R.......c#',
+    '#.............#.......x..L##',
     '#...######..#####..M######.#',
     '#...######..#####..#######.#',
     '#...######..#####..#######.#',
-    '#..c....x........N........c#',
-    '#..........L..............E#',
+    '#..c....x.....#..N........c#',
+    '#..........L#.............E#',
     '############################'
   ], routes: [[[2,2],[2,9],[2,15],[9,15],[10,10],[10,6],[2,6],[2,2]],[[26,16],[26,10],[17,10],[17,5],[24,5],[26,5],[26,16]]] },
   { name: 'THE ABANDONED', depth: 'WARD', theme: 'ward', coins: 8, bots: 2, rows: [
@@ -854,7 +896,7 @@ const MAPS = [
     '#..#..c..#.e..x.#.I.#..L..x#',
     '#..#.....#......#...#......#',
     '#..####..##V#D###...#..#####',
-    '#...........H......x#c.....#',
+    '#......#....H......x#c.....#',
     '####.#####.########.####.###',
     '#..c......#x..L..#....N....#',
     '#..#####..#......#...x.....#',
@@ -868,22 +910,22 @@ const MAPS = [
   ], routes: [[[3,1],[24,1],[24,7],[13,7],[13,10],[3,11],[3,7],[3,1]],[[22,9],[16,9],[15,13],[15,16],[22,16],[25,9],[25,16],[19,16],[15,16],[15,13],[20,12],[25,12],[25,9]]] },
   { name: 'THE MUSEUM', depth: 'MUSEUM', theme: 'museum', coins: 9, bots: 2, spd: 1.0, rows: [
     '############################',
-    '#.P..........!..........x..#',
+    '#.P..........!#.........x..#',
     '#....####..####..####c.....#',
     '#....####C.####..####......#',
     '#....####..M###..####......#',
-    '#...m.........!R.$.........#',
+    '#...m....#....!R.$.........#',
     '#....####..####..####......#',
-    '#....####..####..####..S...#',
-    '#.c..####c.####.c####....c.#',
-    '#..............Z...........#',
-    '#..S.................s.....#',
+    '#....####..####..####..S..##',
+    '#.c..####c.#####c####....c.#',
+    '##.##.....#...#Z#....#####.#',
+    '#..S..........#......s.....#',
     '#....####..####..####......#',
     '#....####..####..####......#',
     '#....M###..####..####......#',
-    '#..........................#',
-    '#...c......c......c......c.#',
-    '#.......x.........x.......E#',
+    '#.............#............#',
+    '#...c......c..#...c......c.#',
+    '#.......x.....#...x.......E#',
     '############################'
   ], routes: [[[2,2],[25,2],[25,15],[2,15],[2,9],[13,9],[13,1],[2,2]],[[13,5],[3,5],[3,12],[24,12],[24,5],[13,5]]] },
   { name: 'THE SERVER FARM', depth: 'SERVER', theme: 'server', coins: 10, bots: 2, spd: 1.05,
@@ -892,39 +934,39 @@ const MAPS = [
     '#.P....#...c#....#..cY#...c#',
     '#......#....#.IK.#....#....#',
     '#......#..e.#....#....#....#',
-    '#...........D..............#',
+    '#...........D.#............#',
     '#......V....#.f..#..O.#....#',
     '#......#....#....#...C#....#',
     '#......#....#....#....#...c#',
-    '#......c....!...c..........#',
-    '#......#....#....V....#....#',
+    '#......c....!.#.c..........#',
+    '#############..##V##.####.##',
     '#......#....#....#....#....#',
     '#......#....#....#....#....#',
-    '#........................O.#',
+    '#............#...........O.#',
     '#......#....#....#....#....#',
     '#......#....#....#....#....#',
     '#......#....#....#....#...c#',
-    '#c........c.!.....c.......E#',
+    '#c........c.!.#...c.......E#',
     '############################'
   ], routes: [[[3,1],[24,1],[24,4],[3,4],[3,1]],[[3,8],[24,8],[24,12],[3,12],[3,8]],[[3,16],[24,16],[24,13],[15,13],[15,16],[3,16]]] },
   { name: 'THE BANK VAULT', depth: 'BANK', theme: 'bank', coins: 10, bots: 3, spd: 1.1, siren: true, rows: [
     '############################',
-    '#.P............!.....$.....#',
+    '#.P......#.....!.....$.....#',
     '#.#######..#######..######.#',
     '#.#....c#..#....c#..#...c#.#',
     '#.#.....#..#.KI..#..#....#.#',
     '#.G.....#..#.....#.C#....#.#',
     '#.M##D###..###.###..##.###.#',
-    '#........s....R............#',
-    '#.............Y............#',
-    '#...........c.......c.....c#',
+    '#........s...#R............#',
+    '#........#...#Y...........##',
+    '##........#.c#....##c.....c#',
     '#.###.###..###.###..##.###.#',
     '#!#....C#..#.....#..#....#.#',
     '#.#c....#..#..d..#..#.f..#.#',
     '#.#.....G..#.....#..#....#.#',
     '#.#.....#..#.....#..#....#.#',
     '#.M######..#######..######c#',
-    '#.......Y.c....!..c.......E#',
+    '#.......Y.c...#!..c.......E#',
     '############################'
   ], routes: [[[2,1],[25,1],[25,8],[2,8],[2,1]],[[2,9],[25,9],[25,16],[2,16],[2,9]],[[5,4],[14,4],[22,4],[22,13],[14,13],[5,13],[5,4]]] },
   { name: 'THE FOG DOCKS', depth: 'DOCKS', theme: 'docks', coins: 11, bots: 3, spd: 1.15, fog: true, rows: [
@@ -937,34 +979,34 @@ const MAPS = [
     '#.......####.Z......#####..#',
     '#.####..####..####..#####..#',
     '#.####.c####..####.c#####.c#',
-    '#.####........####.........#',
-    '#......~~I...c.....~~~.....#',
+    '######........####........##',
+    '#......~~I...c#....~~~.....#',
     '#..f...~..####.....~~.####.#',
     '#.~~####..####..####..####.#',
     '#...####..####..####..####.#',
     '#.O.####..####..####..####.#',
-    '#.............m...........c#',
-    '#.c.......c.......c.......E#',
+    '#............#m...........c#',
+    '#.c.......c...#...c.......E#',
     '############################'
   ], routes: [[[1,1],[26,1],[26,5],[1,5],[1,1]],[[1,10],[26,10],[26,16],[1,16],[1,10]],[[7,5],[19,5],[19,10],[7,10],[7,5]]] },
   { name: 'THE CORE', depth: 'CORE', theme: 'core', coins: 12, bots: 3, spd: 1.25, siren: true, blackout: true, rows: [
     '############################',
-    '#.P....!......c......Hc....#',
+    '#.P....!.....#c......Hc....#',
     '#.K.####..f.......d.####...#',
     '#...####............####.s.#',
     '#...####....OS......###M...#',
-    '#..e.............Z.........#',
+    '#..e..........#..Z.........#',
     '#..........######....C.....#',
     '#.###G#...c######....#V###c#',
-    '#.#...D....######.c......#.#',
-    '#.#c..#.R..######....G...#.#',
+    '#.#...D....#######c......#.#',
+    '###c..#.R########.##.G...###',
     '#.##V##....######....###G#!#',
     '#..........######..I...c...#',
     '#....C....Y...c............#',
     '#...####............###M...#',
     '#...####....O.......####...#',
     '#...####............####..c#',
-    '#c....$...c..S....c..!....E#',
+    '#c....$...c..S...#c..!....E#',
     '############################'
   ], routes: [[[1,1],[26,1],[26,16],[1,16],[1,1]],[[9,5],[18,5],[18,12],[9,12],[9,5]],[[4,8],[4,16],[13,16],[13,12],[8,12],[8,8],[4,8]]] },
   { name: 'THE GALLERY', depth: 'GALLERY', theme: 'museum', coins: 12, bots: 3, spd: 1.28, siren: true, rows: [
@@ -980,7 +1022,7 @@ const MAPS = [
     '###....##.C.L..#############',
     '###....!c....###############',
     '###..!.M###G.#######.......#',
-    '###......sc.......c........#',
+    '###......sc..#....c........#',
     '#########Lcfc..#####.BL...E#',
     '#########......#############',
     '#########......#############',
@@ -1012,7 +1054,7 @@ const MAPS = [
     '#########........###########',
     '#P...L###...L....###########',
     '#...Lc###.c...cd.###########',
-    '#....f..c........Y.#########',
+    '#....f..c.#......Y.#########',
     '#.....####.##.####.#########',
     '#.....##.....C####B#########',
     '########......##...L.#######',
@@ -1020,13 +1062,113 @@ const MAPS = [
     '########....C..#....c##.c..#',
     '########.!..c.!#.....##....#',
     '#c....#####VM..#G######....#',
-    '#.c..........c.c.m........##',
+    '#.c.........#c.c.m........##',
     '#...O.########.##########.##',
     '###########....c..#######L##',
-    '###########............c.E##',
+    '###########.......#....c.E##',
     '###########......c##########',
     '############################'
-  ], routes: [[[13,8],[11,2],[24,10],[14,15],[11,9]], [[2,4],[3,4],[11,7],[10,8],[9,8]], [[13,4],[19,8],[18,8],[18,9],[17,9]], [[13,9],[11,2],[25,10],[24,10],[15,15]]] }
+  ], routes: [[[13,8],[11,2],[24,10],[14,15],[11,9]], [[2,4],[3,4],[11,7],[10,8],[9,8]], [[13,4],[19,8],[18,8],[18,9],[17,9]], [[13,9],[11,2],[25,10],[24,10],[15,15]]] },
+  { name: 'THE ATRIUM', depth: 'ATRIUM', theme: 'museum', coins: 14, bots: 4, spd: 1.4, rows: [
+    '############################',
+    '#s..G..#..c...#L.x#....c..##',
+    '#..c.M.#...L.x#...#c.c..M.##',
+    '#x....C...x.#.....c.L.c...##',
+    '######.#####################',
+    '#...L..#....S.#...##########',
+    '#..c...#..$...#.G.##########',
+    '#...x..#.L....#P..##########',
+    '#..G...x.#.......C##########',
+    '#...G..#......#...##########',
+    '#..c...#......#...##########',
+    '#......#..G.R.#..C##########',
+    '#####.######################',
+    '#..G..c#......#..x.c......##',
+    '#.x..........L#...#..c.L..##',
+    '#f...L.#L...c...c.#......E##',
+    '############################',
+    '############################'
+  ], routes: [[[11,2], [16,2], [22,2], [4,8], [4,14], [11,14], [11,2]], [[16,2], [16,8], [11,8], [4,8], [16,14], [22,14], [16,2]], [[4,2], [16,2], [22,2], [16,8], [11,8], [4,8], [4,2]], [[4,2], [11,2], [11,8], [4,14], [16,14], [22,14], [4,2]]] },
+  { name: 'THE SUBLEVEL', depth: 'SUBLEVEL', theme: 'server', coins: 15, bots: 4, spd: 1.42, rows: [
+    '############################',
+    '#!...C#.c....#.......c.x.e##',
+    '#.L.c.#.......c.B.x#V.....##',
+    '#..x.c...#...C.....#..V...##',
+    '#.##############c###.#######',
+    '#..O.L.c...V.###.###....!.##',
+    '#.....#..V...###.###......##',
+    '#.....#.....x###.###......##',
+    '#!....#..P.L.###V###......##',
+    '#..x..#...c..###.###.Y....##',
+    '#...c.#O.....###V###......##',
+    '##.#############.###########',
+    '#....c########...C....c.c.##',
+    '#x.c..########.....#V..L..##',
+    '#....Y########..c..#..O..j##',
+    '#.....########c...x#.L...E##',
+    '############################',
+    '############################'
+  ], routes: [[[3,2], [10,2], [16,2], [23,2], [3,14], [16,14], [3,2]], [[3,2], [10,2], [23,2], [3,8], [3,14], [23,14], [3,2]], [[3,2], [16,2], [23,8], [10,8], [3,8], [3,14], [3,2]], [[16,2], [23,8], [3,8], [3,14], [16,14], [23,14], [16,2]]] },
+  { name: 'THE CISTERN', depth: 'CISTERN', theme: 'docks', coins: 15, bots: 4, spd: 1.42, fog: true, rows: [
+    '############################',
+    '#hH..L#.Z....c#L..c...L..M##',
+    '#.c.x.x....#L.c.....#c....##',
+    '#..~.~#.c....c#.....#..~..##',
+    '##c##########.#######~######',
+    '#..L.c#.L.....#######..x..##',
+    '#.L...#....H..#######.....##',
+    '#~#.O.#..c....#######....x##',
+    '#.....#.......#######..P..##',
+    '#~...~....~...#######.....##',
+    '#...~.#..~....#######.x...##',
+    '##.#########################',
+    '#.x...#x...~.....~..########',
+    '#..c....~.c...#L....########',
+    '#.....#..c.c..#.~...########',
+    '#f..~.#.c.L...#..~.E########',
+    '############################',
+    '############################'
+  ], routes: [[[3,2], [10,2], [23,2], [3,8], [3,14], [17,14], [3,2]], [[17,2], [23,2], [10,8], [3,14], [10,14], [17,14], [17,2]], [[10,2], [23,8], [10,8], [3,8], [3,14], [17,14], [10,2]], [[3,2], [10,2], [17,2], [23,2], [3,8], [10,14], [3,2]]] },
+  { name: 'THE ARCHIVE', depth: 'ARCHIVE', theme: 'bank', coins: 16, bots: 4, spd: 1.44, siren: true, rows: [
+    '############################',
+    '#######...c........#.!..!.##',
+    '#######..x.x#.C..G........##',
+    '#######.....#..c...#......##',
+    '##################G####.####',
+    '#L..!.#######C..$..#x.x...##',
+    '#Y....#######......#...G..##',
+    '#c....#######..P.....L....##',
+    '#...c.#######I.....#c..#.L##',
+    '#.c.......E#..c.!..#.c..x.##',
+    '#.....#######.....C#......##',
+    '#.#####################.####',
+    '#....Y#.........x#......c.##',
+    '#...c.......c.#.....L.....##',
+    '#j....#..c.L#......#......##',
+    '#$c..x#.c...#.....c#c...Ys##',
+    '############################',
+    '############################'
+  ], routes: [[[9,2], [16,2], [23,2], [16,8], [9,14], [16,14], [9,2]], [[9,2], [23,2], [16,8], [3,8], [3,14], [16,14], [9,2]], [[9,2], [16,2], [23,2], [16,8], [3,8], [16,14], [9,2]], [[9,2], [16,2], [3,8], [9,14], [16,14], [23,14], [9,2]]] },
+  { name: 'THE ROOST', depth: 'ROOST', theme: 'city', coins: 16, bots: 4, spd: 1.45, blackout: true, siren: true, rows: [
+    '############################',
+    '#########c.L.c.B.#...c.x..##',
+    '#########.N..#......#.....##',
+    '#########...........#..P..##',
+    '#########....#......#.....##',
+    '####.L....c..#.x...c#.....##',
+    '####V#######################',
+    '#.......c.L#....V.N.#L..x.##',
+    '#.c.....#c..M#c....x#.....##',
+    '#m..$...#.......#.x..c....##',
+    '#c.L....#.H..#.x.x..#...N.##',
+    '#.......#..c.#L.....#....c##',
+    '#####.#############.########',
+    '#............N#....c.H.M..##',
+    '#.....H.######....L.#.....##',
+    '#d..c...######......#L.c.E##',
+    '############################',
+    '############################'
+  ], routes: [[[11,3], [17,3], [23,9], [11,9], [4,14], [23,14], [11,3]], [[11,3], [23,3], [23,9], [11,9], [4,14], [23,14], [11,3]], [[17,3], [23,3], [23,9], [11,9], [4,14], [23,14], [17,3]], [[17,3], [23,3], [23,9], [17,9], [4,14], [17,14], [17,3]]] }
 ];
 
 /* ---------- state ---------- */
@@ -1134,6 +1276,11 @@ const ACHS = [
 ];
 let achs = (() => { try { return JSON.parse(localStorage.getItem('flashpoint.achs') || '{}') || {}; } catch (e) { return {}; } })();
 let fSeen = false, fSprint = false, fNoticed = false, fEmp = false;
+/* what happened, floor by floor, so a long run can be read back rather than
+   summed. caughtBy names the thing that actually filled the meter - the two
+   call sites of caught() both fire on meter >= 1, so the cause has to be
+   recorded where the meter rises, not where the run ends. */
+let runLog = [], caughtBy = null, floorT0 = 0, fSafes = 0, runSafes = 0;
 let runUnlocks = [];
 
 function unlock(id) {
@@ -1222,13 +1369,20 @@ try { muted = localStorage.getItem('flashpoint.mute') === '1'; } catch (e) {}
    their own markup, so an assertion checks all three agree rather than a
    refactor putting the lot at risk. */
 const GADGETS = [
-  { id: 'flare', label: 'FLARE',  key: 'Q', btn: 'itFlare' },
-  { id: 'smoke', label: 'SMOKE',  key: 'X', btn: 'itSmoke' },
-  { id: 'emp',   label: 'EMP',    key: 'C', btn: 'itEmp' },
-  { id: 'decoy', label: 'DECOY',  key: 'V', btn: 'itDecoy' },
-  { id: 'mag',   label: 'MAGNET', key: 'G', btn: 'itMag' },
-  { id: 'hush',  label: 'MUFFLE', key: 'B', btn: 'itHush' },
-  { id: 'jam',   label: 'JAMMER', key: 'J', btn: 'itJam' },
+  { id: 'flare', label: 'FLARE',  key: 'Q', btn: 'itFlare',
+    what: 'thrown light, and a noise where you are not' },
+  { id: 'smoke', label: 'SMOKE',  key: 'X', btn: 'itSmoke',
+    what: 'a cloud neither of you can see through' },
+  { id: 'emp',   label: 'EMP',    key: 'C', btn: 'itEmp',
+    what: 'the grid dies around you — loudly' },
+  { id: 'decoy', label: 'DECOY',  key: 'V', btn: 'itDecoy',
+    what: 'a noise that keeps talking, worth walking to' },
+  { id: 'mag',   label: 'MAGNET', key: 'G', btn: 'itMag',
+    what: 'loose gold within reach comes to your hand' },
+  { id: 'hush',  label: 'MUFFLE', key: 'B', btn: 'itHush',
+    what: 'the haul stops rattling, for this floor only' },
+  { id: 'jam',   label: 'JAMMER', key: 'J', btn: 'itJam',
+    what: 'a bubble the drones inside it cannot hear through' },
 ];
 let loadout = (() => {
   try {
@@ -1247,7 +1401,7 @@ let loadout = (() => {
 })();
 function saveLoadout() { try { localStorage.setItem('flashpoint.loadout', JSON.stringify(loadout)); } catch (e) {} }
 
-const SET0 = { vol: 0.55, motion: 'auto', minimap: true, cb: false };
+const SET0 = { vol: 0.55, motion: 'auto', minimap: true, cb: false, ui: 1, crack: 'still' };
 const colourblind = () => settings.cb === true;
 let settings = (() => {
   try { return Object.assign({}, SET0, JSON.parse(localStorage.getItem('flashpoint.settings') || '{}')); }
@@ -1259,6 +1413,7 @@ const prefersReduced = () => { try { return matchMedia('(prefers-reduced-motion:
 const motionFull = () => settings.motion === 'auto' ? !prefersReduced() : settings.motion === 'full';
 function applySettings() {
   shakeScale = motionFull() ? 1 : 0.25;
+  document.documentElement.style.setProperty('--ui', String(settings.ui || 1));
   if (master) master.gain.value = muted ? 0 : settings.vol;
 }
 function initAudio() {
@@ -1596,6 +1751,7 @@ function loadMap(idx) {
   puLens = 0; puShoe = 0; puGhost = 0;
   batt = T.BATT_MAX; beamOn = true; battDead = false;
   fSeen = false; fSprint = false; fNoticed = false; fEmp = false;
+  floorT0 = runT; fSafes = 0;
   trail = []; trailT = 0; floorT = 0; loadGhost();
   /* live objects clear with the floor; what you are carrying does not */
   smokes = []; emps = []; decoys = []; jams = []; magT = 0;
@@ -2103,12 +2259,19 @@ function update(dt) {
     if (u.kind === 'm') { magCharges = Math.min(T.CAP.mag, magCharges + 1); toast('MAGNET STOWED', 1.8); }
     hud();
   }
+  /* Whether your hands are steady enough to work. In 'still' that is literally
+     standing still; in 'hold' it is holding the key, and moving no longer
+     costs you progress - the button is the commitment instead. */
+  const steadyHands = () => holdToCrack()
+    ? !!keys.crack
+    : Math.hypot(player.vx, player.vy) <= 6;
+
   /* crates - only when there is no door demanding your hands */
   const crate = nearestShutDoor() ? null : nearestCrate();
   if (!crate) { if (crateT !== 0) { crateT = 0; crateOn = null; } }
   else {
     if (crateOn !== crate) { crateOn = crate; crateT = 0; }
-    if (Math.hypot(player.vx, player.vy) > 6) crateT = 0;
+    if (!steadyHands()) crateT = 0;
     else {
       crateT += dt;
       if (crateT >= T.CRATE_T) { breakCrate(crate); crateT = 0; crateOn = null; }
@@ -2151,7 +2314,7 @@ function update(dt) {
   if (!nearSafe) { if (safeT !== 0) { safeT = 0; safeOn = null; } }
   else {
     if (safeOn !== nearSafe) { safeOn = nearSafe; safeT = 0; }
-    if (Math.hypot(player.vx, player.vy) > 6) {
+    if (!steadyHands()) {
       /* it slips rather than resetting: four and a half seconds is long enough
          that a flinch losing everything would just stop anyone trying */
       safeT = Math.max(0, safeT - dt * 2);
@@ -2161,7 +2324,7 @@ function update(dt) {
       safeTick -= dt;
       if (safeTick <= 0) { safeTick = T.SAFE_TICK; makeNoise(nearSafe.x, nearSafe.y, T.SAFE_NOISE); sfx.crate(nearSafe); }
       if (safeT >= T.SAFE_T) {
-        nearSafe.cracked = true; nearSafe.flash = 1;
+        nearSafe.cracked = true; nearSafe.flash = 1; fSafes++; runSafes++;
         score += T.SAFE_SCORE;
         safeT = 0; safeOn = null;
         renderMapCanvas();
@@ -2270,6 +2433,7 @@ function update(dt) {
     if (l.on && !l.zapped && invuln <= 0 && ptSeg(player.x, player.y, l) < player.r + 4) {
       l.zapped = true;
       meter = Math.min(1, meter + 0.45);
+      caughtBy = 'laser';
       makeNoise(player.x, player.y, 520);
       sfx.laser({ x: player.x, y: player.y });
       redPulse = Math.max(redPulse, 0.65);
@@ -2840,6 +3004,10 @@ function updateMeter(dt) {
     if (!searchOnly) for (const e of emitters) { if (e.kind === 'exit' || e.kind === 'search' || e.dead) continue; if (blackout > 0) continue; if (Math.hypot(e.x - player.x, e.y - player.y) < e.r * 0.8) { mult = T.EXPOSE_MULT; break; } }
     const wasBelow = meter < 0.55;
     if (listenLock) mult *= T.LISTEN_FILL;
+    caughtBy = listenLock ? 'listener'
+      : !searchOnly ? 'drone'
+      : (emitters.some(e => e.kind === 'search' && e.cam && !e.dead
+          && inFan(player.x, player.y, e.x, e.y, e.ang, 0.13, e.r, e.rays, 16)) ? 'camera' : 'search');
     meter = Math.min(1, meter + T.SEE_FILL * D().fill * (MOD().fill || 1) * mult * dt);
     if (wasBelow && meter >= 0.55 && !searchOnly) bumpAlert();
     redPulse = Math.max(redPulse, meter);
@@ -2900,6 +3068,21 @@ function caught() {
   $('cCoins').textContent = coins;
   $('cScore').textContent = score;
   $('cFloor').textContent = 'LOOP ' + (loop + 1) + ' · ' + (mapIdx + 1) + '/' + MAPS.length;
+  /* Naming the thing that got you is the difference between a loss and a lesson.
+     Each line is the drone's own doing, not a scolding of the player. */
+  const CAUSE = {
+    drone:    ['A DRONE HAD YOU', 'it held the cone until the meter filled'],
+    listener: ['IT HEARD YOU FIRST', 'a listener called your position in'],
+    camera:   ['A CAMERA HAD YOU', 'it never blinked and never moved'],
+    search:   ['THE SWEEP FOUND YOU', 'the searchlight crossed you and stayed'],
+    laser:    ['YOU CROSSED THE BEAM', 'the grid screamed before you cleared it']
+  };
+  const cz = CAUSE[caughtBy] || ['THE LIGHT TOUCHED YOU', ''];
+  $('cCause').textContent = cz[0];
+  /* how close it was: the exit is the only thing that would have ended it */
+  const dt2 = Math.round(Math.hypot(exitPt.x - player.x, exitPt.y - player.y) / T.TILE);
+  $('cWhere').textContent = (cz[1] ? cz[1] + ' · ' : '')
+    + 'on ' + MAPS[mapIdx].name + ', ' + dt2 + ' tile' + (dt2 === 1 ? '' : 's') + ' from the way out';
   renderRecords($('recCaught'));
   /* hold on the moment before the card lands */
   caughtHold = T.CAUGHT_HOLD;
@@ -2935,6 +3118,7 @@ function nextMap() {
     try { localStorage.setItem('flashpoint.levels', JSON.stringify(completedLevels)); } catch (e) {}
     renderFloors();
   }
+  logFloor(ghost);
   if (last && !endless) { win(); return; }
   totalRunCoins += coins;
   mapIdx = (mapIdx + 1) % MAPS.length;
@@ -2945,7 +3129,7 @@ function nextMap() {
 }
 
 /* A total that lands all at once reads as a receipt. One that arrives reads as a
-   result, which is what finishing twelve floors deserves. */
+   result, which is what finishing seventeen floors deserves. */
 function countUp(el, to, dur) {
   if (!el) return;
   const from = 0, t0 = performance.now();
@@ -2957,6 +3141,25 @@ function countUp(el, to, dur) {
     else el.textContent = to;
   };
   requestAnimationFrame(step);
+}
+
+/* Recorded on the way out of a floor, where realCoins and the CLEAN flags are
+   still the ones that floor earned. After loadMap they belong to the next one. */
+function logFloor(ghost) {
+  runLog.push({ n: MAPS[mapIdx].name, c: realCoins, of: coinsTotal,
+    t: Math.max(0, runT - floorT0), g: !!ghost, s: fSafes, seen: fSeen });
+}
+
+function renderFloorLog(el) {
+  if (!el) return;
+  if (!runLog.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<span class="rtitle">FLOOR BY FLOOR</span>' + runLog.map((f, i) =>
+    '<div class="frow' + (f.g ? ' ghost' : '') + '">' +
+      '<span class="fk">' + (i + 1) + '</span>' +
+      '<span class="fn">' + f.n + '</span>' +
+      '<span class="fc' + (f.c >= f.of ? ' full' : '') + '">' + f.c + '/' + f.of + '</span>' +
+      '<span class="ft">' + fmtTime(f.t) + '</span>' +
+    '</div>').join('');
 }
 
 function win() {
@@ -2976,6 +3179,12 @@ function win() {
   if (dailyOn) bits.push('<b>DAILY ' + todaySeed() + '</b>');
   bits.push(alertLvl === 0 ? 'never <b>detected</b>' : 'alert level <b>' + alertLvl + '</b>');
   bits.push('in <b>' + fmtTime(runT) + '</b>');
+  /* the three sentences a heist run is actually about */
+  const gh = runLog.filter(f => f.g).length;
+  if (gh > 0) bits.push('<b>' + gh + '</b> floor' + (gh > 1 ? 's' : '') + ' ghosted');
+  if (runSafes > 0) bits.push('<b>' + runSafes + '</b> safe' + (runSafes > 1 ? 's' : '') + ' cracked');
+  const left = runLog.reduce((s, f) => s + (f.of - f.c), 0);
+  if (left > 0) bits.push('<b>' + left + '</b> left behind');
   const sm2 = $('escSummary');
   if (sm2) sm2.innerHTML = bits.join(' · ');
   const ea = $('escAchs');
@@ -2983,6 +3192,7 @@ function win() {
     .map(id => (ACHS.find(a => a[0] === id) || [null, null])[1])
     .filter(Boolean).map(n => '<span>' + n + '</span>').join('');
 
+  renderFloorLog($('escFloors'));
   renderRecords($('recEsc'));
   $('escaped').classList.remove('hidden');
   setRain(false);
@@ -5169,9 +5379,21 @@ function renderKit() {
   g.innerHTML = GADGETS.map(x =>
     '<button class="kitchip' + (loadout.includes(x.id) ? ' on' : '') + '" type="button" data-kit="' + x.id + '">'
     + '<b>' + x.label + '</b><s>' + x.key + '</s></button>').join('');
+  describeKit(null);
   const c = $('kitCount');
   if (c) c.textContent = loadout.length + '/' + T.LOADOUT_MAX;
 }
+/* Hover cannot be the only way in - on a phone there is no hover - so a tap
+   describes as well as picks. */
+function describeKit(id) {
+  const el = $('kitWhat');
+  if (!el) return;
+  const g = GADGETS.find(x => x.id === id);
+  el.textContent = g ? g.label + ' — ' + g.what
+    : 'three of seven — take what the building calls for';
+  el.classList.toggle('named', !!g);
+}
+
 function toggleKit(id) {
   if (!GADGETS.some(x => x.id === id)) return false;
   const i = loadout.indexOf(id);
@@ -5252,6 +5474,7 @@ function startGame() {
   loop = Math.floor(mapIdx / MAPS.length);
   mapIdx = mapIdx % MAPS.length;
   endless = false; modIdx = -1; runT = 0; score = 0; totalRunCoins = 0;
+  runLog = []; caughtBy = null; runSafes = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
@@ -5279,6 +5502,7 @@ function startFromFloor(floorIdx) {
   mapIdx = floorIdx % MAPS.length;
   loop = Math.floor(floorIdx / MAPS.length);
   endless = false; runT = 0; score = 0; totalRunCoins = 0;
+  runLog = []; caughtBy = null; runSafes = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
@@ -5319,6 +5543,12 @@ const CONTROLS = [
   ['MUTE', ['M']],
   ['NEW RUN', ['R']],
 ];
+/* There is no Z on a phone, so hold mode cannot apply there whatever the saved
+   setting says - otherwise a desktop preference silently bricks every safe. */
+const holdToCrack = () => !TOUCH && settings.crack === 'hold';
+/* only listed while it does something */
+const controlRows = () => holdToCrack()
+  ? [...CONTROLS, ['CRACK &amp; PRY', ['Z']]] : CONTROLS;
 function renderPause() {
   const M = MAPS[mapIdx];
   $('pWhere').textContent = (loop ? 'LOOP ' + (loop + 1) + ' \u00b7 ' : '') + M.name;
@@ -5342,7 +5572,7 @@ function renderPause() {
   if (blackoutMap) haz.push('BLACKOUTS');
   $('pHaz').innerHTML = haz.map(h => '<b>' + h + '</b>').join('');
   /* a phone has no keys to look up, and the item bar is already tappable */
-  $('pKeys').innerHTML = TOUCH ? '' : CONTROLS.map(([what, keys]) =>
+  $('pKeys').innerHTML = TOUCH ? '' : controlRows().map(([what, keys]) =>
     '<div class="prow"><em>' + what + '</em><s>' +
     keys.map(k => '<span class="key">' + k + '</span>').join('') + '</s></div>').join('');
   $('pSticks').style.display = TOUCH ? '' : 'none';
@@ -5355,6 +5585,13 @@ function renderSettings() {
   for (const b of $('motionSeg').children) b.classList.toggle('on', b.dataset.motion === settings.motion);
   for (const b of $('miniSeg').children) b.classList.toggle('on', (b.dataset.mini === 'on') === (settings.minimap !== false));
   for (const b of $('cbSeg').children) b.classList.toggle('on', (b.dataset.cb === 'on') === colourblind());
+  for (const b of $('uiSeg').children) b.classList.toggle('on', parseFloat(b.dataset.ui) === (settings.ui || 1));
+  /* the row is meaningless on a phone, so it does not appear on one */
+  $('crackRow').style.display = TOUCH ? 'none' : '';
+  for (const b of $('crackSeg').children) b.classList.toggle('on', b.dataset.crack === (settings.crack || 'still'));
+  $('crackNote').textContent = holdToCrack()
+    ? 'Hold Z instead — moving no longer costs you progress'
+    : 'Stand still to work a safe or a crate';
 }
 const DIFF_NOTE = {
   casual: 'Slower drones, a kinder meter, a longer torch',
@@ -5482,6 +5719,7 @@ window.addEventListener('keydown', e => {
   const k = keymap[e.key];
   if (k && mode === 'playing') { keys[k] = true; e.preventDefault(); }
   if (e.key === 'Shift') { keys.sprint = true; }
+  if (e.key === 'z' || e.key === 'Z') keys.crack = true;
   if (e.code === 'Space') {
     e.preventDefault();
     if (mode === 'menu' || mode === 'caught') startGame();
@@ -5504,6 +5742,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => {
   const k = keymap[e.key]; if (k) keys[k] = false;
   if (e.key === 'Shift') keys.sprint = false;
+  if (e.key === 'z' || e.key === 'Z') keys.crack = false;
 });
 
 function screenToWorld(clientX, clientY) {
@@ -5567,9 +5806,31 @@ $('cbSeg').addEventListener('click', e => {
   settings.cb = b.dataset.cb === 'on';
   saveSettings(); renderSettings(); sfx.ui();
 });
+['pointerover', 'focusin'].forEach(ev => $('kitGrid').addEventListener(ev, e => {
+  const b = e.target.closest('.kitchip');
+  if (b) describeKit(b.dataset.kit);
+}));
+/* A finger lifting fires pointerleave, which would wipe the line the tap just
+   put there. Only a mouse leaving the grid means "nothing is being pointed at". */
+$('kitGrid').addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') describeKit(null); });
+$('kitGrid').addEventListener('focusout', () => { if (!$('kitGrid').matches(':hover')) describeKit(null); });
 $('kitGrid').addEventListener('click', e => {
   const b = e.target.closest('button[data-kit]');
-  if (b) toggleKit(b.dataset.kit);
+  if (!b) return;
+  toggleKit(b.dataset.kit);
+  describeKit(b.dataset.kit);   /* renderKit has just reset the line */
+});
+$('crackSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-crack]');
+  if (!b) return;
+  settings.crack = b.dataset.crack;
+  saveSettings(); renderSettings(); sfx.ui();
+});
+$('uiSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-ui]');
+  if (!b) return;
+  settings.ui = parseFloat(b.dataset.ui);
+  applySettings(); saveSettings(); renderSettings(); sfx.ui();
 });
 $('miniSeg').addEventListener('click', e => {
   const b = e.target.closest('button[data-mini]');
@@ -5711,6 +5972,8 @@ window.__fp = {
   setLoadout(ids) { loadout = ids.filter(id => GADGETS.some(g => g.id === id)).slice(0, T.LOADOUT_MAX); saveLoadout(); renderKit(); return loadout.slice(); },
   toggleKitNow(id) { return toggleKit(id); },
   kitShown() { return [...$('kitGrid').querySelectorAll('.kitchip')].map(e => ({ id: e.dataset.kit, on: e.classList.contains('on') })); },
+  kitWhat(id) { describeKit(id); return $('kitWhat').textContent; },
+  gadgetCopy() { return GADGETS.map(g => ({ id: g.id, what: g.what || null })); },
   charges() { return { flare: flares, smoke: smokePellets, emp: empCharges, decoy: decoyCharges,
     mag: magCharges, hush: hushCharges, jam: jamCharges }; },
   botKinds() { return bots.map(b => b.kind); },
@@ -5753,6 +6016,29 @@ window.__fp = {
                            on: T.STICK_SPRINT_ON, off: T.STICK_SPRINT_OFF, aim: T.STICK_AIM_DEAD }; },
   get colourblind() { return colourblind(); },
   setCb(v) { settings.cb = !!v; saveSettings(); renderSettings(); return colourblind(); },
+  setUi(v) { settings.ui = v; applySettings(); saveSettings(); renderSettings(); return settings.ui; },
+  setCrack(v) { settings.crack = v; saveSettings(); renderSettings(); return settings.crack; },
+  holdMode() { return holdToCrack(); },
+  /* a full run's worth of rows, built by the real logFloor so the row shape
+     under test is the row shape that ships */
+  fillRunLog() {
+    runLog = [];
+    const keep = mapIdx;
+    for (let i = 0; i < MAPS.length; i++) {
+      mapIdx = i; coinsTotal = MAPS[i].coins; realCoins = i % 3 ? MAPS[i].coins : MAPS[i].coins - 2;
+      floorT0 = 0; runT = 40 + i * 7; fSafes = i % 5 === 0 ? 1 : 0; fSeen = i % 4 === 0;
+      logFloor(i % 4 === 1);
+    }
+    mapIdx = keep;
+    return runLog.length;
+  },
+  /* safeT is already exposed as a getter further down; a second definition here
+     is a duplicate key, and the later one silently wins. */
+  holdCrack(on) { keys.crack = !!on; },
+  controlRows() { return controlRows().length; },
+  resetRunLog() { runLog = []; runSafes = 0; caughtBy = null; },
+  setSafeT(v) { safeT = v; },
+  uiScale() { return getComputedStyle(document.documentElement).getPropertyValue('--ui').trim(); },
   conePalette() { return colourblind() ? { ...CONE.on } : { ...CONE.off }; },
   tutorState() {
     return { on: tutorOn(), step: tutorStep, shown: tutorShown,
@@ -5939,6 +6225,8 @@ window.__fp = {
   hud(); 
 },
   setMeter(v) { meter = v; }, forceBlackout() { blackout = 3.6; },
+  runLog() { return runLog.slice(); }, caughtBy() { return caughtBy; },
+  setCause(c) { caughtBy = c; }, runSafes() { return runSafes; },
   faceBot(deg) { if (bots[0]) bots[0].face = deg * Math.PI / 180; },
   placeBotNear(x, y) { if (bots[0]) { bots[0].x = x; bots[0].y = y; } },
   moveStickL(dx, dy) { if (sticks.L) { sticks.L.dx = dx; sticks.L.dy = dy; } },

@@ -211,20 +211,67 @@ await sleep(150);
 await eq('core blackouts', '__fp.blackout > 0', true);
 await evl('mapIdx = 1; loadMap(1);');
 
+/* ---- the five new floors: each one's central idea has to survive loadMap,
+   not merely appear in the rows. A tile the builder has no branch for reads as
+   plain floor and says nothing, which is how THE PENTHOUSE ended up carrying
+   three characters that mean nothing at all. ---- */
+const sum = a => `Array.from(${a}).reduce((s, v) => s + v, 0)`;
+
+await evl('mapIdx = 12; loadMap(12);'); await sleep(200);
+await eq('the atrium keeps its gold behind glass', `${sum('glassAt')} >= 5`, true);
+await eq('the atrium is a museum', 'MAPS[12].theme', 'museum');
+
+await evl('mapIdx = 13; loadMap(13);'); await sleep(200);
+await eq('the sublevel is cut through with vents', `${sum('ventAt')} >= 5`, true);
+await eq('and watched by things that cannot follow', 'sentryPts.length >= 2', true);
+
+await evl('mapIdx = 14; loadMap(14);'); await sleep(200);
+await eq('the cistern is half under water', `${sum('waterAt')} >= 10`, true);
+await eq('and listened to rather than watched', 'listenPts.length >= 2', true);
+await eq('the cistern runs fog', '!!MAPS[14].fog', true);
+
+await evl('mapIdx = 15; loadMap(15);'); await sleep(200);
+await eq('the archive holds two safes', 'safes.length >= 2', true);
+await eq('guarded by three sentries', 'sentryPts.length >= 3', true);
+await eq('over a floor that reports you', 'plates.length >= 4', true);
+await eq('and a siren to answer them', '!!MAPS[15].siren', true);
+
+await evl('mapIdx = 16; loadMap(16);'); await sleep(200);
+await eq('the roost is three listeners in the dark', 'listenPts.length >= 3', true);
+await eq('and the dark is the point', '!!MAPS[16].blackout', true);
+
+/* a copy-pasted floor is the easy mistake when five arrive at once */
+await eq('every floor is named once', 'new Set(MAPS.map(m => m.name)).size', 17);
+await eq('every floor tags its depth once', 'new Set(MAPS.map(m => m.depth)).size', 17);
+await eq('every new floor is walkable end to end', 'validateMaps()', 'ok');
+
 /* full campaign -> win -> endless */
 await evl(`(() => {
   mode = 'playing'; paused = false;
   meter = 0; invuln = 2.5; alertLvl = 0; alertCool = 0;
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
   smokes.length = 0; emps.length = 0; decoys.length = 0;
+  /* Own the floor this starts on. It used to inherit whatever the block above
+     happened to leave behind, so adding a block that ends on floor 17 made the
+     campaign win on its first teleport and still report 'won'. */
+  mapIdx = 0; loop = 0; loadMap(0); __fp.resetRunLog();
 })()`);
-await eq('campaign has 12 floors', 'MAPS.length', 12);
+await eq('campaign has 17 floors', 'MAPS.length', 17);
 const nMaps = await evl('MAPS.length');
 for (let i = 0; i < nMaps; i++) {
   await evl('__fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);');
   await sleep(500);
 }
 await eq('campaign win', '__fp.mode', 'won');
+/* Q2: a seventeen floor run used to collapse into two totals */
+await eq('every floor cleared is written down', '__fp.runLog().length', 17);
+await eq('and each row carries that floor, not the next one',
+  "__fp.runLog().every((f, i) => f.n === MAPS[i].name && f.of === MAPS[i].coins)", true);
+await eq('the escape card lists one row per floor',
+  "document.querySelectorAll('#escFloors .frow').length", 17);
+/* Q1: the story, not just the receipt */
+await eq('the summary says what the run was',
+  "/ghosted|left behind|safe/.test(document.getElementById('escSummary').innerHTML)", true);
 await ok('escaped card visible', await evl("!document.getElementById('escaped').classList.contains('hidden')"));
 await shot('won');
 await evl("document.getElementById('endlessBtn').click();");
@@ -607,7 +654,7 @@ const loot = await evl(`(() => {
   return JSON.stringify({ kinds, uniq: [...new Set(kinds)].length, n: kinds.length });
 })()`);
 const lootRes = JSON.parse(loot);
-ok('every floor resolves a loot shape', lootRes.n === 12 && lootRes.kinds.every(k => !!k), loot);
+ok('every floor resolves a loot shape', lootRes.n === 17 && lootRes.kinds.every(k => !!k), loot);
 ok('and there is real variety across the campaign', lootRes.uniq >= 5, loot);
 
 /* the shape changes but nothing about picking it up does */
@@ -1572,8 +1619,8 @@ const grid12 = await evl(`(() => {
   });
 })()`);
 const g12 = JSON.parse(grid12);
-ok('the picker shows all twelve floors', g12.n === 12, grid12);
-ok('twelve boxes still fit a phone', g12.overflow === false, grid12);
+ok('the picker shows every floor', g12.n === 17, grid12);
+ok('seventeen boxes still fit a phone', g12.overflow === false, grid12);
 ok('and stay tappable', g12.minW >= 28, grid12);
 await send('Emulation.clearDeviceMetricsOverride');
 
@@ -2684,7 +2731,7 @@ const pau = JSON.parse(await evl(`(() => {
 })()`));
 ok('pause opens the panel', pau.open.paused === true && pau.open.shown === true, JSON.stringify(pau.open));
 ok('it says where you are and how the run is going',
-  pau.text.where === 'THE CORE' && pau.text.floor === '9/12' && pau.text.gold === '3/12'
+  pau.text.where === 'THE CORE' && pau.text.floor === '9/17' && pau.text.gold === '3/12'
   && pau.text.score === '1840' && pau.text.time === '1:36', JSON.stringify(pau.text));
 ok('a later loop says so rather than repeating the floor name',
   pau.looped === 'LOOP 2 \u00b7 THE CORE', pau.looped);
@@ -4003,9 +4050,12 @@ const saf = JSON.parse(await evl(`(() => {
 })()`));
 const withSafes = saf.perFloor.filter(n => n > 0).length;
 ok('the maps still validate with a safe bolted into them', saf.valid === 'ok', saf.valid);
-ok('a few floors have one, and the early ones do not',
-  withSafes === 4 && saf.perFloor.slice(0, 4).every(n => n === 0),
-  JSON.stringify(saf.perFloor));
+/* Pinned to exactly four, this broke the moment a new floor got a safe - the
+   count was never the claim. The claim is that safes are scarce and late. */
+ok('safes stay scarce, and never turn up early',
+  withSafes >= 4 && withSafes <= Math.ceil(saf.perFloor.length / 2)
+  && saf.perFloor.slice(0, 4).every(n => n === 0),
+  `${withSafes} of ${saf.perFloor.length}: ${JSON.stringify(saf.perFloor)}`);
 ok('it takes real time standing at it',
   saf.need > 3 && saf.partway.t > 0.8 && saf.partway.cracked === false,
   `${saf.partway.t}s of ${saf.need}s`);
@@ -4285,6 +4335,98 @@ ok('but you can never walk in carrying nothing',
 ok('and the choice is remembered', kit.stored.join(',') === 'emp,hush', JSON.stringify(kit.stored));
 
 
+/* ---- cracking without having to hold still, and a HUD you can read ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+/* the control that only exists in the mode it works in */
+const crk = JSON.parse(await evl(`(() => {
+  const rowsStill = (__fp.setCrack('still'), __fp.controlRows());
+  const rowsHold = (__fp.setCrack('hold'), __fp.controlRows());
+  return JSON.stringify({ rowsStill, rowsHold,
+    note: document.getElementById('crackNote').textContent });
+})()`));
+ok('hold mode advertises its key, still mode does not',
+  crk.rowsHold === crk.rowsStill + 1, `${crk.rowsStill} -> ${crk.rowsHold}`);
+ok('and the setting says which one you are in', /Hold Z/.test(crk.note), crk.note);
+
+/* the behaviour itself: moving must not cost progress in hold mode, and
+   standing on the safe must not earn any without the key */
+const crack = JSON.parse(await evl(`(() => {
+  mode = 'playing'; invuln = 99;
+  const f = safes.find(s => !s.cracked) || (loadMap(15), safes[0]);
+  const step = (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); };
+  const sit = () => { __fp.teleport(f.x, f.y); player.vx = 0; player.vy = 0; };
+
+  __fp.setCrack('hold'); __fp.holdCrack(false); sit(); __fp.setSafeT(0);
+  step(1.5); const idle = __fp.safeT;
+
+  __fp.holdCrack(true); sit(); __fp.setSafeT(0);
+  step(1.5); const held = __fp.safeT;
+
+  /* the whole point: a hand that will not sit still no longer loses the safe */
+  __fp.holdCrack(true); sit(); __fp.setSafeT(0);
+  for (let i = 0; i < 90; i++) { player.vx = 40; player.vy = 0; update(1 / 60); }
+  const moving = __fp.safeT;
+
+  __fp.setCrack('still'); __fp.holdCrack(false); sit(); __fp.setSafeT(0);
+  step(1.5); const stillMode = __fp.safeT;
+  __fp.setCrack('still');
+  return JSON.stringify({ idle, held, moving, stillMode });
+})()`));
+ok('in hold mode the safe does nothing until you hold the key',
+  crack.idle < 0.2, JSON.stringify(crack));
+ok('holding it works the safe', crack.held > 1.0, `${crack.held.toFixed(2)}s`);
+ok('and moving no longer costs you the progress',
+  crack.moving > 1.0, `${crack.moving.toFixed(2)}s while moving`);
+ok('stand-still mode still works the way it always did',
+  crack.stillMode > 1.0, `${crack.stillMode.toFixed(2)}s`);
+
+/* R2: the scale reaches the DOM, and the bar still fits a phone at 150% */
+const ui = JSON.parse(await evl(`(() => {
+  __fp.setUi(1.5);
+  const bar = document.getElementById('itemBar').getBoundingClientRect();
+  const hud = document.getElementById('hud').getBoundingClientRect();
+  const r = { scale: __fp.uiScale(), barRight: Math.round(bar.right),
+    hudRight: Math.round(hud.right), vw: window.innerWidth };
+  __fp.setUi(1);
+  r.back = __fp.uiScale();
+  return JSON.stringify(r);
+})()`));
+ok('the interface scale reaches the page', ui.scale === '1.5', ui.scale);
+ok('and at 150% the item bar is still on the screen',
+  ui.barRight <= ui.vw + 1, `${ui.barRight} of ${ui.vw}`);
+ok('the HUD does not overflow its own width either',
+  ui.hudRight <= ui.vw + 1, `${ui.hudRight} of ${ui.vw}`);
+ok('and it goes back', ui.back === '1', ui.back);
+
+/* ---- the loadout says what each thing is for ---- */
+const kw = JSON.parse(await evl(`(() => {
+  const copy = __fp.gadgetCopy();
+  return JSON.stringify({
+    missing: copy.filter(g => !g.what).map(g => g.id),
+    dupes: copy.length - new Set(copy.map(g => g.what)).size,
+    idle: __fp.kitWhat(null),
+    named: __fp.kitWhat('jam'),
+    cls: document.getElementById('kitWhat').className
+  });
+})()`));
+ok('every gadget says what it is for', kw.missing.length === 0, JSON.stringify(kw.missing));
+ok('and no two say the same thing', kw.dupes === 0, `${kw.dupes} repeated`);
+ok('the line invites a choice when nothing is pointed at',
+  /three of seven/.test(kw.idle), kw.idle);
+ok('and names the one you point at', /^JAMMER — /.test(kw.named), kw.named);
+ok('the line is marked as named so it can be styled apart',
+  kw.cls === 'named', kw.cls);
+/* a tap has to describe as well as pick, because a phone has no hover */
+const kwTap = JSON.parse(await evl(`(() => {
+  __fp.kitWhat(null);
+  document.querySelector('.kitchip[data-kit="emp"]').click();
+  return JSON.stringify({ line: document.getElementById('kitWhat').textContent,
+    on: __fp.loadout.includes('emp') });
+})()`));
+ok('tapping a gadget describes it as well as picking it',
+  /^EMP — /.test(kwTap.line), kwTap.line);
+
 /* ---- you do not start the floor inside a patrol ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
@@ -4307,6 +4449,26 @@ ok('nothing starts on your doorstep on any floor of any loop',
   spw.under150 === 0, `${spw.under150} of ${spw.total}; closest ${spw.closest[0].nearest}px (${spw.closest[0].kind})`);
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
+
+/* ---- the caught card names what got you ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const CAUSES = [
+  ['drone', 'A DRONE HAD YOU'], ['listener', 'IT HEARD YOU FIRST'],
+  ['camera', 'A CAMERA HAD YOU'], ['search', 'THE SWEEP FOUND YOU'],
+  ['laser', 'YOU CROSSED THE BEAM'], [null, 'THE LIGHT TOUCHED YOU']
+];
+for (const [cause, want] of CAUSES) {
+  const got = await evl(`(() => {
+    mode = 'playing'; caughtHold = 0; __fp.setCause(${JSON.stringify(cause)});
+    caught();
+    return document.getElementById('cCause').textContent;
+  })()`);
+  await ok(`caught by ${cause || 'something'} reads "${want}"`, got === want, got);
+}
+const where = await evl("document.getElementById('cWhere').textContent");
+await ok('and it says where it happened, and how close you were',
+  /on .+, \d+ tiles? from the way out/.test(where), where);
 
 /* ---- moving fast is the default; the key buys quiet ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
@@ -4360,6 +4522,111 @@ const mbl = JSON.parse(await evl(`(() => {
     const m = __fp.tutorState().msg || ''; return /THUMB/.test(m); })();
   return JSON.stringify(o);
 })()`));
+/* ---- and everything added since has to work there too ---- */
+/* R2: the scale is only worth having if the biggest step still fits a phone */
+const mUi = JSON.parse(await evl(`(() => {
+  const read = () => {
+    const bar = document.getElementById('itemBar').getBoundingClientRect();
+    const hud = document.getElementById('hud').getBoundingClientRect();
+    return { bar: Math.round(bar.right), hud: Math.round(hud.right),
+      w: Math.round(bar.width),
+      scroll: document.documentElement.scrollWidth > window.innerWidth + 1 };
+  };
+  const out = {};
+  for (const s of [1, 1.25, 1.5]) { __fp.setUi(s); out['s' + s] = read(); }
+  __fp.setUi(1);
+  out.vw = window.innerWidth;
+  return JSON.stringify(out);
+})()`));
+ok('the item bar still fits the phone at every interface scale',
+  [mUi.s1, mUi['s1.25'], mUi['s1.5']].every(r => r.bar <= mUi.vw + 1),
+  JSON.stringify(mUi));
+ok('and nothing pushes the page sideways at 150%',
+  mUi['s1.5'].scroll === false && mUi['s1.5'].hud <= mUi.vw + 1, JSON.stringify(mUi['s1.5']));
+ok('150% actually makes the buttons bigger, rather than doing nothing',
+  mUi['s1.5'].w > mUi.s1.w * 1.3, `${mUi.s1.w} -> ${mUi['s1.5'].w}`);
+
+/* R1: there is no Z on a phone, so the row must not be offered there */
+const mCrack = JSON.parse(await evl(`(() => {
+  __fp.setCrack('hold');   /* as if carried over from a desktop session */
+  openSettings();
+  const row = getComputedStyle(document.getElementById('crackRow')).display;
+  closeSettings();
+  return JSON.stringify({ row, hold: __fp.holdMode(), rows: __fp.controlRows() });
+})()`));
+ok('the cracking setting is not offered on a phone', mCrack.row === 'none', mCrack.row);
+ok('and a hold setting carried over cannot brick a phone safe',
+  mCrack.hold === false, JSON.stringify(mCrack));
+
+/* Q2: seventeen rows on a 390px card */
+const mLog = JSON.parse(await evl(`(() => {
+  const n = __fp.fillRunLog();
+  renderFloorLog(document.getElementById('escFloors'));
+  document.getElementById('escaped').classList.remove('hidden');
+  const box = document.getElementById('escFloors').getBoundingClientRect();
+  const rows = [...document.querySelectorAll('#escFloors .frow')];
+  const names = rows.map(r => r.querySelector('.fn'));
+  const out = { n, rows: rows.length, right: Math.round(box.right),
+    vw: window.innerWidth,
+    scroll: document.documentElement.scrollWidth > window.innerWidth + 1,
+    clipped: names.filter(e => e.scrollWidth > e.clientWidth + 1).length,
+    ghosts: rows.filter(r => r.classList.contains('ghost')).length };
+  document.getElementById('escaped').classList.add('hidden');
+  return JSON.stringify(out);
+})()`));
+ok('a full run writes seventeen rows', mLog.n === 17 && mLog.rows === 17, JSON.stringify(mLog));
+ok('and they fit the phone without pushing the page sideways',
+  mLog.right <= mLog.vw + 1 && mLog.scroll === false, JSON.stringify(mLog));
+ok('no floor name is cut off', mLog.clipped === 0, `${mLog.clipped} clipped`);
+ok('ghosted floors are marked as such', mLog.ghosts > 0, `${mLog.ghosts} ghosted`);
+
+/* Q3: the caught card grew two lines; it still has to fit or scroll */
+const mCaught = JSON.parse(await evl(`(() => {
+  mode = 'playing'; caughtHold = 0; __fp.setCause('listener'); caught();
+  /* caught() sets caughtHold, which holds the card hidden for the beat before
+     it lands. A hidden element measures 0x0, so every "fits the phone" check
+     against it passes without looking at anything. */
+  caughtHold = 0;
+  document.getElementById('caught').classList.remove('hidden');
+  const card = document.querySelector('#caught .card').getBoundingClientRect();
+  const w = document.getElementById('cWhere');
+  return JSON.stringify({ right: Math.round(card.right), vw: window.innerWidth,
+    scroll: document.documentElement.scrollWidth > window.innerWidth + 1,
+    scrolls: document.getElementById('caught').scrollHeight > window.innerHeight
+      ? getComputedStyle(document.getElementById('caught')).overflowY : 'fits',
+    where: w.textContent, wClipped: w.scrollWidth > w.clientWidth + 1,
+    shown: Math.round(card.width) });
+})()`));
+/* the control: prove there was something on screen to measure */
+ok('the caught card was really on screen when measured',
+  mCaught.shown > 200, `card width ${mCaught.shown}`);
+ok('the caught card fits the phone', mCaught.right <= mCaught.vw + 1
+  && mCaught.scroll === false, JSON.stringify(mCaught));
+ok('and its new line is readable rather than clipped',
+  mCaught.wClipped === false && /listener/.test(mCaught.where), mCaught.where);
+ok('a card taller than the phone scrolls rather than hiding itself',
+  mCaught.scrolls === 'fits' || mCaught.scrolls === 'auto', mCaught.scrolls);
+
+/* N3: the gadget line has to survive a narrow screen */
+const mKit = JSON.parse(await evl(`(() => {
+  /* the line lives on the start overlay, which is hidden once a run begins */
+  const st = document.getElementById('start');
+  const wasHidden = st.classList.contains('hidden');
+  st.classList.remove('hidden');
+  __fp.kitWhat('jam');
+  const e = document.getElementById('kitWhat');
+  const r = e.getBoundingClientRect();
+  const out = { text: e.textContent, right: Math.round(r.right),
+    vw: window.innerWidth, h: Math.round(r.height), w: Math.round(r.width),
+    clipped: e.scrollHeight > e.clientHeight + 1 };
+  if (wasHidden) st.classList.add('hidden');
+  return JSON.stringify(out);
+})()`));
+ok('the gadget line was really on screen when measured',
+  mKit.w > 100 && mKit.h > 0, `${mKit.w}x${mKit.h}`);
+ok('the gadget description fits the phone width',
+  mKit.right <= mKit.vw + 1 && mKit.clipped === false, JSON.stringify(mKit));
+
 await send('Emulation.setDeviceMetricsOverride', {
   width: 844, height: 390, deviceScaleFactor: 3, mobile: true,
   screenOrientation: { type: 'landscapePrimary', angle: 90 } });
