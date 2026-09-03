@@ -374,6 +374,32 @@ await evl('mapIdx = 0; loadMap(0); hud();');
 await sleep(200);
 ok('every floor starts on a full charge', (await evl('__fp.batt')) > 95 && (await evl('__fp.beamOn')) === true, `batt=${await evl('__fp.batt')}`);
 
+/* ---- the exit is a door ---- */
+/* Deliberately not a pixel assertion. The exit sits at the map edge on several
+   floors and the camera clamps there, so the door lands off-canvas and every
+   sample reads zero - that tests the harness, not the game. Both states were
+   checked by eye in full-frame captures; what is worth pinning here is the
+   geometry the drawing depends on. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2200);
+const doorGeom = await evl(`(() => {
+  const out = [];
+  for (let i = 0; i < MAPS.length; i++) {
+    loop = 0; mapIdx = i; loadMap(i);
+    const c = cellOf(exitPt.x, exitPt.y);
+    const openH = !isWallCell(c.gx - 1, c.gy) || !isWallCell(c.gx + 1, c.gy);
+    const openV = !isWallCell(c.gx, c.gy - 1) || !isWallCell(c.gx, c.gy + 1);
+    out.push({ i, vertical: exitVertical, reachable: !isWall(exitPt.x, exitPt.y), openH, openV });
+  }
+  return JSON.stringify(out);
+})()`);
+const dg = JSON.parse(doorGeom);
+ok('every floor has a reachable exit', dg.every(d => d.reachable), doorGeom);
+ok('every doorway resolves an orientation', dg.every(d => typeof d.vertical === 'boolean'), doorGeom);
+ok('and it matches the side that is actually open',
+  dg.every(d => (d.openH || d.openV) ? (d.vertical === (d.openH && !d.openV ? true : (d.openV && !d.openH ? false : d.vertical))) : true),
+  doorGeom);
+
 /* ---- the drone reads its own state ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);

@@ -68,7 +68,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 ## F · Look
 
 - [x] F1 Drone sprite pass — the real fault was state-blindness, not detail; patrol/invest/chase now read at a glance
-- [ ] F2 Exit door — a real door, not a beacon blob
+- [x] F2 Exit door — shutter door with ribs, frame, status lamp and light spilling through when it opens
 - [ ] F3 Coin sprite — distinct silhouette per floor theme
 - [ ] F4 Caught sequence — a held beat before the card
 - [ ] F5 Win screen — a proper payoff, currently plain
@@ -142,3 +142,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · E7 · hearR() scales with floor, loop and wariness, 4 assertions
 - 2026-09-03 · E8 · four drones, four distinct clocks, 6 assertions — **section E complete**
 - 2026-09-03 · F1 · drone redrawn with per-state lens ramp, vent, rotors and rim; pixel-asserted as three distinct states
+- 2026-09-03 · F2 · exit redrawn as a two-leaf shutter, orientation from the open axis; verified by screenshot (camera clamps at map edges, so pixel sampling tests the harness not the game), 3 geometry assertions
