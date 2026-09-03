@@ -2495,6 +2495,68 @@ const states = await evl('JSON.stringify(__fp.botState)');
 ok('searchlight wakes the drones', !/^\["patrol"(,"patrol")*\]$/.test(states), `states=${states}`);
 
 
+/* ---- memory: a fast bright trail riding over a slow faint survey ----
+   All of it runs inside one evaluate, so the RAF loop cannot interleave and the
+   stepping is exact. Note update() returns early while paused, so this block
+   must NOT pause the way the fog block does — it drives update() itself. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const glw = JSON.parse(await evl(`(() => {
+  mapIdx = 0; loadMap(0); hud(); bots.length = 0; meter = 0;
+  let best = null;
+  for (let k = 0; k < 32; k++) { const a = k * TAU / 32; let d = 0;
+    while (d < 340 && !isWall(player.x + Math.cos(a) * d, player.y + Math.sin(a) * d)) d += 6;
+    if (!best || d > best.d) best = { a, d }; }
+  const px = player.x, py = player.y, ax = Math.cos(best.a), ay = Math.sin(best.a);
+  const at = d => __fp.glowAt(px + ax * d, py + ay * d);
+  const step = n => { for (let i = 0; i < n; i++) update(1 / 60); };
+  /* the whole canvas, because the camera clamps at the map edge and the player
+     is nowhere near screen centre on floor 1 */
+  const read = () => { const d = ctx.getImageData(0, 0, W * DPR, H * DPR).data;
+    let s2 = 0, n = 0; for (let i = 0; i < d.length; i += 4) { s2 += d[i] + d[i+1] + d[i+2]; n++; }
+    return Math.round(s2 / n); };
+  const look = () => __fp.aimAt(px + ax * 400, py + ay * 400);
+  const away = () => __fp.aimAt(px - ax * 400, py - ay * 400);
+  look(); clearMemory(); step(18);
+  const early = at(60);
+  step(72);
+  const near = at(60), mid = at(180), far = at(300), live = __fp.glowLive();
+  away(); step(2);
+  render(); const withMem = read();
+  clearMemory(); render(); const noMem = read();
+  look(); step(90); away();
+  step(180); const s3 = at(60);
+  step(480); const s11 = at(60);
+  step(1800); const s41 = at(60);
+  const rates = [__fp.glowStep(1/60, 60), __fp.glowStep(1/30, 30), __fp.glowStep(1/120, 120)];
+  mapIdx = 1; loadMap(1); hud();
+  return JSON.stringify({ early, near, mid, far, live, withMem, noMem, s3, s11, s41, rates, afterLoad: __fp.glowLive() });
+})()`));
+ok('a glance leaves a trail long before it leaves a survey',
+  glw.early.trail > glw.early.survey * 2.5, JSON.stringify(glw.early));
+ok('standing and looking builds the survey too',
+  glw.near.survey > 0.5, JSON.stringify(glw.near));
+ok('remembered light falls off with distance, it is not a flat slab',
+  glw.mid.trail < glw.near.trail && glw.far.trail < glw.near.trail * 0.6,
+  `near=${glw.near.trail} mid=${glw.mid.trail} far=${glw.far.trail}`);
+ok('the memory is actually visible on screen',
+  glw.withMem > glw.noMem + 2, `with=${glw.withMem} without=${glw.noMem}`);
+/* the old canvas afterglow jammed at alpha 0.12 and stayed there for the rest
+   of the floor: 8-bit alpha cannot take the last multiplicative step down */
+ok('the trail fades all the way to nothing',
+  glw.s11.trail < 0.05 && glw.s41.trail === 0, JSON.stringify([glw.s11, glw.s41]));
+ok('the survey outlives it by a long way',
+  glw.s11.survey > 0.3 && glw.s11.survey > glw.s11.trail * 10, JSON.stringify(glw.s11));
+ok('but the survey goes in the end as well',
+  glw.s41.survey > 0 && glw.s41.survey < glw.near.survey * 0.6,
+  `${glw.near.survey} -> ${glw.s41.survey}`);
+ok('memory decays on elapsed time, not on frame count',
+  glw.rates[0] === glw.rates[1] && glw.rates[1] === glw.rates[2], JSON.stringify(glw.rates));
+ok('a new floor is not remembered from the last one',
+  glw.afterLoad.trail === 0 && glw.afterLoad.survey === 0 && glw.live.survey > 20,
+  `lit=${glw.live.survey} after=${JSON.stringify(glw.afterLoad)}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

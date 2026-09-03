@@ -156,8 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
-- **Memory** — what your beam recently lit stays faintly burned into your view,
-  so sweeping is mapping.
+- **Memory** — two of them. A bright warm trail shows where the beam has just
+  been and is gone in a couple of seconds; underneath it a faint amber survey
+  builds slowly and lasts most of a floor, so sweeping is mapping and the room
+  you have already worked stays roughly known.
 - **They get better as you go deeper** — a drone that spots you accelerates the
   longer it holds you, floor by floor, until only a sprint escapes it. From the
   Museum down they run a radio net: one drone seeing you sends the rest.

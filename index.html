@@ -500,7 +500,10 @@ const T = {
   SEE_FILL: 0.92, GRACE: 0.65, METER_DRAIN: 0.5, EXPOSE_MULT: 1.65,
   HEAR_R: 470, NOISE_SPRINT: 0.5, NOISE_PICKUP: 380, STEP_R: 520,
   COIN_VALUE: 50, COIN_FLOOR_MULT: 1.2, CLEAR_BONUS: 500, WIN_BONUS: 1500,
-  AFTERGLOW_STAMP: 0.055, AFTERGLOW_FADE: 0.016, AFTERGLOW_DRAW: 0.15,
+  /* memory: a fast bright trail over a slow faint survey. IN/OUT are per second,
+     DRAW is the peak alpha each field contributes on screen. */
+  GLOW_TRAIL_IN: 5.2, GLOW_TRAIL_OUT: 0.41, GLOW_TRAIL_DRAW: 0.30,
+  GLOW_SURVEY_IN: 0.8, GLOW_SURVEY_OUT: 0.02, GLOW_SURVEY_DRAW: 0.12,
   DARK: 0.5,
 };
 
@@ -950,7 +953,7 @@ let records = [];
 try { records = JSON.parse(localStorage.getItem('flashpoint.records') || '[]'); if (!Array.isArray(records)) records = []; } catch (e) { records = []; }
 
 /* canvases */
-let mapCv, mapCtx, darkCv, darkCtx, memCv, memCtx, losGrid;
+let mapCv, mapCtx, darkCv, darkCtx, losGrid;
 
 /* ---------- audio ---------- */
 let AC = null, master = null, droneO = null, droneG = null, rainN = null, muted = false;
@@ -1168,7 +1171,7 @@ function loadMap(idx) {
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
-  memCv && memCtx.clearRect(0, 0, T.COLS * T.TILE, T.ROWS * T.TILE);
+  clearMemory();
   motes = []; for (let i = 0; i < (TOUCH ? 30 : 55); i++) motes.push({ x: rand(0, T.COLS * T.TILE), y: rand(0, T.ROWS * T.TILE), vx: rand(-4, 4), vy: rand(-6, -1), p: rand(0, TAU) });
   /* three depths: far drops are short, slow and faint, near ones long and quick,
      which is what gives a flat sheet of rain any sense of space */
@@ -1463,7 +1466,7 @@ function update(dt) {
       }
     }
   }
-  stampMemory();
+  stampMemory(dt);
 
   /* coins */
   for (const c of coinList) {
@@ -2219,7 +2222,6 @@ const grainS = (() => {
 function renderMapCanvas() {
   const mw = T.COLS * T.TILE, mh = T.ROWS * T.TILE;
   if (!mapCv || mapCv.width !== mw) { mapCv = document.createElement('canvas'); mapCv.width = mw; mapCv.height = mh; mapCtx = mapCv.getContext('2d'); }
-  if (!memCv) { memCv = document.createElement('canvas'); memCv.width = mw; memCv.height = mh; memCtx = memCv.getContext('2d'); }
   const g = mapCtx;
   g.clearRect(0, 0, mw, mh);
   seed = mapIdx * 991 + 7;
@@ -2385,17 +2387,90 @@ function drawProp(g, p) {
 }
 function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
 
-function stampMemory() {
-  memCtx.save();
-  memCtx.globalCompositeOperation = 'destination-out';
-  memCtx.fillStyle = 'rgba(0,0,0,' + T.AFTERGLOW_FADE + ')';
-  memCtx.fillRect(0, 0, memCv.width, memCv.height);
-  memCtx.restore();
-  fanPath(memCtx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, flRange(), player.aim);
-  if (mirrorBeam) { memCtx.moveTo(mirrorBeam.x, mirrorBeam.y); fanPath(memCtx, mirrorBeam.x, mirrorBeam.y, mirrorBeam.hits, T.FL_RAYS, T.FL_HALF, mirrorBeam.range, mirrorBeam.ang); }
-  memCtx.globalCompositeOperation = 'source-over';
-  memCtx.fillStyle = 'rgba(255,238,200,' + T.AFTERGLOW_STAMP + ')';
-  memCtx.fill();
+/* ---------- what you remember of the room ----------
+   Two fields, not one. The TRAIL is where the beam has just been: warm, bright,
+   most of it gone inside two seconds. The SURVEY is the shape of the floor you
+   have actually explored — it fills slowly, so sweeping past a doorway leaves
+   almost nothing while standing and looking leaves something that lasts.
+
+   These are float grids rather than a canvas because canvas alpha is 8 bit and a
+   multiplicative fade cannot cross the last step: the old single-canvas afterglow
+   decayed to 0.12 and then stuck there for the rest of the floor, so everywhere
+   you had ever pointed the torch kept a permanent flat wash. Floats reach zero,
+   and come out frame-rate independent as well. The grid is half a tile, drawn
+   through a 56x36 canvas scaled up, so the smoothing softens it for free — the
+   old version stamped a hard cone polygon and read as paint on the floor. */
+const GC = 20;
+const GW = (T.COLS * T.TILE / GC) | 0, GH = (T.ROWS * T.TILE / GC) | 0;
+const trailG = new Float32Array(GW * GH), surveyG = new Float32Array(GW * GH);
+const GLOW_TRAIL_RGB = [255, 228, 176], GLOW_SURVEY_RGB = [243, 188, 120];
+let glowCv = null, glowCtx = null, glowImg = null;
+
+function clearMemory() { trailG.fill(0); surveyG.fill(0); }
+
+/* the one light curve the rest of the game uses, sampled instead of drawn */
+function falloffAt(t) {
+  if (t <= 0) return 1;
+  if (t >= 1) return 0;
+  for (let i = 1; i < FALLOFF.length; i++) {
+    const [t1, v1] = FALLOFF[i];
+    if (t <= t1) { const [t0, v0] = FALLOFF[i - 1]; return v0 + (v1 - v0) * (t - t0) / (t1 - t0); }
+  }
+  return 0;
+}
+
+function stampMemory(dt) {
+  const keepT = Math.exp(-T.GLOW_TRAIL_OUT * dt), keepS = Math.exp(-T.GLOW_SURVEY_OUT * dt);
+  for (let i = 0; i < trailG.length; i++) {
+    const t = trailG[i] * keepT, sv = surveyG[i] * keepS;
+    trailG[i] = t < 0.0015 ? 0 : t;
+    surveyG[i] = sv < 0.0015 ? 0 : sv;
+  }
+  const gainT = 1 - Math.exp(-T.GLOW_TRAIL_IN * dt), gainS = 1 - Math.exp(-T.GLOW_SURVEY_IN * dt);
+  const beams = [{ x: player.x, y: player.y, a: player.aim, r: flRange(), h: flHits }];
+  if (mirrorBeam) beams.push({ x: mirrorBeam.x, y: mirrorBeam.y, a: mirrorBeam.ang, r: mirrorBeam.range, h: mirrorBeam.hits });
+  for (const bm of beams) {
+    if (!(bm.r > 0) || !bm.h || !bm.h.length) continue;
+    const gx0 = Math.max(0, ((bm.x - bm.r) / GC) | 0), gx1 = Math.min(GW - 1, ((bm.x + bm.r) / GC) | 0);
+    const gy0 = Math.max(0, ((bm.y - bm.r) / GC) | 0), gy1 = Math.min(GH - 1, ((bm.y + bm.r) / GC) | 0);
+    for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+      const wx = gx * GC + GC / 2, wy = gy * GC + GC / 2;
+      if (!inFan(wx, wy, bm.x, bm.y, bm.a, T.FL_HALF, bm.r, bm.h, T.FL_RAYS)) continue;
+      const f = falloffAt(Math.hypot(wx - bm.x, wy - bm.y) / bm.r);
+      if (f <= 0) continue;
+      const i = gy * GW + gx;
+      trailG[i] += (1 - trailG[i]) * gainT * f;
+      surveyG[i] += (1 - surveyG[i]) * gainS * f;
+    }
+  }
+}
+
+/* fresh light is nearer white, old memory settles into amber, and the blend
+   between them is what tells you at a glance which is which */
+function drawMemory(g) {
+  if (!glowCv) {
+    glowCv = document.createElement('canvas'); glowCv.width = GW; glowCv.height = GH;
+    glowCtx = glowCv.getContext('2d'); glowImg = glowCtx.createImageData(GW, GH);
+  }
+  const d = glowImg.data;
+  let any = false;
+  for (let i = 0; i < trailG.length; i++) {
+    const t = trailG[i] * T.GLOW_TRAIL_DRAW, sv = surveyG[i] * T.GLOW_SURVEY_DRAW, a = t + sv, o = i * 4;
+    const k = a > 0 ? t / a : 0;
+    /* colour every cell, transparent ones included: the upscale interpolates
+       neighbours, and a transparent cell left at black would darken the edge */
+    d[o] = GLOW_SURVEY_RGB[0] + (GLOW_TRAIL_RGB[0] - GLOW_SURVEY_RGB[0]) * k;
+    d[o + 1] = GLOW_SURVEY_RGB[1] + (GLOW_TRAIL_RGB[1] - GLOW_SURVEY_RGB[1]) * k;
+    d[o + 2] = GLOW_SURVEY_RGB[2] + (GLOW_TRAIL_RGB[2] - GLOW_SURVEY_RGB[2]) * k;
+    d[o + 3] = a > 0 ? Math.min(255, a * 255) : 0;
+    if (a > 0) any = true;
+  }
+  if (!any) return;
+  glowCtx.putImageData(glowImg, 0, 0);
+  const sm = g.imageSmoothingEnabled;
+  g.imageSmoothingEnabled = true;
+  g.drawImage(glowCv, 0, 0, GW, GH, 0, 0, T.COLS * T.TILE, T.ROWS * T.TILE);
+  g.imageSmoothingEnabled = sm;
 }
 
 function fanPath(g, x0, y0, hits, rays, half, range, a0) {
@@ -2479,7 +2554,7 @@ function render() {
   ctx.scale(Z, Z); ctx.translate(-cx, -cy);
 
   ctx.drawImage(mapCv, 0, 0);
-  ctx.globalAlpha = T.AFTERGLOW_DRAW; ctx.drawImage(memCv, 0, 0); ctx.globalAlpha = 1;
+  drawMemory(ctx);
 
   /* dust motes only in light — coins, bots, player and the exit beacon
      ride ABOVE the darkness: only the hunters hide in it */
@@ -4232,6 +4307,20 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  glowAt(x, y) {
+    const gx = Math.min(GW - 1, Math.max(0, (x / GC) | 0)), gy = Math.min(GH - 1, Math.max(0, (y / GC) | 0));
+    const i = gy * GW + gx;
+    return { trail: +trailG[i].toFixed(4), survey: +surveyG[i].toFixed(4) };
+  },
+  glowLive() { let t = 0, sv = 0; for (let i = 0; i < trailG.length; i++) { if (trailG[i] > 0) t++; if (surveyG[i] > 0) sv++; } return { trail: t, survey: sv, cells: trailG.length }; },
+  glowStep(dt, steps) {
+    /* decay only, no beam, so the same elapsed time can be compared one step
+       against many — the old canvas version could not survive this */
+    const keep = Math.exp(-T.GLOW_TRAIL_OUT * dt);
+    let v = 1; for (let k = 0; k < steps; k++) v *= keep;
+    return +v.toFixed(5);
+  },
+  glowFalloff(t) { return +falloffAt(t).toFixed(4); },
   get mode() { return mode; }, get mapIdx() { return mapIdx; }, get loop() { return loop; },
   get coins() { return coins; }, get coinsTotal() { return coinsTotal; }, get meter() { return meter; },
   get exitOpen() { return exitOpen; }, get blackout() { return blackout; }, get score() { return score; },
