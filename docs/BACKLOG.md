@@ -113,7 +113,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 ## H · Interface
 
 - [x] H1 Settings panel — volume (new), difficulty (moved in, not duplicated) and three-state motion, reachable from the menu and from a paused run. **Colourblind deliberately left to H7**: a toggle that only writes to localStorage is a control that lies about what is possible
-- [ ] H2 Minimap of swept area — built from the memory canvas
+- [x] H2 Minimap of swept area — draws F10's survey grid and strictly nothing else; asserted that drones in the dark leave no mark on it
 - [ ] H3 Exit compass — permanent, subtle, edge-anchored
 - [ ] H4 Leaderboard screen — currently a cramped table
 - [ ] H5 Toast queue — messages currently overwrite each other
@@ -181,3 +181,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · G5 · stereo panning for the sounds that are in the room, centred for the ones that are not, servoVol generalised to distVol, 9 assertions
 - 2026-09-03 · G6 · pentatonic coin ladder, and split coins from realCoins after finding a bonus coin could open the exit with gold still on the floor, 9 assertions — **section G complete**
 - 2026-09-03 · H1 · one settings panel, volume wired through mute properly, reduced motion reaches particles and wipes as well as shake, 11 assertions
+- 2026-09-03 · H2 · minimap off the survey grid, walls only where swept, exit only once seen, off-switchable, 6 assertions
