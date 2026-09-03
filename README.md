@@ -156,6 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **You can hear one before you see it** — a listener ticks like slow sonar,
+  panned to where it stands, tightening as it closes. Get near and the reach it
+  can feel you in appears, brightening the moment you move and settling when you
+  stop.
 - **Something down there has no eyes** — the listener casts no cone at all. It
   cannot see you in full light, a blackout does nothing to it, and your torch is
   irrelevant. It hears, nearly twice as far as a drone, and it knows you are

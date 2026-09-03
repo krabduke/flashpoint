@@ -668,6 +668,7 @@ const T = {
      are moving. Standing still is the counterplay, which the game has never
      asked of you before. */
   LISTEN_HEAR: 1.75, LISTEN_R: 96, LISTEN_FILL: 0.72, LISTEN_STILL: 6,
+  LISTEN_SHOW: 2.3, LISTEN_PING: 2.6, LISTEN_PING_HOT: 0.62,
   STING_ON: 0.22, STING_LO: 110, STING_HI: 165, STING_V: 0.055,
   STING_TRI_ON: 0.45, STING_TRI_V: 0.03, STING_DUCK: 0.55,
 };
@@ -1255,6 +1256,12 @@ const sfx = {
   crate(at) { noiseBurst(0.3, 0.3, 320, at); tone(180, 90, 0.24, 0.16, 'square', 0, at); },
   emp(at) { tone(900, 60, 0.45, 0.22, 'square', 0, at); noiseBurst(0.3, 0.16, 140, at); },
   decoy(at) { tone(1180, 1180, 0.05, 0.07, 'square', 0, at); },
+  /* the listener's own voice. A thing that hunts by sound should announce
+     itself by sound, and G5 puts it where it actually stands. */
+  ping(hot, at) {
+    tone(300 + hot * 190, 220 + hot * 150, 0.16 + hot * 0.05, 0.05 + hot * 0.05, 'sine', 0, at);
+    tone(600 + hot * 380, 520 + hot * 300, 0.1, 0.018 + hot * 0.022, 'triangle', 0, at);
+  },
   /* a drone's own servo, moving. Rising means it is getting interested,
      falling means it is losing you - which the game had no sound for at all. */
   servo(dir, weight, vol, at) {
@@ -1536,7 +1543,7 @@ function spawnBots() {
       range: 0, half: 0, rays: new Array(T.BOT_RAYS + 1),
       sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, chirpT: 0,
       saidHeat: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [],
-      wary: 0, radioT: 0, heard: 0,
+      wary: 0, radioT: 0, heard: 0, pingT: rand(0, 2), pingFlash: 0,
       sweepK: rand(0.7, 1.4), paceK: rand(0.9, 1.12), peekK: rand(0.7, 1.5),
       dwellK: rand(0, 1), dwellT: 0
     });
@@ -2261,9 +2268,27 @@ function updateBots(dt) {
     /* idle sweep while stationary or searching */
     if (b.radioT > 0) b.radioT = Math.max(0, b.radioT - dt);
     if (b.heard > 0) b.heard = Math.max(0, b.heard - dt * 1.6);
+    if (b.kind === 'listen') {
+      /* Posture: it has no cone to point, so turning toward what it heard is the
+         only aim it can show you. Only while it is standing still, though - when
+         it is walking, the path steering already turns it where it is going, and
+         two faceToward calls a frame just fight each other into a jitter. */
+      if (!b.path.length && (b.lastX || b.lastY)) faceToward(b, b.lastX, b.lastY, dt);
+      const hot = b.state === 'chase' ? 1 : b.state === 'invest' ? 0.55 : 0;
+      b.pingT = (b.pingT || 0) - dt;
+      if (b.pingT <= 0) {
+        b.pingT = lerp(T.LISTEN_PING, T.LISTEN_PING_HOT, hot);
+        sfx.ping(hot, b);
+        b.pingFlash = 1;
+      }
+      if (b.pingFlash > 0) b.pingFlash = Math.max(0, b.pingFlash - dt * 2.2);
+    }
     if (b.wary > 0) b.wary = Math.max(0, b.wary - dt);
     const sweepK = (b.wary > 0 ? T.WARY_SWEEP : 1) * b.sweepK;
-    if (!b.path.length && b.state !== 'chase') b.face += Math.sin(time * 1.7 + b.sweepP) * T.BOT_SWEEP * sweepK * dt * 6;
+    /* Sweeping is a thing you do with a cone, and a listener has not got one.
+       Left in, the wobble is +-0.030 rad a frame against a 0.037 turn rate, so
+       it very nearly cancels the lock-on and the head just wanders. */
+    if (!b.path.length && b.state !== 'chase' && b.kind !== 'listen') b.face += Math.sin(time * 1.7 + b.sweepP) * T.BOT_SWEEP * sweepK * dt * 6;
 
     /* cone rays (shared for draw + detection) */
     castCone(b.rays, b.x, b.y, b.face, b.half, T.BOT_RAYS, botRange(b));
@@ -3175,6 +3200,7 @@ function render() {
   ctx.translate(shx, shy);
   ctx.scale(Z, Z); ctx.translate(-cx, -cy);
   if (mode !== 'menu') for (const b of bots) if (b.kind !== 'listen') drawBotCone(b);
+  if (mode !== 'menu') for (const b of bots) if (b.kind === 'listen') drawListenReach(b);
   if (blackout > 0 && Math.sin(time * 30) > 0.4) { ctx.fillStyle = 'rgba(255,40,40,0.05)'; ctx.fillRect(cx, cy, vw, vh); }
   /* coins: always readable; in the beam they light up fully */
   for (const c of coinList) if (!c.got) drawCoin(c);
@@ -3380,6 +3406,36 @@ function drawLasers() {
    with, so it needs its own tell: no lens anywhere on it, two dishes instead of
    eyes, and a ring that goes out from it the moment it hears something. The
    ring is the whole point - it is the only warning you get. */
+/* A drone's cone tells you where the danger is. The listener's reach was a
+   96px sphere with nothing drawn on it at all, which is an invisible instant
+   loss. It shows now - but only once you are near enough for it to matter, so
+   it is a warning rather than a permanent marker on the map.
+
+   And it answers your feet: bright and pulsing while you are moving, quiet when
+   you stop. The ring teaches the counterplay without a word of text. */
+function drawListenReach(b) {
+  const d = Math.hypot(b.x - player.x, b.y - player.y);
+  const show = T.LISTEN_R * T.LISTEN_SHOW;
+  if (d > show) return;
+  const near = 1 - (d - T.LISTEN_R) / (show - T.LISTEN_R);
+  const prox = clamp(near, 0, 1);
+  const speed = Math.min(1, Math.hypot(player.vx, player.vy) / 120);
+  const live = speed > T.LISTEN_STILL / 120 ? 1 : 0;
+  ctx.save();
+  ctx.setLineDash([7, 9]);
+  ctx.lineDashOffset = -time * (14 + live * 46);
+  ctx.strokeStyle = 'rgba(203,180,255,' + (0.1 + prox * 0.16 + live * prox * 0.3).toFixed(3) + ')';
+  ctx.lineWidth = 1 + live * 0.8;
+  ctx.beginPath(); ctx.arc(b.x, b.y, T.LISTEN_R, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+  if (live && prox > 0) {
+    ctx.strokeStyle = 'rgba(230,214,255,' + (prox * 0.12).toFixed(3) + ')';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(b.x, b.y, T.LISTEN_R, 0, TAU); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawListener(b) {
   const a = revealed(b) ? 1 : (b.state === 'chase' ? 0.8 : 0.14);
   const hot = b.state === 'chase' ? 1 : b.state === 'invest' ? 0.55 : 0;
@@ -3388,6 +3444,13 @@ function drawListener(b) {
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.beginPath(); ctx.ellipse(2, 8, 12, 5, 0, 0, TAU); ctx.fill();
   ctx.globalAlpha = a;
+  /* the sonar tick, seen as well as heard, for anyone playing muted */
+  if (b.pingFlash > 0) {
+    ctx.globalAlpha = a * b.pingFlash * 0.3;
+    ctx.strokeStyle = '#8f7ac4'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(0, 0, 13 + (1 - b.pingFlash) * 20, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = a;
+  }
   /* the ring it makes when something reaches it */
   if (b.heard > 0) {
     const k = 1 - b.heard;
@@ -5114,6 +5177,14 @@ window.__fp = {
   botKinds() { return bots.map(b => b.kind); },
   listenerCount() { return bots.filter(b => b.kind === 'listen').length; },
   listenHeard() { return bots.filter(b => b.kind === 'listen').map(b => +(b.heard || 0).toFixed(2)); },
+  listenPing() { return bots.filter(b => b.kind === 'listen').map(b => ({ t: +(b.pingT || 0).toFixed(2), flash: +(b.pingFlash || 0).toFixed(2) })); },
+  listenFacing() { const b = bots.find(x => x.kind === 'listen'); return b ? +b.face.toFixed(3) : null; },
+  listenReachSeen() {
+    const b = bots.find(x => x.kind === 'listen');
+    if (!b) return null;
+    const d = Math.hypot(b.x - player.x, b.y - player.y);
+    return { d: Math.round(d), drawn: d <= T.LISTEN_R * T.LISTEN_SHOW, r: T.LISTEN_R };
+  },
   get listenLock() { return listenLock; },
   hearReachFor(i) { return Math.round(hearR(bots[i])); },
   stickResponse(raw) {

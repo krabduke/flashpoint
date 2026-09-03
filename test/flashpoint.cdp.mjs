@@ -3613,6 +3613,66 @@ ok('and the block never measured a frozen game',
   `${lsn.still.mode} / ${lsn.moving.mode} / ${lsn.heardRing.mode}`);
 
 
+/* ---- making a thing with no cone readable ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const lg2 = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  mapIdx = 3; loop = 0; loadMap(3); invuln = 9e9; meter = 0; initAudio();
+  const L = bots.find(b => b.kind === 'listen');
+  for (const b of bots) if (b.kind !== 'listen') { b.x = -900; b.y = -900; b.path = []; }
+  /* a warning as you approach, not a marker sat on the map all game */
+  player.x = L.x + 500; player.y = L.y; o.farAway = __fp.listenReachSeen();
+  player.x = L.x + 140; player.y = L.y; o.close = __fp.listenReachSeen();
+  /* sample ON the ring rather than a big box around it, or a thin circle gets
+     averaged away to nothing */
+  const onRing = () => { render();
+    const wx = L.x + T.LISTEN_R, wy = L.y;
+    const sx = (wx - camNow.cx) * Z, sy = (wy - camNow.cy) * Z, h = 12;
+    const d = ctx.getImageData((sx - h) * DPR, (sy - h) * DPR, h * 2 * DPR, h * 2 * DPR).data;
+    let v = 0; for (let i = 0; i < d.length; i += 4) v += d[i] + d[i + 1] + d[i + 2];
+    return Math.round(v / (d.length / 4)); };
+  player.vx = 0; player.vy = 0; o.inkStill = onRing();
+  player.vx = 150; player.vy = 0; o.inkMoving = onRing();
+  player.vx = 0; player.vy = 0;
+  /* it keeps its own clock, and it tightens when it is hunting */
+  const gapFor = st => { L.pingT = 0; L.lastX = 0; L.lastY = 0;
+    for (let i = 0; i < 3; i++) { L.state = st; update(1 / 60); }
+    return __fp.listenPing()[0].t; };
+  o.gapCalm = gapFor('patrol');
+  o.gapHunting = gapFor('chase');
+  o.flash = __fp.listenPing()[0].flash;
+  /* Posture: turning toward what it heard is all the aim it can show you, and
+     it applies while it is standing still. A walking one looks where it walks. */
+  L.face = 0; const want = Math.PI;
+  const post = { x: L.x, y: L.y };
+  for (let i = 0; i < 240; i++) {
+    L.state = 'invest'; L.path = []; L.x = post.x; L.y = post.y;
+    L.lastX = post.x - 300; L.lastY = post.y;
+    update(1 / 60);
+  }
+  o.faceAfter = __fp.listenFacing();
+  o.faceErr = +Math.abs(Math.atan2(Math.sin(o.faceAfter - want), Math.cos(o.faceAfter - want))).toFixed(3);
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+ok('the block measured a running game', lg2.mode === 'playing', lg2.mode);
+/* a 96px instant-loss sphere with nothing drawn on it is not a mechanic, it is
+   an ambush */
+ok('its reach is drawn once you are near enough for it to matter',
+  lg2.farAway.drawn === false && lg2.close.drawn === true,
+  `${lg2.farAway.d}px hidden, ${lg2.close.d}px shown, r=${lg2.close.r}`);
+ok('and the ring answers your feet, which is the lesson',
+  lg2.inkMoving > lg2.inkStill, `still=${lg2.inkStill} moving=${lg2.inkMoving}`);
+ok('it ticks on its own clock so you can place it unseen',
+  lg2.gapCalm > 2 && lg2.flash > 0, `gap=${lg2.gapCalm}s flash=${lg2.flash}`);
+ok('and the ticking tightens when it is hunting',
+  lg2.gapHunting < lg2.gapCalm * 0.5, `${lg2.gapCalm}s -> ${lg2.gapHunting}s`);
+ok('it turns to face what it heard, having no cone to point',
+  lg2.faceErr < 0.35, `off by ${lg2.faceErr} rad`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);
