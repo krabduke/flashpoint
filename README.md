@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Thumbsticks that behave** — a dead zone you leave at a crawl rather than a
+  jump, and a sprint that engages high and lets go low, so a thumb resting on
+  the line cannot flicker you in and out of making noise.
 - **Colourblind mode** — drone cones turn blue and gain hatching, so they read
   by pattern as well as by hue. Warm gold against red is the one pair this game
   cannot afford to have collapse.

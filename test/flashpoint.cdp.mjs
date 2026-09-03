@@ -3478,6 +3478,55 @@ ok('the choice is remembered', cbl.stored === true, `stored=${cbl.stored}`);
 ok('and this block leaves it off again', cbl.restored === false, `restored=${cbl.restored}`);
 
 
+/* ---- thumbstick response ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const stk = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0;
+  o.k = __fp.stickConsts();
+  o.curve = [0, 0.15, 0.29, 0.31, 0.5, 0.75, 1.0].map(r => __fp.stickResponse(r));
+  __fp.stickRelease();
+  o.inDead = __fp.stickPush(0.25);
+  o.justOut = __fp.stickPush(0.33);
+  o.full = __fp.stickPush(1.0);
+  /* up through the sprint line and back down through the band */
+  __fp.stickRelease();
+  o.up = [0.5, 0.8, 0.89, 0.92].map(r => [r, __fp.stickPush(r).sprint]);
+  o.down = [0.89, 0.86, 0.80, 0.74, 0.70].map(r => [r, __fp.stickPush(r).sprint]);
+  /* the ring drawn on the stick has to mean what it looks like it means */
+  const ring = o.k.dead + o.k.on * (1 - o.k.dead);
+  __fp.stickRelease(); o.atRing = __fp.stickPush(ring + 0.01).sprint;
+  __fp.stickRelease(); o.insideRing = __fp.stickPush(ring - 0.04).sprint;
+  o.ring = +ring.toFixed(3);
+  __fp.stickRelease();
+  return JSON.stringify(o);
+})()`));
+ok('the dead zone is bigger than the 0.22 it was', stk.k.dead >= 0.28, `dead=${stk.k.dead}`);
+ok('inside it nothing moves at all',
+  stk.inDead.mag === 0 && stk.inDead.speed === 0, JSON.stringify(stk.inDead));
+/* it used to hand you the raw stick value the moment you crossed the line, so a
+   thumb creeping over 0.22 jumped straight to a fifth of full speed */
+ok('leaving it starts from a crawl rather than a jump',
+  stk.justOut.mag < 0.08 && stk.justOut.speed > 0 && stk.justOut.speed < 12,
+  `mag=${stk.justOut.mag} speed=${stk.justOut.speed}`);
+ok('and the response climbs smoothly to full',
+  stk.curve.every((v, i) => i === 0 || v >= stk.curve[i - 1]) && stk.curve[6] === 1
+  && stk.full.mag === 1, JSON.stringify(stk.curve));
+ok('pushing all the way sprints', stk.full.sprint === true && stk.full.speed > 150,
+  JSON.stringify(stk.full));
+ok('sprint engages on the way up', stk.up[0][1] === false && stk.up[3][1] === true,
+  JSON.stringify(stk.up));
+/* one threshold meant a thumb resting on the line flickered in and out every
+   frame, and a sprint calls makeNoise, so the flicker screamed your position */
+ok('and holds through the band on the way back down',
+  stk.down[1][1] === true && stk.down[3][1] === true && stk.down[4][1] === false,
+  JSON.stringify(stk.down));
+ok('the sprint ring drawn on the stick is where sprint actually starts',
+  stk.atRing === true && stk.insideRing === false, `ring=${stk.ring}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

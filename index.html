@@ -662,6 +662,8 @@ const T = {
   GLOW_TRAIL_IN: 5.2, GLOW_TRAIL_OUT: 0.41, GLOW_TRAIL_DRAW: 0.30,
   GLOW_SURVEY_IN: 0.8, GLOW_SURVEY_OUT: 0.02, GLOW_SURVEY_DRAW: 0.12,
   DARK: 0.5, SHAKE_CAP: 26, SERVO_HALF: 380, SERVO_GAP: 0.3, PAN_HALF: 420, PAN_MAX: 0.85,
+  STICK_DEAD: 0.30, STICK_WALK: 0.50, STICK_SPRINT_ON: 0.85, STICK_SPRINT_OFF: 0.62,
+  STICK_AIM_DEAD: 0.28,
   STING_ON: 0.22, STING_LO: 110, STING_HI: 165, STING_V: 0.055,
   STING_TRI_ON: 0.45, STING_TRI_V: 0.03, STING_DUCK: 0.55,
 };
@@ -1748,12 +1750,26 @@ function update(dt) {
   if (keys.up) mvy -= 1; if (keys.down) mvy += 1;
   let sprinting = !!keys.sprint;
   if (sticks.L) {
-    const s = sticks.L, m = Math.min(1, Math.hypot(s.dx, s.dy));
-    if (m > 0.22) { mvx = s.dx; mvy = s.dy; mag = m; sprinting = m > 0.88; player.tier = m > 0.88 ? 2 : m; }
-    else mag = 0;
+    const s = sticks.L, raw = Math.min(1.2, Math.hypot(s.dx, s.dy));
+    /* The dead zone was a cliff: cross 0.22 and you were handed the raw stick
+       value, so a thumb creeping over the line jumped straight to a fifth of
+       full speed. It rescales now, so leaving the zone starts you at nothing. */
+    const n = raw <= T.STICK_DEAD ? 0 : Math.min(1, (raw - T.STICK_DEAD) / (1 - T.STICK_DEAD));
+    if (n > 0) {
+      const k = n / raw;                    /* keep the direction, replace the length */
+      mvx = s.dx * k; mvy = s.dy * k; mag = n;
+      /* And sprint had one threshold, so a thumb resting on the line flickered
+         in and out of it every frame. Sprinting calls makeNoise, so that flicker
+         was intermittently screaming your position across the floor. */
+      stickSprint = stickSprint ? n > T.STICK_SPRINT_OFF : n > T.STICK_SPRINT_ON;
+      sprinting = stickSprint;
+      /* player.tier was set here too, and overwritten unconditionally four lines
+         below, and read by nothing at all. Dropped rather than kept in step. */
+    } else { mag = 0; stickSprint = false; }
+    stickMag = mag;
   } else if (mvx || mvy) { const l = Math.hypot(mvx, mvy); mag = sprinting ? 1 : 0.62; mvx /= l; mvy /= l; }
   player.tier = sprinting ? 2 : mvx || mvy ? 1 : 0;
-  const spd = sprinting ? T.SPRINT : (sticks.L && mag < 0.88 ? (mag < 0.55 ? T.SNEAK : T.WALK) : (keys.sneak ? T.SNEAK : (mvx || mvy ? T.WALK : 0)));
+  const spd = sprinting ? T.SPRINT : (sticks.L && mag > 0 ? (mag < T.STICK_WALK ? T.SNEAK : T.WALK) : (keys.sneak ? T.SNEAK : (mvx || mvy ? T.WALK : 0)));
   const spdOut = spd * (puShoe > 0 ? T.PU_SHOE_MULT : 1);
   player.vx = mvx * spdOut; player.vy = mvy * spdOut;
   /* conveyor currents shove you sideways */
@@ -1771,7 +1787,7 @@ function update(dt) {
   }
 
   /* aim */
-  if (sticks.R && Math.hypot(sticks.R.dx, sticks.R.dy) > 0.24) {
+  if (sticks.R && Math.hypot(sticks.R.dx, sticks.R.dy) > T.STICK_AIM_DEAD) {
     player.aim = Math.atan2(sticks.R.dy, sticks.R.dx); aimMode = 'stick';
   } else if (aimMode === 'mouse') {
     player.aim = Math.atan2(mouseWY - player.y, mouseWX - player.x);
@@ -2076,7 +2092,7 @@ function update(dt) {
   unlockFlash = Math.max(0, unlockFlash - dt);
 }
 
-let stepT = 0;
+let stepT = 0, stickSprint = false, stickMag = 0;
 
 function updateCats(dt) {
   for (const ct of cats) {
@@ -4282,8 +4298,11 @@ function drawSticks() {
     ctx.strokeStyle = s === sticks.L ? '#cfd0f2' : '#ffd166'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(s.ax, s.ay, STICK_R, 0, TAU); ctx.stroke();
     ctx.globalAlpha = 0.12;
-    ctx.beginPath(); ctx.arc(s.ax, s.ay, STICK_R * 0.55, 0, TAU); ctx.stroke();
-    ctx.beginPath(); ctx.arc(s.ax, s.ay, STICK_R * 0.88, 0, TAU); ctx.stroke();
+    /* draw the thresholds this stick actually uses, in stick travel */
+    const ringWalk = T.STICK_DEAD + T.STICK_WALK * (1 - T.STICK_DEAD);
+    const ringSprint = T.STICK_DEAD + T.STICK_SPRINT_ON * (1 - T.STICK_DEAD);
+    ctx.beginPath(); ctx.arc(s.ax, s.ay, STICK_R * ringWalk, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s.ax, s.ay, STICK_R * ringSprint, 0, TAU); ctx.stroke();
     const mag = Math.min(1, Math.hypot(s.dx, s.dy));
     ctx.globalAlpha = 0.35;
     ctx.fillStyle = s === sticks.L ? '#cfd0f2' : '#ffd166';
@@ -5010,6 +5029,18 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  stickResponse(raw) {
+    return raw <= T.STICK_DEAD ? 0 : +Math.min(1, (raw - T.STICK_DEAD) / (1 - T.STICK_DEAD)).toFixed(4);
+  },
+  stickPush(raw) {
+    sticks.L = { id: -1, ax: 0, ay: 0, dx: raw, dy: 0 };
+    update(1 / 60);
+    return { mag: +stickMag.toFixed(4), sprint: stickSprint,
+             speed: +Math.hypot(player.vx, player.vy).toFixed(1) };
+  },
+  stickRelease() { sticks.L = null; stickSprint = false; },
+  stickConsts() { return { dead: T.STICK_DEAD, walk: T.STICK_WALK,
+                           on: T.STICK_SPRINT_ON, off: T.STICK_SPRINT_OFF, aim: T.STICK_AIM_DEAD }; },
   get colourblind() { return colourblind(); },
   setCb(v) { settings.cb = !!v; saveSettings(); renderSettings(); return colourblind(); },
   conePalette() { return colourblind() ? { ...CONE.on } : { ...CONE.off }; },
