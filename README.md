@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **A board worth reading** — top runs ranked, with the floor you reached, the
+  gold you carried and how long it took. The run you just finished is picked out
+  wherever it lands.
 - **A compass to the door** — pinned to the edge of the screen whenever the exit
   is off it. Faint while you have never seen the door, firmer once you have lit
   it, bright once every coin is in. Direction only until you have seen it.

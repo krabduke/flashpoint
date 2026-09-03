@@ -275,13 +275,27 @@
   .prow s{text-decoration:none;display:flex;gap:3px;flex-shrink:0}
   @media (max-width:430px){.pkeys{grid-template-columns:1fr;max-width:250px}}
 
-  .records{margin:6px 0 4px;min-width:min(300px,80vw)}
-  .records table{width:100%;border-collapse:collapse;font-size:11.5px;color:#a99fd0}
-  .records td{padding:4px 6px;border-top:1px solid rgba(120,100,180,.14);font-variant-numeric:tabular-nums}
-  .records td:first-child{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:.12em;color:#c9bfe8;text-align:left;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .records td+td{text-align:right;color:#8d84b3}
-  .records .rtitle{font-size:9px;letter-spacing:.3em;color:#5e5679;padding-top:10px;text-align:center;display:block}
-  .newrec{color:#ffd166!important;font-weight:700}
+  .records{margin:8px 0 4px;width:min(330px,84vw)}
+  .records .rtitle{display:block;font-size:9px;letter-spacing:.3em;color:#5e5679;
+    padding:10px 0 8px;text-align:center}
+  .rrow{display:grid;grid-template-columns:18px 1fr auto;align-items:baseline;gap:2px 10px;
+    padding:7px 2px;border-top:1px solid rgba(120,100,180,.14);text-align:left}
+  .rrow .rk{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:#5e5679;
+    font-variant-numeric:tabular-nums}
+  .rrow .rn{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:.1em;color:#c9bfe8;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rrow .rs{font-family:'Orbitron',monospace;font-size:12.5px;font-weight:700;color:#e6dffb;
+    font-variant-numeric:tabular-nums}
+  .rrow .rmeta{grid-column:2 / -1;font-size:9.5px;letter-spacing:.08em;color:#6a6190;
+    font-variant-numeric:tabular-nums}
+  .rrow.top .rk,.rrow.top .rs{color:#ffd166}
+  .rrow.mine{background:linear-gradient(90deg,rgba(255,209,102,.11),transparent 78%);
+    border-radius:6px}
+  .rrow.mine .rn{color:#ffe9a8}
+  .rrow.mine .rk::after{content:'';display:inline-block;width:4px;height:4px;border-radius:50%;
+    background:#ffd166;vertical-align:middle;margin-left:4px;box-shadow:0 0 6px rgba(255,209,102,.9)}
+  .rempty{padding:14px 2px;font-size:11px;color:#6a6190;text-align:center;
+    border-top:1px solid rgba(120,100,180,.14)}
   /* ---- floor select: cleared floors are LIT, locked floors stay dark ---- */
   #floorPanel{width:100%;max-width:430px;margin:4px auto 0}
   .floor-eyebrow{font-family:'Orbitron',monospace;font-size:9px;font-weight:500;letter-spacing:.34em;
@@ -2578,8 +2592,12 @@ function win() {
 }
 let totalRunCoins = 0;
 function fmtTime(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ':' + String(s).padStart(2, '0'); }
+let recordSeq = 0, lastRecordId = 0;
 function addRecord() {
-  records.push({ n: name || 'ANON', s: score, d: loop * MAPS.length + mapIdx + 1, c: totalRunCoins, t: Math.floor(runT) });
+  /* Matching on name-and-score marked every tying run as the new one, including
+     old ones, because sorting had already mixed them together. An id cannot tie. */
+  lastRecordId = ++recordSeq;
+  records.push({ n: name || 'ANON', s: score, d: loop * MAPS.length + mapIdx + 1, c: totalRunCoins, t: Math.floor(runT), id: lastRecordId });
   /* track high score */
   let highScore = 0;
   try { highScore = JSON.parse(localStorage.getItem('flashpoint.highScore') || '0'); } catch (e) {}
@@ -2588,10 +2606,21 @@ function addRecord() {
   records = records.slice(0, 8);
   saveRecords();
 }
+/* Four columns squeezed into 11.5px type, no ranks, and the time captured on
+   every single run never shown at all. Two tiers per entry instead: who and how
+   much on top, how it went underneath. */
 function renderRecords(el) {
-  const rows = records.slice(0, 5).map((r, i) =>
-    `<tr><td class="${(name || 'ANON') === r.n && r.s === score ? 'newrec' : ''}">${escapeHtml(r.n)}</td><td>${r.s}</td><td>${r.c}c</td><td>F${r.d}</td></tr>`).join('');
-  el.innerHTML = '<span class="rtitle">TOP RUNS — THIS DEVICE</span><table>' + (rows || '<tr><td>no runs yet</td></tr>') + '</table>';
+  const rows = records.slice(0, 6).map((r, i) => {
+    const cls = 'rrow' + (i === 0 ? ' top' : '') + (r.id && r.id === lastRecordId ? ' mine' : '');
+    return '<div class="' + cls + '">'
+      + '<span class="rk">' + (i + 1) + '</span>'
+      + '<span class="rn">' + escapeHtml(r.n) + '</span>'
+      + '<span class="rs">' + r.s.toLocaleString('en-GB') + '</span>'
+      + '<span class="rmeta">floor ' + r.d + ' &middot; ' + r.c + ' gold &middot; ' + fmtTime(r.t || 0) + '</span>'
+      + '</div>';
+  }).join('');
+  el.innerHTML = '<span class="rtitle">TOP RUNS — THIS DEVICE</span>'
+    + (rows || '<div class="rempty">No runs yet. This one will be the first.</div>');
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 

@@ -3266,6 +3266,62 @@ ok('and gets out of the way once you can see it', exc.whenVisible.hidden === tru
   JSON.stringify(exc.whenVisible));
 
 
+/* ---- leaderboard ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const brd = JSON.parse(await evl(`(() => {
+  const o = {};
+  const el = $('recCaught');
+  const rows = () => [...el.querySelectorAll('.rrow')];
+  records = []; renderRecords(el);
+  o.empty = { blank: el.querySelectorAll('.rempty').length, rows: rows().length,
+              says: el.querySelector('.rempty') ? el.querySelector('.rempty').textContent.length > 10 : false };
+  /* two runs, same player, identical score. Only the one just played is yours. */
+  records = [{ n: 'TESTY', s: 9000, d: 4, c: 30, t: 200 }];
+  name = 'TESTY'; score = 9000; totalRunCoins = 30; runT = 200; loop = 0; mapIdx = 3;
+  addRecord(); renderRecords(el);
+  o.tie = { rows: rows().length, mine: rows().filter(r => r.classList.contains('mine')).length };
+  /* records saved before this change carry no id and must never light up */
+  records = [{ n: 'OLD', s: 500, d: 1, c: 1, t: 10 }, { n: 'OLDER', s: 400, d: 1, c: 1, t: 9 }];
+  renderRecords(el);
+  o.legacy = rows().filter(r => r.classList.contains('mine')).length;
+  /* a full board */
+  records = [];
+  for (let i = 0; i < 8; i++) records.push({ n: 'PLAYER' + i, s: 15000 - i * 1700, d: 12 - i, c: 60 - i * 5, t: 300 + i * 40, id: 900 + i });
+  lastRecordId = 903; renderRecords(el);
+  const r2 = rows();
+  o.full = {
+    shown: r2.length, stored: records.length,
+    ranks: r2.map(r => r.querySelector('.rk').textContent).join(','),
+    topMarked: r2[0].classList.contains('top'),
+    mineIdx: r2.findIndex(r => r.classList.contains('mine')),
+    score: r2[0].querySelector('.rs').textContent,
+    everyRowHasTime: r2.every(r => /\\d+:\\d\\d/.test(r.querySelector('.rmeta').textContent)),
+    everyRowHasFloor: r2.every(r => /floor \\d+/.test(r.querySelector('.rmeta').textContent)),
+  };
+  /* the same component serves the escape screen */
+  renderRecords($('recEsc'));
+  o.escapedToo = $('recEsc').querySelectorAll('.rrow').length;
+  return JSON.stringify(o);
+})()`));
+ok('an empty board says something instead of showing a blank row',
+  brd.empty.blank === 1 && brd.empty.rows === 0 && brd.empty.says === true, JSON.stringify(brd.empty));
+/* the old check matched on name AND score, so a tie lit up every matching run,
+   including ones from previous sessions once sorting had mixed them together */
+ok('a tie on score marks only the run you just played',
+  brd.tie.rows === 2 && brd.tie.mine === 1, JSON.stringify(brd.tie));
+ok('and records saved before this never claim to be yours', brd.legacy === 0, `marked=${brd.legacy}`);
+ok('runs are ranked', brd.full.ranks === '1,2,3,4,5,6' && brd.full.topMarked === true, brd.full.ranks);
+ok('six shown out of eight kept', brd.full.shown === 6 && brd.full.stored === 8,
+  `${brd.full.shown} of ${brd.full.stored}`);
+ok('your run is picked out wherever it lands', brd.full.mineIdx === 3, `index=${brd.full.mineIdx}`);
+/* every run has recorded its time since the beginning and never showed it */
+ok('each row shows the floor reached and the time taken',
+  brd.full.everyRowHasTime === true && brd.full.everyRowHasFloor === true, JSON.stringify(brd.full));
+ok('big scores are readable', brd.full.score === '15,000', brd.full.score);
+ok('the escape screen gets the same board', brd.escapedToo === 6, `rows=${brd.escapedToo}`);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);
