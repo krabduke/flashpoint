@@ -458,6 +458,7 @@
         <button class="item" id="itMag"   type="button"><b>MAGNET</b><s>G</s></button>
         <button class="item" id="itWire"  type="button"><b>WIRE</b><s>T</s></button>
         <button class="item" id="itHush"  type="button"><b>MUFFLE</b><s>B</s></button>
+        <button class="item" id="itJam"   type="button"><b>JAMMER</b><s>J</s></button>
       </div>
     </div>
   </div>
@@ -666,8 +667,11 @@ const T = {
   /* the kit you start a run with, and the most you can carry of each */
   /* water: you cannot cross a puddle quietly, not even in soft shoes */
   WATER_MULT: 1.4, WATER_STEP: 0.34, WALK_STEP: 0.44,
-  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, wire: 1, hush: 1 },
-  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, wire: 3, hush: 2 },
+  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, wire: 1, hush: 1, jam: 0 },
+  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, wire: 3, hush: 2, jam: 2 },
+  /* The EMP's opposite number. That one takes their sight away in a radius;
+     this takes their hearing. Two senses, two counters. */
+  JAM_R: 230, JAM_T: 6,
   /* Every other gadget acts on them. This one acts on what you know: it makes
      no noise, draws nothing to it, and only ever tells YOU. */
   WIRE_R: 54, WIRE_ARM: 0.6,
@@ -998,6 +1002,7 @@ let emps = [], empCharges = 1;
 let decoys = [], decoyCharges = 1;
 let wires = [], wireCharges = 1;
 let hushOn = false, hushCharges = 1;
+let jams = [], jamCharges = 0;
 let magT = 0, magCharges = 1;
 let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 let safes = [], safeT = 0, safeOn = null, safeTick = 0;
@@ -1133,6 +1138,7 @@ const PU = {
   s: { label: 'SMOKE', glow: null, col: '#b0b0c4', ring: 'rgba(176,176,196,.9)' },
   w: { label: 'WIRE', glow: null, col: '#8fe8d8', ring: 'rgba(143,232,216,.9)' },
   h: { label: 'MUFFLE', glow: null, col: '#c9bfe8', ring: 'rgba(201,191,232,.9)' },
+  j: { label: 'JAMMER', glow: null, col: '#9fd8ff', ring: 'rgba(159,216,255,.9)' },
   f: { label: 'FLARE', glow: null, col: '#ffb347', ring: 'rgba(255,179,71,.9)' },
   Z: { label: 'SHOES', glow: null, col: '#7dffc4', ring: 'rgba(125,255,196,.9)' },
   I: { label: 'GHOST', glow: null, col: '#d8b6ff', ring: 'rgba(216,182,255,.9)' }
@@ -1432,7 +1438,7 @@ function loadMap(idx) {
        applies to one - the alarm, an EMP killing it, smoke breaking its line -
        applies here for free. It only needs pointing somewhere useful. */
     if (ch === 'C') emitters.push({ x: cx, y: cy, r: 205, col: '#ffe0c0', flick: 0, kind: 'search', cam: true, ang: 0, spin: 0, rays: new Float32Array(17) });
-    if ('fsedmwh'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
+    if ('fsedmwhj'.includes(ch)) powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
     /* Glass is deliberately NOT a wall in the grid. That is what lets sight
        through it for free - losClear and both cones read the grid, so they need
        no changes at all. Only bodies are stopped, and only where bodies move. */
@@ -1516,7 +1522,7 @@ function loadMap(idx) {
   fSeen = false; fSprint = false; fNoticed = false; fEmp = false;
   trail = []; trailT = 0; floorT = 0; loadGhost();
   /* live objects clear with the floor; what you are carrying does not */
-  smokes = []; emps = []; decoys = []; wires = []; magT = 0;
+  smokes = []; emps = []; decoys = []; wires = []; jams = []; magT = 0;
   hushOn = false;   /* one floor, so it lapses on the stairs */
   hasKey = false; pickT = 0; pickOn = null;
   safeT = 0; safeOn = null; safeTick = 0;
@@ -1995,6 +2001,7 @@ function update(dt) {
     if (u.kind === 'd') { decoyCharges = Math.min(T.CAP.decoy, decoyCharges + 1); toast('DECOY STOWED', 1.8); }
     if (u.kind === 'w') { wireCharges = Math.min(T.CAP.wire, wireCharges + 1); toast('WIRE STOWED', 1.8); }
     if (u.kind === 'h') { hushCharges = Math.min(T.CAP.hush, hushCharges + 1); toast('MUFFLE STOWED', 1.8); }
+    if (u.kind === 'j') { jamCharges = Math.min(T.CAP.jam, jamCharges + 1); toast('JAMMER STOWED', 1.8); }
     if (u.kind === 'm') { magCharges = Math.min(T.CAP.mag, magCharges + 1); toast('MAGNET STOWED', 1.8); }
     hud();
   }
@@ -2592,7 +2599,13 @@ const hearR = b => T.HEAR_R
   * ((b && b.wary > 0) ? T.WARY_HEAR : 1)
   * ((b && b.kind === 'listen') ? T.LISTEN_HEAR : 1);
 
+const jammed = (b) => jams.some(j => Math.hypot(j.x - b.x, j.y - b.y) < T.JAM_R);
 function nearestNoise(b) {
+  /* Deaf for the duration. Note this stops them ANSWERING a sound - it does not
+     stop a listener feeling you through the floor, which is not hearing. So this
+     is not a walk-past-anything button; it is cover for a noise you are about to
+     make, which is what makes it the answer to the safe. */
+  if (jammed(b)) return null;
   let best = null, bd = 1e9;
   const reach = hearR(b);
   for (const n of noise) { const d = Math.hypot(n.x - b.x, n.y - b.y); if (d < n.r + reach && d < bd) { bd = d; best = n; } }
@@ -2741,6 +2754,7 @@ function updateMeter(dt) {
   else beatT = 0;
   updateSting(dt);
   updateWires(dt);
+  updateJams(dt);
   updateTutor(dt);
   vibrateFor(meter);
 }
@@ -2945,6 +2959,7 @@ PU.e.glow = makeGlow('159,216,255');
 PU.s.glow = makeGlow('176,176,196');
 PU.w.glow = makeGlow('143,232,216');
 PU.h.glow = makeGlow('201,191,232');
+PU.j.glow = makeGlow('159,216,255');
 PU.f.glow = makeGlow('255,179,71');
 PU.Z.glow = makeGlow('125,255,196');
 PU.I.glow = makeGlow('216,182,255');
@@ -3376,6 +3391,7 @@ function render() {
   for (const pl of plates) drawPlate(pl);
   for (const cr of crates) if (!cr.broken) drawCrate(cr);
   for (const f of safes) drawSafe(f);
+  for (const j of jams) drawJam(j);
   for (const w of wires) drawWire(w);
   for (const m of mirrors) drawMirror(m);
   for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
@@ -3875,6 +3891,25 @@ function coinLight(c) {
    rather than making you walk back over to check. */
 /* Drawn faint and flat on the floor. It is not a threat and not a light - it is
    a note to yourself, and it should never read as either. */
+/* Quiet, cold and wide: it should read as an absence rather than a weapon,
+   because that is what it is - a hole in what they can hear. */
+function drawJam(j) {
+  const k = j.life / j.max;
+  ctx.save(); ctx.translate(j.x, j.y);
+  ctx.globalAlpha = 0.09 + 0.07 * k;
+  const g = ctx.createRadialGradient(0, 0, T.JAM_R * 0.2, 0, 0, T.JAM_R);
+  g.addColorStop(0, 'rgba(159,216,255,.5)');
+  g.addColorStop(1, 'rgba(159,216,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, T.JAM_R, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 0.14 + 0.2 * k;
+  ctx.strokeStyle = '#9fd8ff'; ctx.lineWidth = 1.2;
+  ctx.setLineDash([3, 7]); ctx.lineDashOffset = time * 9;
+  ctx.beginPath(); ctx.arc(0, 0, T.JAM_R * (0.55 + 0.45 * (1 - k)), 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
 function drawWire(w) {
   ctx.save();
   ctx.translate(w.x, w.y);
@@ -4784,6 +4819,7 @@ function resetKit() {
   decoyCharges = Math.max(0, T.KIT.decoy + Math.max(0, k));
   wireCharges = kv(T.KIT.wire);
   hushCharges = kv(T.KIT.hush);
+  jamCharges = Math.max(0, T.KIT.jam + Math.max(0, k));
   magCharges = Math.max(0, T.KIT.mag + Math.max(0, k));
 }
 
@@ -4912,6 +4948,24 @@ function dropWire() {
   toast('WIRE SET — IT WILL TELL YOU', 2.2);
   hud();
   return true;
+}
+
+function throwJam() {
+  if (mode !== 'playing' || jamCharges <= 0) { sfx.ui(); return false; }
+  jamCharges--;
+  jams.push({ x: player.x, y: player.y, life: T.JAM_T, max: T.JAM_T, ph: rand(0, TAU) });
+  sfx.emp({ x: player.x, y: player.y });
+  toast('JAMMER — THEY CANNOT HEAR A THING', 2.4);
+  hud();
+  return true;
+}
+
+function updateJams(dt) {
+  for (let i = jams.length - 1; i >= 0; i--) {
+    const j = jams[i];
+    j.life -= dt;
+    if (j.life <= 0) jams.splice(i, 1);
+  }
 }
 
 function useHush() {
@@ -5183,6 +5237,7 @@ const CONTROLS = [
   ['SMOKE', ['X']], ['EMP', ['C']],
   ['DECOY', ['V']], ['MAGNET', ['G']],
   ['TRIPWIRE', ['T']], ['MUFFLE', ['B']],
+  ['JAMMER', ['J']],
   ['MUTE', ['M']],
   ['NEW RUN', ['R']],
 ];
@@ -5280,6 +5335,7 @@ function hud() {
     set('itMag', magCharges > 0, magT > 0);
     set('itWire', wireCharges > 0, wires.some(w => w.fired <= 0));
     set('itHush', hushCharges > 0 && !hushOn, hushOn);
+    set('itJam', jamCharges > 0, jams.length > 0);
   }
 
   const dt2 = $('dailyTag');
@@ -5355,6 +5411,7 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'v' || e.key === 'V') && mode === 'playing') { dropDecoy(); }
   if ((e.key === 't' || e.key === 'T') && mode === 'playing') { dropWire(); }
   if ((e.key === 'b' || e.key === 'B') && mode === 'playing') { useHush(); }
+  if ((e.key === 'j' || e.key === 'J') && mode === 'playing') { throwJam(); }
   if ((e.key === 'g' || e.key === 'G') && mode === 'playing') { runMagnet(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if (e.key === 'Escape' && settingsOpen()) { closeSettings(); return; }
@@ -5457,6 +5514,7 @@ bindBtn('itDecoy', dropDecoy);
 bindBtn('itMag', runMagnet);
 bindBtn('itWire', dropWire);
 bindBtn('itHush', useHush);
+bindBtn('itJam', throwJam);
 ['nameInput', 'nameInput2', 'nameInput3'].forEach((id, i) => {
   const el = $(id);
   el.value = name;
@@ -5865,6 +5923,11 @@ window.__fp = {
   get pickT() { return +pickT.toFixed(2); },
   wireCount() { return wires.length; },
   get hushOn() { return hushOn; },
+  get jamCharges() { return jamCharges; },
+  jamCount() { return jams.length; },
+  throwJamNow() { return throwJam(); },
+  botJammed() { return bots.map(b => jammed(b)); },
+  botHears(i) { const n = nearestNoise(bots[i]); return n ? { x: Math.round(n.x), y: Math.round(n.y) } : null; },
   get hushCharges() { return hushCharges; },
   useHushNow() { return useHush(); },
   haulNoiseNow() { return +haulNoise().toFixed(4); },

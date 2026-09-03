@@ -1973,7 +1973,7 @@ ok('you cannot carry more than the cap', JSON.parse(capped).flares === JSON.pars
 /* ---- item bar: every gadget reachable without a keyboard ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('the item bar has every gadget', (await evl("document.querySelectorAll('#itemBar .item').length")) === 9,
+ok('the item bar has every gadget', (await evl("document.querySelectorAll('#itemBar .item').length")) === 10,
   `n=${await evl("document.querySelectorAll('#itemBar .item').length")}`);
 ok('it is reachable by a finger', await evl(`(() => {
   const b = document.getElementById('itFlare');
@@ -2694,7 +2694,7 @@ ok('and claims nothing on a floor that is quiet', pau.hazHouse.length === 0, JSO
 /* the agreement is the point; the row count just has to keep up with the game
    growing a gadget, which is what caught the tripwire missing from here */
 ok('the control list agrees with the item bar',
-  pau.keysAgree === true && pau.rows === 14, `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows}`);
+  pau.keysAgree === true && pau.rows === 15, `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows}`);
 ok('pausing again re-reads the run instead of replaying the last look',
   pau.refreshed.score === '9999' && pau.refreshed.gold === '7/12', JSON.stringify(pau.refreshed));
 ok('resume puts you back in', pau.closed.paused === false && pau.closed.hidden === true, JSON.stringify(pau.closed));
@@ -4189,6 +4189,95 @@ ok('and it lapses on the stairs, being one floor of quiet',
 ok('it reaches both the item bar and the control list',
   hsh.inBar === true && hsh.inControls === true, `bar=${hsh.inBar} controls=${hsh.inControls}`);
 ok('the block measured a running game', hsh.mode === 'playing', hsh.mode);
+
+
+/* ---- the jammer: the EMP's opposite number ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const jam = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  startGame(); mapIdx = 8; loop = 0; loadMap(8); invuln = 9e9; meter = 0; clearToast();
+  jamCharges = 2;
+  const L = bots.find(b => b.kind === 'listen'), D = bots.find(b => b.kind === 'drone');
+  const iL = bots.indexOf(L), iD = bots.indexOf(D);
+  player.x = L.x + 60; player.y = L.y;
+  D.x = L.x + 40; D.y = L.y + 30; D.path = []; D.state = 'patrol';
+  noise = []; makeNoise(player.x, player.y, 500);
+  o.before = { listener: !!__fp.botHears(iL), drone: !!__fp.botHears(iD) };
+  o.threw = __fp.throwJamNow();
+  o.charges = __fp.jamCharges;
+  noise = []; makeNoise(player.x, player.y, 500);
+  o.after = { listener: !!__fp.botHears(iL), drone: !!__fp.botHears(iD) };
+  /* the field has an edge */
+  const far = bots.filter(b => b.kind === 'drone')[1];
+  far.x = L.x + 700; far.y = L.y;
+  noise = []; makeNoise(far.x + 20, far.y, 500);
+  o.outside = !!__fp.botHears(bots.indexOf(far));
+  o.flags = { inField: __fp.botJammed().filter(Boolean).length, total: bots.length };
+  /* it deafens them; it does not stop a listener feeling you through the floor */
+  meter = 0; invuln = 0;
+  for (let i = 0; i < 40; i++) { player.x = L.x + 40; player.y = L.y; player.vx = 90; updateMeter(1 / 60); }
+  o.stillFelt = +meter.toFixed(2);
+  mode = 'playing'; paused = false; meter = 0; invuln = 9e9; caughtHold = 0;
+  /* the pairing it exists for: a safe screams for 4.6s, and nobody comes */
+  const f = __fp.safeState()[0];
+  if (f) {
+    /* Measure the channel the jammer governs. Parking drones next to the player
+       also lets them SEE him, which the jammer never claimed to touch - so count
+       what reaches their ears, not what they end up doing about it. */
+    for (const b of bots) if (b.kind !== 'sentry') { b.state = 'patrol'; b.path = []; b.x = f.x + 90; b.y = f.y; }
+    /* stand at the safe BEFORE throwing it: the field lands where you are */
+    player.x = f.x - 30; player.y = f.y;
+    __fp.throwJamNow();
+    let reached = 0;
+    for (let i = 0; i < 120; i++) {
+      update(1 / 60);
+      for (let k = 0; k < bots.length; k++) {
+        if (bots[k].kind === 'sentry') continue;
+        if (__fp.botHears(k)) reached++;
+      }
+    }
+    o.safeHeardBy = reached;
+    /* and the same crack with no jammer up, so the number means something */
+    jams.length = 0;
+    let reachedBare = 0;
+    for (let i = 0; i < 60; i++) {
+      makeNoise(f.x, f.y, T.SAFE_NOISE);
+      for (let k = 0; k < bots.length; k++) {
+        if (bots[k].kind === 'sentry') continue;
+        if (__fp.botHears(k)) reachedBare++;
+      }
+      update(1 / 60);
+    }
+    o.safeHeardBare = reachedBare;
+  }
+  /* and it lapses */
+  for (let i = 0; i < 480; i++) update(1 / 60);
+  o.lapsed = { jams: __fp.jamCount(), anyJammed: __fp.botJammed().some(Boolean) };
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+ok('without it, a noise reaches both a drone and a listener',
+  jam.before.listener === true && jam.before.drone === true, JSON.stringify(jam.before));
+/* the EMP takes their sight in a radius; this takes their hearing */
+ok('inside the field neither of them hears a thing',
+  jam.threw === true && jam.after.listener === false && jam.after.drone === false,
+  JSON.stringify(jam.after));
+ok('and the field has an edge', jam.outside === true && jam.flags.inField < jam.flags.total,
+  `${jam.flags.inField} of ${jam.flags.total} deafened`);
+/* it stops them ANSWERING a sound, not a listener feeling you through the floor,
+   so it is cover for noise you are about to make rather than a free pass */
+ok('a listener beside you still has you if you move',
+  jam.stillFelt > 0.2, `meter=${jam.stillFelt}`);
+/* not exactly zero on purpose: a drone that patrols out of the 230px field
+   during those seconds can hear again from outside it, which is the field
+   having an edge rather than the jammer leaking */
+ok('which is what makes it the answer to a safe',
+  jam.safeHeardBy < jam.safeHeardBare * 0.05 && jam.safeHeardBare > 50,
+  `4.6s of screaming reached ears ${jam.safeHeardBy} times jammed against ${jam.safeHeardBare} not`);
+ok('it lapses', jam.lapsed.jams === 0 && jam.lapsed.anyJammed === false, JSON.stringify(jam.lapsed));
+ok('the block measured a running game', jam.mode === 'playing', jam.mode);
 
 
 const clean = problems.length === 0;

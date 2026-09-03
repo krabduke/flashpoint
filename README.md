@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **A jammer, on J** — the EMP takes their sight in a radius; this takes their
+  hearing. Crack a safe inside one and the screaming reaches nobody. It will not
+  stop a listener feeling you through the floor, though.
 - **A muffle for the gold** — B wraps your haul for one floor, so a full load
   stops costing you the extra noise it normally does. Worth most on the walk
   back to the door with everything.
