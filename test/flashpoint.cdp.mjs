@@ -3673,6 +3673,78 @@ ok('it turns to face what it heard, having no cone to point',
   lg2.faceErr < 0.35, `off by ${lg2.faceErr} rad`);
 
 
+/* ---- the sentry: bolted down, sees wide, asleep until something trips ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const snt = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  o.mapsValid = __fp.mapCheck;
+  mapIdx = 6; loop = 0; loadMap(6); invuln = 9e9; meter = 0;
+  o.sentries = __fp.sentryCount();
+  o.cone = __fp.sentryCone();
+  const S = bots.find(b => b.kind === 'sentry');
+  /* stand in front of a sleeping one and it is none the wiser */
+  player.x = S.x + Math.cos(S.face) * 90; player.y = S.y + Math.sin(S.face) * 90;
+  o.asleep = { sees: botSees(S), open: __fp.sentryState()[0].open };
+  /* an alarm on the far side of the floor opens every one of them */
+  raiseAlarm(60, 60, 300, null);
+  for (let i = 0; i < 60; i++) update(1 / 60);
+  o.woken = __fp.sentryState().map(x => ({ awake: x.awake, open: x.open }));
+  o.seesNow = botSees(S);
+  /* it is bolted down */
+  const at = { x: S.x, y: S.y };
+  for (let i = 0; i < 180; i++) update(1 / 60);
+  o.moved = Math.round(Math.hypot(S.x - at.x, S.y - at.y));
+  /* it dozes off, given nothing to keep waking it */
+  player.x = 60; player.y = 60; meter = 0; nextSiren = 1e9; sirenT = 0;
+  for (const b of bots) if (b.kind !== 'sentry') { b.x = -900; b.y = -900; b.path = []; }
+  const trail = [];
+  for (let i = 1; i <= 800; i++) { update(1 / 60); if (i % 160 === 0) trail.push(__fp.sentryState()[0].awake); }
+  o.dozeTrail = trail;
+  o.dozed = __fp.sentryState()[0];
+  /* But a siren wakes the floor, which is what makes one worth fearing. Note
+     forceSiren() sets sirenT directly, which parks the code in the "already
+     sounding" branch - the wake lives in the else, so it would never fire. */
+  for (const b of bots) if (b.kind === 'sentry') b.awake = 0;
+  sirenT = 0; nextSiren = 0.01;
+  for (let i = 0; i < 30; i++) update(1 / 60);
+  o.afterSiren = __fp.sentryState()[0].awake;
+  /* and an alarm must never be handed to something that cannot walk to it */
+  loadMap(6);
+  const S2 = bots.find(b => b.kind === 'sentry');
+  for (const b of bots) if (b.kind !== 'sentry') { b.x = 40; b.y = 700; b.state = 'patrol'; b.path = []; }
+  raiseAlarm(S2.x + 10, S2.y + 10, 300, null);
+  o.answered = bots.filter(b => b.state !== 'patrol' && b.kind !== 'sentry').length;
+  o.sentryStillPatrolOrLooking = bots.filter(b => b.kind === 'sentry')
+    .every(b => b.path.length === 0 && b.flankX === undefined);
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+ok('the maps still validate with the sentry tile', snt.mapsValid === 'ok', snt.mapsValid);
+ok('the vault fields two of them', snt.sentries === 2, `n=${snt.sentries}`);
+ok('it sees much wider and much less far than a drone',
+  snt.cone.half > snt.cone.droneHalf * 2 && snt.cone.range < snt.cone.droneRange,
+  `half ${snt.cone.droneHalf}->${snt.cone.half}, range ${snt.cone.droneRange}->${snt.cone.range}`);
+/* asleep it is scenery, which is why you can learn a floor and route around it */
+ok('asleep it does not see you standing right in front of it',
+  snt.asleep.sees === false && snt.asleep.open === 0, JSON.stringify(snt.asleep));
+/* this is what makes an alarm cost more than the one drone it sends */
+ok('an alarm anywhere opens every one of them',
+  snt.woken.length === 2 && snt.woken.every(w => w.awake > 7 && w.open === 1) && snt.seesNow === true,
+  JSON.stringify(snt.woken));
+ok('it never moves an inch', snt.moved === 0, `moved=${snt.moved}px`);
+ok('and it dozes off again if nothing keeps it up',
+  snt.dozed.awake === 0 && snt.dozed.open === 0 && snt.dozed.sees === false,
+  `trail=${JSON.stringify(snt.dozeTrail)}`);
+ok('a siren puts the whole floor back on watch', snt.afterSiren > 7, `awake=${snt.afterSiren}`);
+/* raiseAlarm sends the nearest bot, and a sentry is nearest to its own tile */
+ok('an alarm is never handed to something bolted to the floor',
+  snt.answered > 0 && snt.sentryStillPatrolOrLooking === true,
+  `answered by ${snt.answered} mobile unit(s)`);
+ok('and the block measured a running game', snt.mode === 'playing', snt.mode);
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

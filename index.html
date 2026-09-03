@@ -669,6 +669,10 @@ const T = {
      asked of you before. */
   LISTEN_HEAR: 1.75, LISTEN_R: 96, LISTEN_FILL: 0.72, LISTEN_STILL: 6,
   LISTEN_SHOW: 2.3, LISTEN_PING: 2.6, LISTEN_PING_HOT: 0.62,
+  /* the sentry: the listener's opposite in every direction. Bolted down, sees
+     wide, hears nothing, and asleep until somebody trips an alarm. */
+  SENTRY_HALF: 15.5 * 2.6 * Math.PI / 180, SENTRY_RANGE: 235,
+  SENTRY_WAKE: 9, SENTRY_OPEN: 0.55,
   STING_ON: 0.22, STING_LO: 110, STING_HI: 165, STING_V: 0.055,
   STING_TRI_ON: 0.45, STING_TRI_V: 0.03, STING_DUCK: 0.55,
 };
@@ -833,7 +837,7 @@ const MAPS = [
     '#.G.....#..#.....#.C#....#.#',
     '#.M##D###..###.###..##.###.#',
     '#........s....R............#',
-    '#..........................#',
+    '#.............Y............#',
     '#...........c.......c.....c#',
     '#.###.###..###.###..##.###.#',
     '#!#....C#..#.....#..#....#.#',
@@ -841,7 +845,7 @@ const MAPS = [
     '#.#.....G..#.....#..#....#.#',
     '#.#.....#..#.....#..#....#.#',
     '#.M######..#######..######c#',
-    '#.........c....!..c.......E#',
+    '#.......Y.c....!..c.......E#',
     '############################'
   ], routes: [[[2,1],[25,1],[25,8],[2,8],[2,1]],[[2,9],[25,9],[25,16],[2,16],[2,9]],[[5,4],[14,4],[22,4],[22,13],[14,13],[5,13],[5,4]]] },
   { name: 'THE FOG DOCKS', depth: 'DOCKS', theme: 'docks', coins: 11, bots: 3, spd: 1.15, fog: true, rows: [
@@ -1023,7 +1027,7 @@ function saveGhost() {
 }
 
 let exitVertical = true;
-let listenPts = [];
+let listenPts = [], sentryPts = [];
 let caughtHold = 0;
 let wipeT = 0, wipeName = '';
 let fogBanks = [];
@@ -1380,7 +1384,7 @@ function loadMap(idx) {
   mirrors = []; mirrorBeam = null;
   crates = []; crateT = 0; crateOn = null;
   ventAt = new Uint8Array(T.COLS * T.ROWS);
-  listenPts = [];
+  listenPts = []; sentryPts = [];
   glassAt = new Uint8Array(T.COLS * T.ROWS);
   waterAt = new Uint8Array(T.COLS * T.ROWS);
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
@@ -1408,6 +1412,7 @@ function loadMap(idx) {
     if (ch === '~') waterAt[y * T.COLS + x] = 1;
     if (ch === 'V') ventAt[y * T.COLS + x] = 1;
     if (ch === 'H') listenPts.push({ x: cx, y: cy, gx: x, gy: y });
+    if (ch === 'Y') sentryPts.push({ x: cx, y: cy, gx: x, gy: y });
     if (ch === 'D') { grid[y * T.COLS + x] = 1; doors.push({ gx: x, gy: y, x: cx, y: cy, open: false }); }
     if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
     if (ch === 'B') powerups.push({ x: cx, y: cy, kind: 'B', got: false, ph: rand(0, TAU) });
@@ -1546,6 +1551,26 @@ function spawnBots() {
       wary: 0, radioT: 0, heard: 0, pingT: rand(0, 2), pingFlash: 0,
       sweepK: rand(0.7, 1.4), paceK: rand(0.9, 1.12), peekK: rand(0.7, 1.5),
       dwellK: rand(0, 1), dwellT: 0
+    });
+  }
+  /* Aimed the way the room runs, the way B1 aims its cameras: a wide cone
+     bolted to a wall is only worth putting there if it covers something. */
+  for (const p of sentryPts) {
+    let bestA = 0, bestD = -1;
+    for (let k = 0; k < 16; k++) {
+      const a = k * TAU / 16; let d = 0;
+      while (d < T.SENTRY_RANGE && !isWall(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d)) d += 8;
+      if (d > bestD) { bestD = d; bestA = a; }
+    }
+    bots.push({
+      x: p.x, y: p.y, r: 13, kind: 'sentry',
+      face: bestA, route: [], wp: 0, path: [], pathT: 0,
+      state: 'patrol', tgt: null, lastX: 0, lastY: 0,
+      range: T.SENTRY_RANGE, half: T.SENTRY_HALF, rays: new Array(T.BOT_RAYS + 1),
+      sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, chirpT: 0,
+      saidHeat: 0, peekT: 0, peekCool: 0, peekTo: 0, searchPts: [],
+      wary: 0, radioT: 0, awake: 0, open: 0,
+      sweepK: 1, paceK: 1, peekK: 1, dwellK: 1, dwellT: 0
     });
   }
 }
@@ -2074,7 +2099,7 @@ function update(dt) {
 
   /* siren sweeps wake every drone */
   if (sirenT > 0) sirenT -= dt;
-  else { nextSiren -= dt; if (nextSiren <= 0) { sirenT = 5; nextSiren = rand(13, 18); sfx.siren(); toast('SIREN SWEEP — THEY ALL HEAR YOU', 2.5); } }
+  else { nextSiren -= dt; if (nextSiren <= 0) { sirenT = 5; nextSiren = rand(13, 18); sfx.siren(); for (const b of bots) if (b.kind === 'sentry') b.awake = T.SENTRY_WAKE; toast('SIREN SWEEP — THEY ALL HEAR YOU', 2.5); } }
 
   /* fog banks strangle the beam */
   if (fogT > 0) fogT -= dt;
@@ -2172,6 +2197,16 @@ function updateBots(dt) {
   const sm = speedMult();
   const patches = beamPatches();
   for (const b of bots) {
+    if (b.kind === 'sentry') {
+      /* bolted down: no steering, no route, no investigating. It wakes, it
+         looks at the one thing it has always looked at, and it goes back to
+         sleep. */
+      if (b.awake > 0) b.awake = Math.max(0, b.awake - dt);
+      b.open = clamp(b.open + (b.awake > 0 ? dt / T.SENTRY_OPEN : -dt / T.SENTRY_OPEN), 0, 1);
+      b.state = b.awake > 0 ? (botSees(b) ? 'chase' : 'invest') : 'patrol';
+      castCone(b.rays, b.x, b.y, b.face, b.half, T.BOT_RAYS, botRange(b) * b.open);
+      continue;
+    }
     b.blink = Math.max(0, b.blink - dt);
     let speed = T.BOT_PATROL * sm;
     const sees = botSees(b);
@@ -2398,7 +2433,10 @@ function radio(src) {
   if (src.radioT > 0) return 0;
   src.radioT = T.RADIO_COOL;
   const r = T.RADIO_R + mapIdx * 30;
-  const heard = bots.filter(o => o !== src && o.state !== 'chase'
+  /* A sentry is bolted down. Handing it a flank point and a path is telling
+     something that cannot walk to go somewhere, and it silently eats a slot in
+     the net that a drone should have had. */
+  const heard = bots.filter(o => o !== src && o.state !== 'chase' && o.kind !== 'sentry'
     && Math.hypot(o.x - src.x, o.y - src.y) <= r);
   const claimed = [];
   heard.forEach((o, i) => {
@@ -2501,6 +2539,7 @@ function seesYourLight(b, patches) {
 
 function botSees(b) {
   if (b.kind === 'listen') return false;      /* it has no eyes at all */
+  if (b.kind === 'sentry' && b.awake <= 0) return false;   /* and this one is asleep */
   if (blackout > 0 && b.state !== 'chase') return false;
   const dx = player.x - b.x, dy = player.y - b.y, d = Math.hypot(dx, dy);
   const range = botRange(b);
@@ -3481,8 +3520,50 @@ function drawListener(b) {
   ctx.restore();
 }
 
+/* Bolted to the floor, so it is furniture: visible even unlit, the way B1's
+   cameras are, because you are meant to learn where they are and route around
+   them. Shut and dark until an alarm, then the shutter opens on a live lens. */
+function drawSentry(b) {
+  const lit = revealed(b), open = b.open;
+  const a = lit ? 1 : 0.42 + open * 0.35;
+  const C = colourblind() ? '110,190,255' : '255,80,66';
+  ctx.save(); ctx.translate(b.x, b.y);
+  ctx.globalAlpha = a * 0.55;
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.beginPath(); ctx.ellipse(2, 7, 13, 5, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = a;
+  ctx.rotate(b.face);
+  /* the mount */
+  ctx.fillStyle = '#191622';
+  rr(ctx, -11, -10, 22, 20, 5); ctx.fill();
+  ctx.strokeStyle = 'rgba(150,140,190,.45)'; ctx.lineWidth = 1.2; ctx.stroke();
+  /* the shutter, two leaves that part as it wakes */
+  const gap = open * 8.5;
+  ctx.fillStyle = '#0a0810';
+  rr(ctx, -2, -9, 12, 18, 3); ctx.fill();
+  if (open > 0.02) {
+    ctx.globalAlpha = a * open;
+    const g = ctx.createRadialGradient(6, 0, 1, 6, 0, 9);
+    g.addColorStop(0, 'rgba(255,255,255,.95)');
+    g.addColorStop(0.4, 'rgba(' + C + ',.85)');
+    g.addColorStop(1, 'rgba(' + C + ',0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(6, 0, 5.5, gap * 0.62, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = a;
+  }
+  ctx.fillStyle = '#231e30';
+  rr(ctx, -3, -10, 6, 10 - gap * 0.5, 2); ctx.fill();
+  rr(ctx, -3, gap * 0.5, 6, 10 - gap * 0.5, 2); ctx.fill();
+  /* a slow amber standby bead so a sleeping one still reads as a machine */
+  ctx.globalAlpha = a * (0.3 + 0.3 * Math.sin(time * 1.4 + b.sweepP)) * (1 - open * 0.7);
+  ctx.fillStyle = '#ffb347';
+  ctx.beginPath(); ctx.arc(-7, 0, 1.8, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
 function drawBotBody(b) {
   if (b.kind === 'listen') return drawListener(b);
+  if (b.kind === 'sentry') return drawSentry(b);
   const a = revealed(b) ? 1 : (b.state === 'chase' ? 0.75 : 0);
   if (a <= 0) return;
   /* what the drone is doing, in one number, so every part of it can agree */
@@ -3597,7 +3678,10 @@ const CONE = {
 };
 function drawBotCone(b) {
   const chase = b.state === 'chase', invest = b.state === 'invest';
-  const range = b.range * (blackout > 0 ? 0.6 : 1);
+  /* a sentry's cone is its eyelid: it opens as it wakes and shuts as it dozes */
+  const lid = b.kind === 'sentry' ? b.open : 1;
+  if (lid <= 0.02) return;
+  const range = b.range * (blackout > 0 ? 0.6 : 1) * lid;
   const rays = b.rays;
   const cb = colourblind(), C = cb ? CONE.on : CONE.off;
   ctx.save();
@@ -4557,8 +4641,16 @@ function raiseAlarm(x, y, radius, msg) {
   makeNoise(x, y, radius);
   sfx.alert();
   if (msg) toast(msg, 2);
+  /* Every sentry on the floor opens its eye. This is what makes an alarm cost
+     something beyond the drone it sends: rooms you were about to walk through
+     are now covered. */
+  for (const b of bots) if (b.kind === 'sentry') b.awake = T.SENTRY_WAKE;
+  /* and the one sent to look has to be something that can actually walk there */
   let near = null, nd = 1e9;
-  for (const b of bots) { const d = Math.hypot(b.x - x, b.y - y); if (d < nd) { nd = d; near = b; } }
+  for (const b of bots) {
+    if (b.kind === 'sentry') continue;
+    const d = Math.hypot(b.x - x, b.y - y); if (d < nd) { nd = d; near = b; }
+  }
   if (!near) return;
   const hunt = mapIdx >= T.RADIO_FLOOR || loop > 0;
   near.state = hunt ? 'chase' : 'invest';
@@ -5176,6 +5268,14 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 window.__fp = {
   botKinds() { return bots.map(b => b.kind); },
   listenerCount() { return bots.filter(b => b.kind === 'listen').length; },
+  sentryCount() { return bots.filter(b => b.kind === 'sentry').length; },
+  sentryState() { return bots.filter(b => b.kind === 'sentry').map(b => ({
+    awake: +(b.awake || 0).toFixed(2), open: +(b.open || 0).toFixed(3),
+    state: b.state, sees: botSees(b), x: Math.round(b.x), y: Math.round(b.y) })); },
+  sentryCone() { const b = bots.find(x => x.kind === 'sentry');
+    return b ? { half: +b.half.toFixed(4), range: b.range, droneHalf: +T.BOT_HALF.toFixed(4), droneRange: T.BOT_RANGE } : null; },
+  wakeSentries() { for (const b of bots) if (b.kind === 'sentry') b.awake = T.SENTRY_WAKE; },
+
   listenHeard() { return bots.filter(b => b.kind === 'listen').map(b => +(b.heard || 0).toFixed(2)); },
   listenPing() { return bots.filter(b => b.kind === 'listen').map(b => ({ t: +(b.pingT || 0).toFixed(2), flash: +(b.pingFlash || 0).toFixed(2) })); },
   listenFacing() { const b = bots.find(x => x.kind === 'listen'); return b ? +b.face.toFixed(3) : null; },

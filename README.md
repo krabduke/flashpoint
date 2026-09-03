@@ -156,6 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **Alarms now cost more than one drone** — the vault is watched by sentries:
+  bolted down, blind and asleep until somebody trips something, then every one
+  of them opens a wide cone for nine seconds. The room you were about to cross
+  is suddenly covered.
 - **You can hear one before you see it** — a listener ticks like slow sonar,
   panned to where it stands, tightening as it closes. Get near and the reach it
   can feel you in appears, brightening the moment you move and settling when you
