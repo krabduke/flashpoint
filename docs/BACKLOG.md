@@ -115,7 +115,7 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 - [x] H1 Settings panel — volume (new), difficulty (moved in, not duplicated) and three-state motion, reachable from the menu and from a paused run. **Colourblind deliberately left to H7**: a toggle that only writes to localStorage is a control that lies about what is possible
 - [x] H2 Minimap of swept area — draws F10's survey grid and strictly nothing else; asserted that drones in the dark leave no mark on it
 - [x] H3 Exit compass — the arrow existed but was gated on exitOpen, so it arrived only after every coin was collected; permanent now and graded to what you know
-- [ ] H4 Leaderboard screen — currently a cramped table
+- [x] H4 Leaderboard screen — two tiers per run with rank, floor, gold and the time that had been recorded and never shown; the new-record highlight matched on name+score and lit up ties
 - [ ] H5 Toast queue — messages currently overwrite each other
 - [ ] H6 Tutorial pass — teach light-gated gold properly
 - [ ] H7 Colourblind mode — red cones are the whole game; add its row to the settings panel built in H1 as part of this
@@ -183,3 +183,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-03 · H1 · one settings panel, volume wired through mute properly, reduced motion reaches particles and wipes as well as shake, 11 assertions
 - 2026-09-03 · H2 · minimap off the survey grid, walls only where swept, exit only once seen, off-switchable, 6 assertions
 - 2026-09-03 · H3 · exit compass permanent, three states by what you have seen, genuinely edge-anchored, 6 assertions
+- 2026-09-03 · H4 · ranked two-tier board, time finally displayed, record identity by id so ties cannot false-match, 9 assertions
