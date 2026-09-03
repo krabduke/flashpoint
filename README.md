@@ -156,6 +156,10 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **You can hear a drone lose you** — every drone chirps when its interest
+  changes: rising as it warms up, falling as it cools, quieter the further away
+  it is. Giving up used to be completely silent, so the only way to know you had
+  got away was to watch the cone and hope.
 - **Pause is a briefing** — P shows the floor you are on, the gold you have found
   here, your score and elapsed time, how much torch is left, how high the alert
   has climbed, what this floor throws at you, and what every key does. It is the

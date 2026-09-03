@@ -2702,6 +2702,97 @@ ok('and it stays shut outside a run',
   pau.fromMenu.paused === false && pau.fromMenu.hidden === true, JSON.stringify(pau.fromMenu));
 
 
+/* ---- drones say which way they are going ----
+   Each scenario resets the drone to a known cold state first. Chaining them off
+   each other's leftovers is what made the first cut of this block flaky: a
+   scenario that assumed the previous one had reached `chase` measured nothing
+   at all when it had not. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const srv = JSON.parse(await evl(`(() => {
+  const o = {};
+  /* 400 assertions have run before this one. Difficulty, endless modifiers and
+     alert level all survive a Page.navigate in this harness, and every one of
+     them changes how a drone behaves, so own them rather than inherit them. */
+  o.inherited = { diff: D().id, mod: modIdx, endless, alert: alertLvl };
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
+  mapIdx = 0; loop = 0; loadMap(0);
+  bots.length = 1;
+  const b = bots[0];
+  const drive = n => { for (let i = 0; i < n; i++) update(1/60); };
+  const dirs = () => __fp.servoLog.map(e => e.dir);
+  /* Park it across the floor and wipe what it has said. Draining the meter
+     matters as much as the rest: two seconds nose to nose with a drone fills it,
+     caught() fires, and update() returns early from then on - so every later
+     drive() runs against a frozen game and measures nothing. */
+  const cool = () => {
+    player.x = 60; player.y = 60;
+    b.x = 1000; b.y = 640; b.path = []; b.state = 'patrol'; b.wary = 0;
+    b.chirpT = 0; b.saidHeat = 0; meter = 0; invuln = 9e9;
+    drive(4); __fp.servoClear();
+  };
+  const confront = () => { b.x = player.x + 90; b.y = player.y; b.face = Math.PI; b.path = []; };
+  /* heat is the sprite's own number, so sound and picture cannot drift */
+  const heatFor = st => { b.state = st; b.wary = 0; return botHeat(b); };
+  o.heats = { patrol: heatFor('patrol'), invest: heatFor('invest'), chase: heatFor('chase') };
+  b.state = 'patrol'; b.wary = 3; o.heats.wary = botHeat(b); b.wary = 0;
+  /* left alone, it says nothing */
+  cool(); drive(240);
+  o.quiet = __fp.servoLog.length;
+  /* walking into its cone: the first thing you hear is a rise */
+  cool(); confront(); drive(120);
+  o.spot = { heat: __fp.botHeats()[0], first: __fp.servoLog[0] || null, dirs: dirs() };
+  /* then losing you for real: chase to wary to cold, two falls */
+  player.x = 60; player.y = 60; b.x = 1020; b.y = 650; b.path = [];
+  __fp.servoClear(); meter = 0; drive(720);
+  o.fade = { mode, heat: __fp.botHeats()[0], log: __fp.servoLog.map(e => [e.dir, e.weight, e.vol, e.at, e.d]) };
+  /* distance is a curve, not a scenario: a drone close enough to be loud is
+     close enough to keep seeing you, so it never fades to measure */
+  o.vol = [0, 190, 380, 760, 1100].map(d => __fp.servoVolAt(d));
+  /* Hold a state against the AI, which will happily overrule a bare assignment */
+  const hold = (st, n) => { for (let i = 0; i < n; i++) { b.state = st; b.wary = 0; update(1/60); } };
+  /* A flicker while a chirp is already on cooldown: it goes hot, cold, hot again
+     inside the gap, and the only thing spoken is the first rise - because when
+     the gap expires the drone is back where it was last announced. */
+  cool();
+  hold('chase', 1);
+  o.afterRise = __fp.servoLog.length;
+  hold('patrol', 2); hold('chase', 2); hold('chase', 40);
+  o.undone = { log: __fp.servoLog.length, heat: __fp.botHeats()[0] };
+  o.gap = T.SERVO_GAP;
+  o.volAtFade = o.fade.log[0] ? __fp.servoVolAt(o.fade.log[0][4]) : null;
+  return JSON.stringify(o);
+})()`));
+const near0 = srv.fade.log[0], near1 = srv.fade.log[1];
+ok('the servo reads the same heat the sprite draws',
+  srv.heats.patrol === 0 && srv.heats.invest === 0.5 && srv.heats.chase === 1 && srv.heats.wary === 0.5,
+  JSON.stringify(srv.heats));
+ok('a drone left alone says nothing', srv.quiet === 0, `chirps=${srv.quiet}`);
+ok('walking into a cone is announced going up',
+  !!srv.spot.first && srv.spot.first.dir === 1 && srv.spot.heat === 1, JSON.stringify(srv.spot));
+/* mode is in the message on purpose: a frozen game reads exactly like a
+   drone that never cooled off, and that has cost this suite four runs */
+ok('losing you is announced too, and going down',
+  srv.fade.mode === 'playing' && srv.fade.heat === 0 && srv.fade.log.length === 2
+  && srv.fade.log.every(e => e[0] === -1),
+  `mode=${srv.fade.mode} heat=${srv.fade.heat} ${JSON.stringify(srv.fade.log)}`);
+ok('it steps down through wary rather than jumping straight cold',
+  !!near0 && !!near1 && near0[1] === 0.5 && near1[1] === 0.5, JSON.stringify(srv.fade.log));
+ok('chirps keep their distance from each other',
+  !!near0 && !!near1 && near1[3] - near0[3] >= srv.gap,
+  near0 && near1 ? `gap=${(near1[3] - near0[3]).toFixed(2)} min=${srv.gap}` : 'not enough chirps');
+ok('a drone across the floor is quieter than one beside you',
+  srv.vol[0] === 1 && srv.vol.every((v, i) => i === 0 || v < srv.vol[i - 1]) && srv.vol[4] < 0.15,
+  JSON.stringify(srv.vol));
+ok('and a real chirp uses that same curve',
+  !!near0 && Math.abs(near0[2] - srv.volAtFade) < 0.002, `logged=${near0 && near0[2]} curve=${srv.volAtFade}`);
+/* comparing against the last thing SAID, not against last frame, is what stops
+   a re-acquire inside the cooldown from swallowing the news for good */
+ok('going hot is announced at once', srv.afterRise === 1, `chirps=${srv.afterRise}`);
+ok('a flicker that lands back where it was announced adds nothing',
+  srv.undone.log === 1 && srv.undone.heat === 1, JSON.stringify(srv.undone));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

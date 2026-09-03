@@ -549,7 +549,7 @@ const T = {
      DRAW is the peak alpha each field contributes on screen. */
   GLOW_TRAIL_IN: 5.2, GLOW_TRAIL_OUT: 0.41, GLOW_TRAIL_DRAW: 0.30,
   GLOW_SURVEY_IN: 0.8, GLOW_SURVEY_OUT: 0.02, GLOW_SURVEY_DRAW: 0.12,
-  DARK: 0.5, SHAKE_CAP: 26,
+  DARK: 0.5, SHAKE_CAP: 26, SERVO_HALF: 380, SERVO_GAP: 0.3,
 };
 
 /* ---------- dom ---------- */
@@ -837,7 +837,7 @@ let lasers = [], sirenT = 0, nextSiren = 1e9, fogT = 0, nextFog = 1e9, flScale =
 let rusty = [], cats = [], belts = [], surging = null, nextSurge = 1e9;
 let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
 let exitOpen = false, blackout = 0, nextBlackout = 999;
-let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0;
+let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
 let powerups = [], puLens = 0, puShoe = 0, puGhost = 0;
 let batt = 100, beamOn = true, battDead = false;
@@ -1062,6 +1062,15 @@ const sfx = {
   crate() { noiseBurst(0.3, 0.3, 320); tone(180, 90, 0.24, 0.16, 'square'); },
   emp() { tone(900, 60, 0.45, 0.22, 'square'); noiseBurst(0.3, 0.16, 140); },
   decoy() { tone(1180, 1180, 0.05, 0.07, 'square'); },
+  /* a drone's own servo, moving. Rising means it is getting interested,
+     falling means it is losing you - which the game had no sound for at all. */
+  servo(dir, weight, vol) {
+    const lo = 480, hi = lo * (1 + 1.15 * weight);
+    const a = dir > 0 ? lo : hi, b = dir > 0 ? hi : lo;
+    tone(a, b, 0.07 + 0.05 * weight, 0.1 * vol, 'square');
+    tone(a * 2.01, b * 2.01, 0.05, 0.035 * vol, 'triangle');
+    noiseBurst(0.035, 0.05 * vol, 2200 + 900 * weight);
+  },
   ui() { tone(700, 900, 0.06, 0.08); }
 };
 function toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; $('muteBtn').textContent = muted ? '🔇' : '🔊'; try { localStorage.setItem('flashpoint.mute', muted ? '1' : '0'); } catch (e) {} }
@@ -1216,7 +1225,7 @@ function loadMap(idx) {
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
-  clearMemory();
+  clearMemory(); servoLog = [];
   motes = []; for (let i = 0; i < (TOUCH ? 30 : 55); i++) motes.push({ x: rand(0, T.COLS * T.TILE), y: rand(0, T.ROWS * T.TILE), vx: rand(-4, 4), vy: rand(-6, -1), p: rand(0, TAU) });
   /* three depths: far drops are short, slow and faint, near ones long and quick,
      which is what gives a flat sheet of rain any sense of space */
@@ -1256,7 +1265,7 @@ function spawnBots() {
       face: rand(0, TAU), route: rotatedRoute, wp: 1 % route.length, path: [], pathT: 0,
       state: 'patrol', tgt: null, lastX: 0, lastY: 0,
       range: T.BOT_RANGE * (1 + loop * 0.14) * (1 + coinsTotal * 0.008),
-      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [], wary: 0, radioT: 0,
+      half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, chirpT: 0, saidHeat: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [], wary: 0, radioT: 0,
       /* drawn through rng() so a daily run reproduces the same personalities */
       sweepK: rand(0.7, 1.4), paceK: rand(0.9, 1.12), peekK: rand(0.7, 1.5),
       dwellK: rand(0, 1), dwellT: 0
@@ -1951,8 +1960,36 @@ function updateBots(dt) {
 
     /* cone rays (shared for draw + detection) */
     castCone(b.rays, b.x, b.y, b.face, b.half, T.BOT_RAYS, botRange(b));
+
+    /* Watch the state rather than editing all eight places that set it: one
+       comparison catches every transition, including the ones another drone's
+       radio caused. A drone giving up used to make no sound whatsoever, which
+       is the single most useful thing a stealth game can tell you. */
+    if (b.chirpT > 0) b.chirpT = Math.max(0, b.chirpT - dt);
+    const h = botHeat(b);
+    /* Compare against what was last announced, not against last frame. A drone
+       re-acquiring you inside the cooldown would otherwise have its change
+       swallowed and never spoken, so you could lose a drone and never be told -
+       which is the whole point of the cue. Deferring instead means rapid
+       flapping collapses into one chirp describing where it actually ended up. */
+    if (b.saidHeat === undefined) b.saidHeat = h;
+    else if (h !== b.saidHeat && b.chirpT === 0 && mode === 'playing') {
+      const d = Math.hypot(b.x - player.x, b.y - player.y);
+      const vol = servoVol(d);
+      const dir = h > b.saidHeat ? 1 : -1, weight = Math.abs(h - b.saidHeat) > 0.5 ? 1 : 0.5;
+      sfx.servo(dir, weight, vol);
+      servoLog.push({ dir, weight, vol: +vol.toFixed(3), d: Math.round(d), from: b.saidHeat, to: h, at: +time.toFixed(3) });
+      if (servoLog.length > 24) servoLog.shift();
+      b.saidHeat = h;
+      b.chirpT = T.SERVO_GAP;
+    }
   }
 }
+/* chase is hot, investigating or still wary is half, patrolling is cold. The
+   sprite and the servo read the same number so they cannot drift apart. */
+function botHeat(b) { return b.state === 'chase' ? 1 : (b.state === 'invest' || b.wary > 0 ? 0.5 : 0); }
+/* inverse-square-ish: full beside you, half a floor away is half as loud */
+function servoVol(d) { const k = d / T.SERVO_HALF; return 1 / (1 + k * k); }
 /* A chasing drone gets faster the deeper you are, the more loops you've run, and
    the longer it has been on you - but never quite as fast as a sprint. */
 function chaseSpeed(b, sm) {
@@ -2889,7 +2926,7 @@ function drawBotBody(b) {
   const a = revealed(b) ? 1 : (b.state === 'chase' ? 0.75 : 0);
   if (a <= 0) return;
   /* what the drone is doing, in one number, so every part of it can agree */
-  const heat = b.state === 'chase' ? 1 : (b.state === 'invest' || b.wary > 0 ? 0.5 : 0);
+  const heat = botHeat(b);
   const alerted = heat > 0;
   const spin = 20 + heat * 26;
 
@@ -4451,6 +4488,11 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  get servoLog() { return servoLog.map(e => ({ ...e })); },
+  servoClear() { servoLog = []; },
+  botHeats() { return bots.map(b => botHeat(b)); },
+  servoVolAt(d) { return +servoVol(d).toFixed(4); },
+  get botChirpT() { return bots.map(b => +(b.chirpT || 0).toFixed(2)); },
   get shakeN() { return shakes.length; },
   get shakeMag() { const o = shakeOffset(); return +Math.hypot(o.x, o.y).toFixed(3); },
   shakeOff() { const o = shakeOffset(); return { x: +o.x.toFixed(3), y: +o.y.toFixed(3) }; },
