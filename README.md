@@ -156,6 +156,9 @@ either. They see what their light sees, and nothing else.
   looks like the place it is.
 - **Light is a liability** — standing in a lamp or neon pool makes the meter
   fill faster. The darkness that hides you from them is also what blinds you.
+- **A compass to the door** — pinned to the edge of the screen whenever the exit
+  is off it. Faint while you have never seen the door, firmer once you have lit
+  it, bright once every coin is in. Direction only until you have seen it.
 - **A map of what you have lit** — bottom left, and strictly the swept area: no
   drones, no gold you have not found, no walls you have not shone a beam at. The
   way out appears on it only once you have seen the door yourself.

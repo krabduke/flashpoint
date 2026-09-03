@@ -3219,6 +3219,53 @@ ok('settings can turn it off and back on',
 ok('and it is not on the menu', mm.inMenu === false);
 
 
+/* ---- exit compass: on all the time, and graded to what you know ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const exc = JSON.parse(await evl(`(() => {
+  const o = {};
+  endless = false; __fp.setMod(-1); __fp.setDiff('standard');
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0;
+  clearMemory(); exitOpen = false; render();
+  o.unseen = __fp.exitCompass();
+  const i = ((exitPt.y / 20) | 0) * 56 + ((exitPt.x / 20) | 0);
+  surveyG[i] = 1;
+  o.seen = __fp.exitCompass();
+  exitOpen = true;
+  o.open = __fp.exitCompass();
+  o.screen = { W, H, m: 26 };
+  /* park the camera so the exit is off to the right, then off to the left */
+  camNow.cx = exitPt.x - 2000; camNow.cy = exitPt.y - H / (2 * Z);
+  o.toRight = __fp.exitCompass();
+  camNow.cx = exitPt.x + 2000;
+  o.toLeft = __fp.exitCompass();
+  /* and out of the way when the door is on screen */
+  camNow.cx = exitPt.x - W / (2 * Z); camNow.cy = exitPt.y - H / (2 * Z);
+  o.whenVisible = __fp.exitCompass();
+  return JSON.stringify(o);
+})()`));
+const onEdge = c => Math.abs(c.x - 26) < 1.5 || Math.abs(c.x - (exc.screen.W - 26)) < 1.5
+  || Math.abs(c.y - 26) < 1.5 || Math.abs(c.y - (exc.screen.H - 26)) < 1.5;
+/* it used to require exitOpen, so it appeared only once every coin was already
+   in hand - exactly when you no longer needed telling where the door was */
+ok('the compass is there before the exit opens',
+  exc.unseen.hidden === false && exc.unseen.state === 0, JSON.stringify(exc.unseen));
+ok('it grows more definite as you learn more',
+  exc.unseen.alpha < exc.seen.alpha && exc.seen.alpha < exc.open.alpha
+  && exc.unseen.state === 0 && exc.seen.state === 1 && exc.open.state === 2,
+  `${exc.unseen.alpha} -> ${exc.seen.alpha} -> ${exc.open.alpha}`);
+ok('and it stays faint while you have never seen the door',
+  exc.unseen.alpha <= 0.2, `alpha=${exc.unseen.alpha}`);
+ok('it sits on the edge of the screen, not on a ring inside it',
+  onEdge(exc.open) && onEdge(exc.toLeft) && onEdge(exc.toRight),
+  `open=${exc.open.x},${exc.open.y} of ${exc.screen.W}x${exc.screen.H}`);
+ok('it points at the door',
+  Math.abs(exc.toRight.ang) < 0.4 && Math.abs(exc.toLeft.ang) > Math.PI - 0.4,
+  `right=${exc.toRight.ang} left=${exc.toLeft.ang}`);
+ok('and gets out of the way once you can see it', exc.whenVisible.hidden === true,
+  JSON.stringify(exc.whenVisible));
+
+
 const clean = problems.length === 0;
 if (!clean) fails++;
 console.log(`${clean ? 'PASS' : 'FAIL'} :: zero console/js errors`);

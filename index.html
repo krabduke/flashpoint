@@ -4123,16 +4123,44 @@ function drawVignette() {
   }
 }
 
+/* This existed already, but only once exitOpen was true - which is to say it
+   turned up exactly when you no longer needed it, after every coin was in hand.
+   Before that the endgame was wandering the dark hunting a door you might never
+   have laid eyes on, which is tedium rather than tension.
+
+   Permanent now, and graded to what you actually know: a faint direction before
+   you have seen the door, a definite one once you have lit it, and a bright pull
+   once it is open. Direction only until you have seen it, so it never gives away
+   position the way the minimap deliberately does not. */
+const EXIT_STATE = [
+  { col: '77,255,184', a: 0.16, len: 7,  back: 4.5, pulse: 0 },   /* never seen */
+  { col: '77,255,184', a: 0.38, len: 9,  back: 5.5, pulse: 0 },   /* lit at some point */
+  { col: '77,255,184', a: 0.58, len: 12, back: 7,   pulse: 0.22 },/* open, go */
+];
+function exitCompassState() {
+  if (exitOpen) return 2;
+  const i = ((exitPt.y / GC) | 0) * GW + ((exitPt.x / GC) | 0);
+  return surveyG[i] >= MINI_SEEN ? 1 : 0;
+}
 function drawExitArrow() {
-  if (!exitOpen || mode !== 'playing') return;
+  if (mode !== 'playing') return;
   const sx = (exitPt.x - camNow.cx) * Z, sy = (exitPt.y - camNow.cy) * Z;
-  if (sx > 30 && sy > 30 && sx < W - 30 && sy < H - 30) return;
-  const a = Math.atan2(sy - H / 2, sx - W / 2);
-  const px = W / 2 + Math.cos(a) * Math.min(W, H) * 0.38, py = H / 2 + Math.sin(a) * Math.min(W, H) * 0.38;
-  ctx.save(); ctx.translate(px, py); ctx.rotate(a);
-  ctx.globalAlpha = 0.5 + 0.3 * Math.sin(time * 6);
-  ctx.fillStyle = '#4dffb8';
-  ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-6, -7); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill();
+  const m = 26;
+  if (sx > m && sy > m && sx < W - m && sy < H - m) return;   /* you can see it */
+  const S = EXIT_STATE[exitCompassState()];
+  /* anchored to the edge of the screen rather than floating on a ring inside it */
+  const cx0 = W / 2, cy0 = H / 2;
+  const dx = sx - cx0, dy = sy - cy0;
+  const hw = Math.max(8, W / 2 - m), hh = Math.max(8, H / 2 - m);
+  const t = Math.min(hw / Math.max(1e-6, Math.abs(dx)), hh / Math.max(1e-6, Math.abs(dy)));
+  const px = cx0 + dx * t, py = cy0 + dy * t;
+  ctx.save();
+  ctx.translate(px, py); ctx.rotate(Math.atan2(dy, dx));
+  ctx.globalAlpha = S.a + S.pulse * Math.sin(time * 5);
+  ctx.fillStyle = 'rgb(' + S.col + ')';
+  ctx.beginPath();
+  ctx.moveTo(S.len, 0); ctx.lineTo(-S.back, -S.back * 1.15); ctx.lineTo(-S.back, S.back * 1.15);
+  ctx.closePath(); ctx.fill();
   ctx.restore();
 }
 
@@ -4845,6 +4873,17 @@ if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
+  exitCompass() {
+    if (mode !== 'playing') return null;
+    const sx = (exitPt.x - camNow.cx) * Z, sy = (exitPt.y - camNow.cy) * Z, m = 26;
+    const on = sx > m && sy > m && sx < W - m && sy < H - m;
+    const cx0 = W / 2, cy0 = H / 2, dx = sx - cx0, dy = sy - cy0;
+    const hw = Math.max(8, W / 2 - m), hh = Math.max(8, H / 2 - m);
+    const t = Math.min(hw / Math.max(1e-6, Math.abs(dx)), hh / Math.max(1e-6, Math.abs(dy)));
+    return { state: exitCompassState(), hidden: on,
+             x: Math.round(cx0 + dx * t), y: Math.round(cy0 + dy * t),
+             ang: +Math.atan2(dy, dx).toFixed(3), alpha: EXIT_STATE[exitCompassState()].a };
+  },
   miniShown() { const el = $('minimap'); return !el.classList.contains('hidden'); },
   miniSeen() { let n = 0; for (let i = 0; i < surveyG.length; i++) if (surveyG[i] >= MINI_SEEN) n++; return n; },
   miniExitVisible() { const i = ((exitPt.y / GC) | 0) * GW + ((exitPt.x / GC) | 0); return surveyG[i] >= MINI_SEEN; },
