@@ -130,6 +130,55 @@ behaviour is assertable. Visual work gets a screenshot check instead.
 
 ---
 
+# Round two
+
+Sections A–H are done (64/64). Measured before writing this: `update()` costs
+0.042ms on floor 1 and 0.129ms on floor 12 at loop 3 with six drones, against a
+16.7ms frame budget. Under 1%. Headless has no compositor so the render figures
+are draw-call submission rather than paint, but the JS side has enormous room.
+**So there is no optimisation section here — the budget is not the constraint,
+and inventing one would have been work for its own sake.**
+
+The real gap after 64 items: every enemy in the game is the same drone. E1–E8
+made them clever but there is still exactly one kind of threat, and the entire
+noise system — footsteps, water, carried weight, crates, tossed coins — exists
+only to attract something that hunts by sight.
+
+## J · A second kind of hunter
+
+- [ ] J1 `H` listener — no cone at all, hunts by sound alone. The noise system
+      already exists and nothing currently makes it frightening.
+- [ ] J2 Listener made legible — you cannot see what it is "looking" at, so it
+      needs a different tell: posture, a pulse when it hears, an audible ping.
+- [ ] J3 `Y` sentry — fixed, wide cone, asleep until an alarm wakes it
+- [ ] J4 Mixed floors — which floors get which, and a per-map enemy list rather
+      than a bare `bots:` count
+- [ ] J5 They tell each other — a listener that hears you hands a position to the
+      drones that can see
+
+## K · Risk against reward
+
+- [ ] K1 The exit opens early at a price — leave with what you have, score what
+      you carried, or stay for the rest
+- [ ] K2 `$` safe — a big score for a long, loud crack
+- [ ] K3 Clean-floor bonus — unseen, unheard, every coin: say so and pay for it
+
+## L · More to carry
+
+- [ ] L1 Tripwire alarm you can place, to know when something followed you
+- [ ] L2 Silencer charge — one floor of soft footsteps whatever you are carrying
+- [ ] L3 A gadget that uses the listener specifically, once J1 exists
+
+## M · Blocked
+
+- [ ] M1 Supabase leaderboard + login. **Blocked, not forgotten**: the MCP server
+      in `~/florasites-business/.mcp.json` has never been authenticated, so there
+      are no credentials to build against. Needs Keenan to run `/mcp`. Note also
+      that client-computed scores cannot be made tamper-proof; a global board
+      will need server-side validation or an honest disclaimer.
+
+---
+
 ## Log
 
 Append one line per completed item: `date · id · commit · note`.
