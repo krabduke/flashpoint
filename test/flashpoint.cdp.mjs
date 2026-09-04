@@ -2568,9 +2568,17 @@ const glw = JSON.parse(await evl(`(() => {
   const px = player.x, py = player.y, ax = Math.cos(best.a), ay = Math.sin(best.a);
   const at = d => __fp.glowAt(px + ax * d, py + ay * d);
   const step = n => { for (let i = 0; i < n; i++) update(1 / 60); };
-  /* the whole canvas, because the camera clamps at the map edge and the player
-     is nowhere near screen centre on floor 1 */
-  const read = () => { const d = ctx.getImageData(0, 0, W * DPR, H * DPR).data;
+  /* Sample the corridor the memory is actually in, not the whole canvas. The
+     whole-canvas average diluted a local effect down to a three-unit margin on
+     a reading of 120, which is noise wearing an assertion's clothes - it drifted
+     to two and failed with nothing to do with memory having changed. The camera
+     clamps at map edges, so go through camNow rather than assuming centre. */
+  const read = () => {
+    const wx = px + ax * 160, wy = py + ay * 160, hw = 36;
+    const sx = (wx - camNow.cx) * Z, sy = (wy - camNow.cy) * Z;
+    const x0 = Math.max(0, Math.min(W - hw * 2, sx - hw));
+    const y0 = Math.max(0, Math.min(H - hw * 2, sy - hw));
+    const d = ctx.getImageData(x0 * DPR, y0 * DPR, hw * 2 * DPR, hw * 2 * DPR).data;
     let s2 = 0, n = 0; for (let i = 0; i < d.length; i += 4) { s2 += d[i] + d[i+1] + d[i+2]; n++; }
     return Math.round(s2 / n); };
   const look = () => __fp.aimAt(px + ax * 400, py + ay * 400);
@@ -5293,6 +5301,47 @@ ok('nothing starts on your doorstep on any floor of any loop',
   spw.under150 === 0, `${spw.under150} of ${spw.total}; closest ${spw.closest[0].nearest}px (${spw.closest[0].kind})`);
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
+
+/* ---- the escape act ----
+   Waiting was free for the whole game. It is not free here: the building keeps
+   getting faster until you are out of it, and it stops hiding you. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const exf = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; alertLvl = 0; alertCool = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+  o.darkIn = __fp.darkLevel();
+  o.phaseIn = __fp.phase;
+
+  __fp.takePrize();
+  o.darkOut = __fp.darkLevel();
+  o.phaseOut = __fp.phase;
+  o.alertAtTake = __fp.alertLvl;
+
+  /* stand perfectly still through two response windows */
+  const secs = T.RESPONSE_EVERY * 2 + 1;
+  for (let i = 0; i < secs * 60; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
+  o.alertAfterWaiting = __fp.alertLvl;
+  o.exfilT = __fp.exfilT();
+  o.mode = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the escape block ran at all', !exf.threw, exf.threw || 'ok');
+ok('the quiet half is dark', exf.darkIn > 0.45 && exf.phaseIn === 'in',
+  `dark=${exf.darkIn} phase=${exf.phaseIn}`);
+/* losing the dark is the biggest single change to the floor, so it should be
+   the first thing you notice about the escape */
+ok('and the building stops hiding you once it knows',
+  exf.darkOut < exf.darkIn && exf.phaseOut === 'out',
+  `${exf.darkIn} -> ${exf.darkOut}`);
+ok('standing still during the escape costs you',
+  exf.alertAfterWaiting > exf.alertAtTake,
+  `alert ${exf.alertAtTake} -> ${exf.alertAfterWaiting} over ${exf.exfilT}s`);
+ok('the escape block measured a running game', exf.mode === 'playing', exf.mode);
 
 /* ---- the prize, and the hinge it turns ----
    A heist needs a moment where you stop being careful. Collecting coins to a

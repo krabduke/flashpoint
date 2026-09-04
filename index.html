@@ -754,6 +754,9 @@ const T = {
   HAUL_DRAG: 0.2,
   /* the take: long enough to be a commitment, loud enough to be the hinge */
   PRIZE_R: 48, PRIZE_T: 2.2, PRIZE_SCORE: 900, PRIZE_NOISE: 760,
+  /* the response: standing still during the escape has to cost something, so
+     the building keeps getting faster until you are out of it */
+  RESPONSE_EVERY: 14, EXFIL_LIGHT: 0.34,
   /* a torch in a blacked-out building is the most conspicuous thing in it.
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
@@ -1321,6 +1324,7 @@ let made = false, madeT = 0;
 /* 'in' is the quiet half, 'out' is the escape. The prize is the hinge between
    them, and the only thing that opens the exit. */
 let phase = 'in', prize = null, heldPrize = false, prizeT = 0;
+let exfilT = 0, responseT = 0;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
 let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
@@ -2009,7 +2013,7 @@ function loadMap(idx) {
   coinsTotal = coinList.length; coins = 0; realCoins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; made = false; madeT = 0; exitOpen = false; exitFull = false;
-  phase = 'in'; heldPrize = false; prizeT = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
+  phase = 'in'; heldPrize = false; prizeT = 0; exfilT = 0; responseT = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
   /* a wipe left over from the previous floor would darken the new one */
   if (mode !== 'playing') wipeT = 0;
@@ -3427,6 +3431,17 @@ function updateMeter(dt) {
   }
   if (meter > 0.28) { beatT -= dt; if (beatT <= 0) { sfx.beat(); beatN++; beatT = lerp(0.9, 0.32, meter); } }
   else beatT = 0;
+  if (phase === 'out') {
+    exfilT += dt;
+    responseT += dt;
+    if (responseT >= T.RESPONSE_EVERY) {
+      responseT = 0;
+      if (alertLvl < T.ALERT_MAX) {
+        alertCool = 0; bumpAlert();
+        toast('THEY ARE STILL COMING — MOVE', 2.2);
+      }
+    }
+  }
   updateSting(dt);
   updateJams(dt);
   updateTutor(dt);
@@ -4123,7 +4138,10 @@ function render() {
   darkCtx.clearRect(0, 0, darkCv.width, darkCv.height);
   darkCtx.scale(DPR * Z, DPR * Z);
   darkCtx.translate(-cx, -cy);
-  darkCtx.fillStyle = TH.fog + (blackout > 0 ? 0.93 : T.DARK) + ')';
+  /* The lights come up when the alarm does. Losing the dark is the largest
+     single thing that changes about the floor, so it should be the thing you
+     notice first about the escape. */
+  darkCtx.fillStyle = TH.fog + (blackout > 0 ? 0.93 : (phase === 'out' ? T.EXFIL_LIGHT : T.DARK)) + ')';
   darkCtx.fillRect(cx, cy, vw, vh);
   darkCtx.globalCompositeOperation = 'destination-out';
   /* flashlight hole */
@@ -5749,6 +5767,14 @@ function drawCaughtHold() {
 
 function drawVignette() {
   const m = mode === 'playing' ? meter : 0;
+  /* The whole screen says which half of the run you are in. Cold and violet
+     while you are still a guest; amber once the building knows it has been
+     robbed - no HUD element required. */
+  if (phase === 'out' && mode === 'playing') {
+    const warm = 0.06 + 0.03 * Math.sin(time * 2.2);
+    ctx.fillStyle = 'rgba(255,150,60,' + warm.toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
   const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34, W / 2, H / 2, Math.max(W, H) * 0.75);
   vg.addColorStop(0, 'rgba(0,0,0,0)');
   vg.addColorStop(1, 'rgba(0,0,0,' + (0.55 + m * 0.35) + ')');
@@ -7314,6 +7340,8 @@ window.__fp = {
   setMeter(v) { meter = v; },
   get made() { return made; }, setMade(v) { made = !!v; madeT = 0; },
   get phase() { return phase; }, get heldPrize() { return heldPrize; },
+  exfilT() { return +exfilT.toFixed(2); },
+  darkLevel() { return blackout > 0 ? 0.93 : (phase === 'out' ? T.EXFIL_LIGHT : T.DARK); },
   prizeAt() { return prize ? { x: prize.x, y: prize.y, taken: prize.taken } : null; },
   prizeT() { return +prizeT.toFixed(3); }, takePrize() { takePrize(); },
   prizeCount() { return MAPS.filter(m => m.rows.join('').includes('*')).length; },
