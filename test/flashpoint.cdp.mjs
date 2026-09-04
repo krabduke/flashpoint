@@ -4116,11 +4116,14 @@ const saf = JSON.parse(await evl(`(() => {
 })()`));
 const withSafes = saf.perFloor.filter(n => n > 0).length;
 ok('the maps still validate with a safe bolted into them', saf.valid === 'ok', saf.valid);
-/* Pinned to exactly four, this broke the moment a new floor got a safe - the
-   count was never the claim. The claim is that safes are scarce and late. */
-ok('safes stay scarce, and never turn up early',
-  withSafes >= 4 && withSafes <= Math.ceil(saf.perFloor.length / 2)
-  && saf.perFloor.slice(0, 4).every(n => n === 0),
+/* This has been rewritten twice, and both times the count was the thing that
+   broke rather than the claim. Scarcity stopped being the rule the moment a
+   drill could be bought at the fence: a tool you pay 780 for cannot walk into
+   four floors with nothing to use it on. What survives is that the first
+   contract teaches without asking, so no safe appears in it. */
+ok('no safe in the first contract, and a drill always has work after it',
+  saf.perFloor.slice(0, 3).every(n => n === 0)
+  && saf.perFloor.slice(3).filter(n => n > 0).length >= saf.perFloor.length - 5,
   `${withSafes} of ${saf.perFloor.length}: ${JSON.stringify(saf.perFloor)}`);
 ok('it takes real time standing at it',
   saf.need > 3 && saf.partway.t > 0.8 && saf.partway.cracked === false,
