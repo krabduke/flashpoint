@@ -1362,7 +1362,8 @@ const negs = await evl(`(() => {
   keys.sprint = false; keys.right = true;
   for (let i = 0; i < 40; i++) update(0.016);
   keys.sprint = false; keys.right = false;
-  __fp.bumpAlert();
+  /* bumpAlert only raises the alert now; identification is what counts as seen */
+  __fp.identify();
   const flags = __fp.floorFlags;
   __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
   for (let i = 0; i < 5; i++) update(0.016);
@@ -3960,63 +3961,68 @@ ok('and holding the lock does not put it on the air every frame',
 ok('the block measured a running game', cal.mode === 'playing', cal.mode);
 
 
-/* ---- the door opens early, and the bonus is what leaving costs ---- */
+/* ---- the exit answers the prize, not a coin count ----
+   It used to open at two thirds of the gold, which meant there was no greed
+   decision: you collected until the door opened and then left. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
 const early = JSON.parse(await evl(`(() => {
+ try {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
-  /* a choice has to exist on every floor, not just the roomy ones */
-  o.thresholds = [];
-  for (let i = 0; i < MAPS.length; i++) { mapIdx = i; loadMap(i);
-    o.thresholds.push({ total: coinsTotal, need: __fp.exitNeed() }); }
   mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0; clearToast();
-  o.total = coinsTotal; o.need = __fp.exitNeed();
-  const real = coinList.filter(c => !c.bonus);
-  const take = n => { for (let i = 0; i < n; i++) { const c = real.find(x => !x.got);
-    player.x = c.x; player.y = c.y; for (let k = 0; k < 3; k++) update(1 / 60); } };
-  o.atStart = { open: __fp.exitOpen, full: __fp.exitFull };
-  take(o.need - 1);
-  o.justBelow = { got: __fp.realCoins, open: __fp.exitOpen };
-  take(1);
-  o.atThreshold = { got: __fp.realCoins, open: __fp.exitOpen, full: __fp.exitFull,
-                    tint: $('coins').classList.contains('canleave') };
-  togglePause(); o.pauseEarly = $('pGoldLabel').textContent; togglePause();
-  /* K3 also pays at nextMap now, so scruff the floor first: this block is
-     measuring the CLEAR bonus, not everything the exit hands you. */
-  fSeen = true; fSprint = true; fNoticed = true;
-  const b1 = score; nextMap(); o.earlyGain = score - b1;
-  /* and the same floor taken clean */
+  o.total = coinsTotal;
+  o.atStart = { open: __fp.exitOpen, held: __fp.heldPrize };
+
+  /* every coin on the floor, and the way out stays shut */
+  for (const c of coinList) if (!c.got && !c.bonus) {
+    player.x = c.x; player.y = c.y;
+    for (let k = 0; k < 3; k++) update(1 / 60);
+  }
+  o.allCoins = { got: __fp.realCoins, total: coinsTotal, open: __fp.exitOpen };
+
+  /* reload so gold is still on the floor: the amber tint means "you may leave,
+     and you are leaving something behind", which needs something left behind */
   mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9;
-  __fp.clearCoins(); hud();
-  o.cleared = { open: __fp.exitOpen, full: __fp.exitFull, tint: $('coins').classList.contains('canleave') };
-  togglePause(); o.pauseFull = $('pGoldLabel').textContent; togglePause();
+  const at = __fp.prizeAt();
+  __fp.teleport(at.x, at.y);
+  for (let i = 0; i < 200; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
+  hud();
+  o.withPrize = { held: __fp.heldPrize, open: __fp.exitOpen, phase: __fp.phase,
+                  left: __fp.goldLeft(), tint: $('coins').classList.contains('canleave') };
+
+  /* and the clear bonus is paid for getting out with it, not for vacuuming */
   fSeen = true; fSprint = true; fNoticed = true;
-  const b2 = score; nextMap(); o.fullGain = score - b2;
+  const b = score; nextMap(); o.gain = score - b;
   o.bonus = T.CLEAR_BONUS;
+
+  /* the same floor, prize taken, not one coin picked up */
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9;
+  __fp.takePrize();
+  fSeen = true; fSprint = true; fNoticed = true;
+  const b2 = score; nextMap(); o.gainNoCoins = score - b2;
   o.mode = mode;
   return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
 })()`));
-ok('every floor leaves something on the table to walk away from',
-  early.thresholds.every(t => t.need < t.total && t.need >= 1),
-  JSON.stringify(early.thresholds.map(t => `${t.need}/${t.total}`)));
-ok('the door is shut to begin with and still shut one coin short',
-  early.atStart.open === false && early.justBelow.open === false,
-  `${early.justBelow.got} of ${early.total}`);
-ok('it opens at the threshold without the floor being clear',
-  early.atThreshold.open === true && early.atThreshold.full === false
-  && early.atThreshold.got === early.need, JSON.stringify(early.atThreshold));
-/* the door may be nowhere near you, so the counter has to say it too */
-ok('and the coin counter says walking out is now a choice',
-  early.atThreshold.tint === true && early.cleared.tint === false,
-  `open=${early.atThreshold.tint} cleared=${early.cleared.tint}`);
-ok('the pause card names which of the three you are in',
-  early.pauseEarly === 'CAN LEAVE NOW' && early.pauseFull === 'FLOOR CLEARED',
-  `${early.pauseEarly} / ${early.pauseFull}`);
-/* the whole point: you escaped either way, the bonus is what you gave up */
-ok('leaving early pays no clear bonus', early.earlyGain === 0, `gained=${early.earlyGain}`);
-ok('and taking every coin pays it', early.fullGain === early.bonus,
-  `gained=${early.fullGain} of ${early.bonus}`);
+ok('the exit block ran at all', !early.threw, early.threw || 'ok');
+ok('the way out starts shut', early.atStart.open === false && early.atStart.held === false,
+  JSON.stringify(early.atStart));
+ok('and every coin on the floor does not open it',
+  early.allCoins.got === early.allCoins.total && early.allCoins.open === false,
+  JSON.stringify(early.allCoins));
+ok('the prize is what opens it',
+  early.withPrize.held === true && early.withPrize.open === true, JSON.stringify(early.withPrize));
+ok('and the counter says walking out is now a choice', early.withPrize.tint === true,
+  `tint=${early.withPrize.tint}`);
+ok('taking it flips the run into its second half', early.withPrize.phase === 'out',
+  early.withPrize.phase);
+/* the bonus used to demand every coin, which is the exhaustive sweep this
+   redesign exists to stop paying for */
+ok('the clear bonus is paid for leaving with the prize', early.gain === early.bonus,
+  `gained=${early.gain} of ${early.bonus}`);
+ok('and it is paid even if you touched no gold at all',
+  early.gainNoCoins === early.bonus, `gained=${early.gainNoCoins} of ${early.bonus}`);
 ok('the block measured a running game', early.mode === 'playing', early.mode);
 
 
@@ -4828,6 +4834,65 @@ ok('nothing starts on your doorstep on any floor of any loop',
   spw.under150 === 0, `${spw.under150} of ${spw.total}; closest ${spw.closest[0].nearest}px (${spw.closest[0].kind})`);
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
+
+/* ---- the prize, and the hinge it turns ----
+   A heist needs a moment where you stop being careful. Collecting coins to a
+   threshold was not one: the exit simply opened at some point and you left. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+await eq('every floor has something worth stealing', '__fp.prizeCount()', 20);
+
+const przRaw = await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 999; alertLvl = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1); __fp.setCrack('still');
+  mapIdx = 0; loop = 0; loadMap(0);
+  o.at = __fp.prizeAt();
+  o.phaseBefore = __fp.phase;
+
+  /* coins alone no longer open the way out - that was the old rule */
+  for (const c of coinList) if (!c.got) { c.got = true; coins++; if (!c.bonus) realCoins++; }
+  for (let i = 0; i < 4; i++) update(1 / 60);
+  o.coinsAloneOpenIt = exitOpen;
+
+  /* standing on it does nothing; it has to be held */
+  __fp.teleport(o.at.x, o.at.y); player.vx = 0; player.vy = 0;
+  update(1 / 60);
+  o.instant = { held: __fp.heldPrize, t: __fp.prizeT() };
+
+  /* hold it, and the run changes shape */
+  for (let i = 0; i < 180; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
+  o.after = { held: __fp.heldPrize, phase: __fp.phase, open: exitOpen,
+    hunters: __fp.hunters(), made: __fp.made, alert: __fp.alertLvl,
+    taken: __fp.prizeAt().taken };
+  return JSON.stringify(o);
+ } catch (e) {
+  return JSON.stringify({ threw: e.message + ' | ' + (e.stack || '').split(String.fromCharCode(10)).slice(1, 3).join(' ') });
+ }
+})()`);
+/* evl returns undefined when the evaluate throws before the try, and JSON.parse
+   on that is a FATAL that stops the run before `problems` is ever printed - so
+   the one thing that knows the cause is thrown away. Report instead. */
+const prz = typeof przRaw === 'string' ? JSON.parse(przRaw) : {};
+ok('the prize block ran at all', typeof przRaw === 'string' && !prz.threw,
+  prz.threw || ('evl gave ' + typeof przRaw + ' · ' + problems.slice(-2).join(' | ')));
+ok('the prize sits somewhere on the floor', prz.at && prz.at.taken === false, JSON.stringify(prz.at));
+ok('a run starts in the quiet half', prz.phaseBefore === 'in', prz.phaseBefore);
+ok('taking every coin no longer opens the exit by itself',
+  prz.coinsAloneOpenIt === false, `exitOpen=${prz.coinsAloneOpenIt}`);
+ok('and the prize is not grabbed by brushing past it',
+  prz.instant.held === false, JSON.stringify(prz.instant));
+ok('holding it takes it', prz.after.held === true && prz.after.taken === true,
+  JSON.stringify(prz.after));
+ok('which is what opens the way out', prz.after.open === true, `exitOpen=${prz.after.open}`);
+/* An alarm says something happened, not that they know where you are. Making
+   the take identify you would put every CLEAN bonus permanently out of reach and
+   there would be no such thing as a perfect heist. */
+ok('and it turns the hinge: the building wakes',
+  prz.after.phase === 'out' && prz.after.alert > 0, JSON.stringify(prz.after));
+ok('but the take alone does not tell them where you are',
+  prz.after.made === false, `made=${prz.after.made}`);
 
 /* ---- being seen starts the hunt; only contact ends the run ----
    This is the change the whole design turns on. Before it, filling the meter

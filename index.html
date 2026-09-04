@@ -746,6 +746,11 @@ const T = {
   /* they have to reach you now: a shade over both radii, so a drone that is
      genuinely on top of you takes you and a near miss does not */
   CONTACT_R: 26, MADE_HOLD: 2.4,
+  /* a full haul costs you a fifth of your speed - greed is paid for in the
+     one currency the escape actually cares about */
+  HAUL_DRAG: 0.2,
+  /* the take: long enough to be a commitment, loud enough to be the hinge */
+  PRIZE_R: 48, PRIZE_T: 2.2, PRIZE_SCORE: 900, PRIZE_NOISE: 760,
   /* a torch in a blacked-out building is the most conspicuous thing in it.
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
@@ -815,7 +820,7 @@ const T = {
   /* The door used to want every last coin, so the floor made one demand and you
      either met it or died trying. It opens at two thirds now, and the bonus is
      what you give up by walking out early. */
-  EXIT_EARLY: 0.66,
+
   /* Three ways to keep a floor clean, each already tracked and until now only
      ever mentioned in an achievement long after the fact. */
   CLEAN_EACH: 200, CLEAN_ALL: 400,
@@ -873,7 +878,7 @@ let seed = 1; const srand = () => { seed = (seed * 16807) % 2147483647; return (
 const MAPS = [
   { name: 'THE HOUSE', depth: 'HOUSE', theme: 'house', coins: 5, bots: 1, rows: [
     '############################',
-    '#.......L......##....c.....#',
+    '#.......L......##.*..c.....#',
     '#.P.......x....##..........#',
     '#..........c...##...####..L#',
     '#....####......##...#..#...#',
@@ -893,7 +898,7 @@ const MAPS = [
   ], routes: [[[3,2],[12,2],[22,2],[22,9],[13,15],[4,15],[4,10],[3,2]]] },
   { name: 'THE WAREHOUSE', depth: 'WAREHOUSE', theme: 'warehouse', coins: 6, bots: 1, rows: [
     '############################',
-    '#.P.....x..L.......x....c..#',
+    '#.P.....x..L......*x....c..#',
     '#####.######.######.######.#',
     '#..c..............#........#',
     '#.#####.#####.###.V.####.#.#',
@@ -913,7 +918,7 @@ const MAPS = [
   ], routes: [[[3,3],[24,3],[24,9],[3,9],[3,13],[24,13],[24,15],[3,15],[3,3]]] },
   { name: 'NEON HEIGHTS', depth: 'CITY', theme: 'city', coins: 7, bots: 2, rows: [
     '############################',
-    '#.Pc..........#...L.......c#',
+    '#.Pc..........#...L*......c#',
     '#.d.######..#####..#######.#',
     '#...######..#####..#######.#',
     '#...######..####M..#######.#',
@@ -933,7 +938,7 @@ const MAPS = [
   ], routes: [[[2,2],[2,9],[2,15],[9,15],[10,10],[10,6],[2,6],[2,2]],[[26,16],[26,10],[17,10],[17,5],[24,5],[26,5],[26,16]]] },
   { name: 'THE ABANDONED', depth: 'WARD', theme: 'ward', coins: 8, bots: 2, rows: [
     '############################',
-    '#.P...x..#.....N#...x...c..#',
+    '#.P...x..#.....N#...x...c.*#',
     '#.K......#..x...#.~~.......#',
     '#..####..#......#.~.####...#',
     '#..#..c..#.e..x.#.I.#..L..x#',
@@ -953,7 +958,7 @@ const MAPS = [
   ], routes: [[[3,1],[24,1],[24,7],[13,7],[13,10],[3,11],[3,7],[3,1]],[[22,9],[16,9],[15,13],[15,16],[22,16],[25,9],[25,16],[19,16],[15,16],[15,13],[20,12],[25,12],[25,9]]] },
   { name: 'THE MUSEUM', depth: 'MUSEUM', theme: 'museum', coins: 9, bots: 2, spd: 1.0, rows: [
     '############################',
-    '#.P..........!#.........x..#',
+    '#.P..........!#....*....x..#',
     '#....####..####..####c.....#',
     '#....####C.####..####......#',
     '#....####..M###..####......#',
@@ -974,7 +979,7 @@ const MAPS = [
   { name: 'THE SERVER FARM', depth: 'SERVER', theme: 'server', coins: 10, bots: 2, spd: 1.05,
     lasers: [[9,1,9,3],[14,5,14,7],[20,9,20,11],[10,13,10,15]], rows: [
     '############################',
-    '#.P....#...c#....#..cY#...c#',
+    '#.P....#...c#....#.*cY#...c#',
     '#......#....#.IK.#....#....#',
     '#......#..e.#....#....#....#',
     '#...........D.#............#',
@@ -994,7 +999,7 @@ const MAPS = [
   ], routes: [[[3,1],[24,1],[24,4],[3,4],[3,1]],[[3,8],[24,8],[24,12],[3,12],[3,8]],[[3,16],[24,16],[24,13],[15,13],[15,16],[3,16]]] },
   { name: 'THE BANK VAULT', depth: 'BANK', theme: 'bank', coins: 10, bots: 3, spd: 1.1, siren: true, rows: [
     '############################',
-    '#.P......#.....!.....$.....#',
+    '#.P......#.....!...*.$.....#',
     '#.#######..#######..######.#',
     '#.#....c#..#....c#..#...c#.#',
     '#.#.....#..#.KI..#..#....#.#',
@@ -1014,7 +1019,7 @@ const MAPS = [
   ], routes: [[[2,1],[25,1],[25,8],[2,8],[2,1]],[[2,9],[25,9],[25,16],[2,16],[2,9]],[[5,4],[14,4],[22,4],[22,13],[14,13],[5,13],[5,4]]] },
   { name: 'THE FOG DOCKS', depth: 'DOCKS', theme: 'docks', coins: 11, bots: 3, spd: 1.15, fog: true, rows: [
     '############################',
-    '#P......c####..c.....####.c#',
+    '#P......c####..c..*..####.c#',
     '#..####..####..####..####..#',
     '#..####..####..####..####..#',
     '#..####........####.e......#',
@@ -1034,7 +1039,7 @@ const MAPS = [
   ], routes: [[[1,1],[26,1],[26,5],[1,5],[1,1]],[[1,10],[26,10],[26,16],[1,16],[1,10]],[[7,5],[19,5],[19,10],[7,10],[7,5]]] },
   { name: 'THE CORE', depth: 'CORE', theme: 'core', coins: 12, bots: 3, spd: 1.25, siren: true, blackout: true, rows: [
     '############################',
-    '#.P....!.....#c......Hc....#',
+    '#.P....!.....#c....*.Hc....#',
     '#.K.####..f.......d.####...#',
     '#...####............####.s.#',
     '#...####....OS......###M...#',
@@ -1068,13 +1073,13 @@ const MAPS = [
     '###......sc..#....c........#',
     '#########Lcfc..#####.BL...E#',
     '#########......#############',
-    '#########......#############',
+    '#########.*....#############',
     '############################',
     '############################'
   ], routes: [[[19,5],[20,5],[20,12],[11,9],[13,8]], [[4,3],[11,7],[13,13],[12,14],[5,10]], [[4,9],[5,9],[12,5],[25,12],[12,12]]] },
   { name: 'THE COLD STORE', depth: 'COLD', theme: 'docks', coins: 13, bots: 3, spd: 1.32, fog: true, rows: [
     '############################',
-    '###############...H..c######',
+    '###############..*H..c######',
     '##########.....Lcc..~.######',
     '##########.G###....!..######',
     '########....######.#########',
@@ -1094,7 +1099,7 @@ const MAPS = [
   ], routes: [[[3,7],[4,7],[18,6],[16,7],[8,12]], [[16,7],[18,3],[18,6],[13,13],[12,14]], [[10,5],[18,8],[11,12],[9,13],[7,14]]] },
   { name: 'THE PENTHOUSE', depth: 'PENTHOUSE', theme: 'city', coins: 14, bots: 4, spd: 1.38, siren: true, blackout: true, rows: [
     '############################',
-    '#########........###########',
+    '#########.......*###########',
     '#P...L###...L....###########',
     '#...Lc###.c...cd.###########',
     '#....f..c.#......Y.#########',
@@ -1127,14 +1132,14 @@ const MAPS = [
     '#......#..G.R.#..C##########',
     '#####.######################',
     '#..G..c#......#..x.c......##',
-    '#.x..........L#...#..c.L..##',
+    '#*x..........L#...#..c.L..##',
     '#f...L.#L...c...c.#......E##',
     '############################',
     '############################'
   ], routes: [[[11,2], [16,2], [22,2], [4,8], [4,14], [11,14], [11,2]], [[16,2], [16,8], [11,8], [4,8], [16,14], [22,14], [16,2]], [[4,2], [16,2], [22,2], [16,8], [11,8], [4,8], [4,2]], [[4,2], [11,2], [11,8], [4,14], [16,14], [22,14], [4,2]]] },
   { name: 'THE SUBLEVEL', depth: 'SUBLEVEL', theme: 'server', coins: 15, bots: 4, spd: 1.42, rows: [
     '############################',
-    '#!...C#.c....#.......c.x.e##',
+    '#!...C#.c....#.......c*x.e##',
     '#.L.c.#.......c.B.x#V.....##',
     '#..x.c...#...C.....#..V...##',
     '#.##############c###.#######',
@@ -1155,7 +1160,7 @@ const MAPS = [
   { name: 'THE CISTERN', depth: 'CISTERN', theme: 'docks', coins: 15, bots: 4, spd: 1.42, fog: true, rows: [
     '############################',
     '#hH..L#.Z....c#L..c...L..M##',
-    '#.c.x.x....#L.c.....#c....##',
+    '#*c.x.x....#L.c.....#c....##',
     '#..~.~#.c....c#.....#..~..##',
     '##c##########.#######~######',
     '#..L.c#.L.....#######..x..##',
@@ -1187,7 +1192,7 @@ const MAPS = [
     '#.#####################.####',
     '#....Y#.........x#......c.##',
     '#...c.......c.#.....L.....##',
-    '#j....#..c.L#......#......##',
+    '#j....#..c.L#......#.....*##',
     '#$c..x#.c...#.....c#c...Ys##',
     '############################',
     '############################'
@@ -1206,7 +1211,7 @@ const MAPS = [
     '#c.L....#.H..#.x.x..#...N.##',
     '#.......#..c.#L.....#....c##',
     '#####.#############.########',
-    '#............N#....c.H.M..##',
+    '#*...........N#....c.H.M..##',
     '#.....H.######....L.#.....##',
     '#d..c...######......#L.c.E##',
     '############################',
@@ -1228,7 +1233,7 @@ const MAPS = [
     '#...#...##.#...#.c..#.....##',
     '#...#...O#....L#.#L......c##',
     '#.c...#.##.#..##..c.#..c..##',
-    '#..##x......#...c#..##....##',
+    '#..##x......#...c#*.##....##',
     '############################',
     '############################'
   ], routes: [[[2,3], [2,14], [18,14], [23,14], [12,9]], [[2,3], [7,3], [2,9], [7,14], [12,14], [23,14]], [[23,14], [12,14], [2,9], [2,3], [12,9]], [[2,14], [2,9], [12,14], [18,9], [12,9]]] },
@@ -1248,13 +1253,13 @@ const MAPS = [
     '#...#c...O...#.c##..c##...##',
     '##.....#....##.....#.#.cc.##',
     '#.O#c..#.Y...#.x#d##..L...##',
-    '#.cxL..#....V....#......#.##',
+    '#.cxL..#....V....#.*....#.##',
     '############################',
     '############################'
   ], routes: [[[23,14], [23,8], [10,14], [4,14], [23,2]], [[10,14], [4,14], [4,8], [23,14], [10,8]], [[10,2], [4,2], [4,14], [10,14], [23,8], [23,2]], [[10,8], [23,8], [23,14], [10,14], [4,14], [23,2]]] },
   { name: 'THE SPIRE', depth: 'SPIRE', theme: 'city', coins: 18, bots: 4, spd: 1.5, fog: true, siren: true, blackout: true, rows: [
     '############################',
-    '#....#YMc......#.#...V....##',
+    '#....#YMc......#.#*..V....##',
     '#....#...#.#..c#...#.#.#.###',
     '#.x......f.#.....##..#.cY.##',
     '###.#####################.##',
@@ -1288,6 +1293,9 @@ let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
 /* made: they have positively identified you and are coming. Not a death
    sentence - the middle of the story rather than the end of it. */
 let made = false, madeT = 0;
+/* 'in' is the quiet half, 'out' is the escape. The prize is the hinge between
+   them, and the only thing that opens the exit. */
+let phase = 'in', prize = null, heldPrize = false, prizeT = 0;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
 let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
@@ -1856,6 +1864,7 @@ function loadMap(idx) {
   const rows = M.rows;
   grid = new Uint8Array(T.COLS * T.ROWS);
   coinList = []; emitters = []; propsXY = []; powerups = [];
+  prize = null;   /* before the tile loop, or the tiles fill it and this empties it */
   doors = []; keycards = [];
   plates = [];
   mirrors = []; mirrorBeam = null;
@@ -1896,6 +1905,7 @@ function loadMap(idx) {
     if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
     if (ch === 'B') powerups.push({ x: cx, y: cy, kind: 'B', got: false, ph: rand(0, TAU) });
     if (ch === 'R' || ch === 'Z' || ch === 'I') powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
+    if (ch === '*') prize = { gx: x, gy: y, x: cx, y: cy, taken: false, ph: rand(0, TAU) };
     if (ch === 'x') propsXY.push({ x: cx, y: cy, k: TH.props[irand(TH.props.length)], r: rand(0, TAU) });
   }
   emitters.push({ x: exitPt.x, y: exitPt.y, r: 95, col: '#4dffb8', flick: rand(0, 9), kind: 'exit', base: .7 });
@@ -1954,7 +1964,8 @@ function loadMap(idx) {
 
   coinsTotal = coinList.length; coins = 0; realCoins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
-  meter = 0; seenTimer = 0; made = false; madeT = 0; exitOpen = false; exitFull = false; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
+  meter = 0; seenTimer = 0; made = false; madeT = 0; exitOpen = false; exitFull = false;
+  phase = 'in'; heldPrize = false; prizeT = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
   /* a wipe left over from the previous floor would darken the new one */
   if (mode !== 'playing') wipeT = 0;
@@ -2263,6 +2274,11 @@ function coinRatio() {
 /* D2 made a full haul 1.55x louder to carry, which is what makes the walk back
    to the door the tense part. The muffler buys that back for one floor, and
    nothing else: it is worth most exactly when you are carrying everything. */
+/* How loaded you are, 0 to 1. Noise already scaled with this; speed now does
+   too, so choosing to clear one more room is a decision the escape has to pay
+   for rather than a free score bonus. */
+const haulK = () => (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
+const haulDrag = () => 1 - T.HAUL_DRAG * haulK();
 const haulNoise = () => hushOn ? 1
   : 1 + T.HAUL_NOISE * (MOD().haul || 1) * (coinsTotal ? Math.min(1, coins / coinsTotal) : 0);
 
@@ -2366,7 +2382,8 @@ function update(dt) {
     stickMag = mag;
   } else if (mvx || mvy) { const l = Math.hypot(mvx, mvy); mag = sprinting ? 1 : 0.62; mvx /= l; mvy /= l; }
   player.tier = sprinting ? 2 : mvx || mvy ? 1 : 0;
-  const spd = sprinting ? T.SPRINT : (sticks.L && mag > 0 ? (mag < T.STICK_WALK ? T.SNEAK : T.WALK) : (careful ? T.WALK : (mvx || mvy ? T.WALK : 0)));
+  const spd = (sprinting ? T.SPRINT : (sticks.L && mag > 0 ? (mag < T.STICK_WALK ? T.SNEAK : T.WALK) : (careful ? T.WALK : (mvx || mvy ? T.WALK : 0))))
+    * haulDrag();
   const spdOut = spd * (puShoe > 0 ? T.PU_SHOE_MULT : 1);
   player.vx = mvx * spdOut; player.vy = mvy * spdOut;
   /* conveyor currents shove you sideways */
@@ -2477,10 +2494,11 @@ function update(dt) {
       sfx.pickup(c, coinRatio());
       burst(c.x, c.y, glowGoldS, 12, 150);
       makeNoise(c.x, c.y, T.NOISE_PICKUP);
-      const need = Math.max(1, Math.ceil(coinsTotal * T.EXIT_EARLY));
-      if (!exitOpen && realCoins >= need) {
-        exitOpen = true; unlockFlash = 1; sfx.unlock();
-        toast('THE DOOR IS OPEN — THE REST IS YOUR CALL', 2.6);
+      /* Coins used to open the door here. They do not any more - the prize does -
+         so this only tells you the floor has nothing else worth stopping for. */
+      if (!exitFull && realCoins >= coinsTotal) {
+        exitFull = heldPrize;
+        toast(heldPrize ? 'EVERY COIN — GO' : 'EVERY COIN — NOW FIND THE PRIZE', 2.6);
       }
       if (!exitFull && realCoins >= coinsTotal) {
         exitFull = true; unlockFlash = 1; sfx.unlock();
@@ -2588,6 +2606,18 @@ function update(dt) {
     }
   }
   for (const f of safes) if (f.flash > 0) f.flash = Math.max(0, f.flash - dt * 1.4);
+
+  /* The prize. Deliberately the same held, committed action as a safe, because
+     the player already knows that verb - what is new is what happens after. */
+  if (prize && !prize.taken) {
+    const near = Math.hypot(prize.x - player.x, prize.y - player.y) < T.PRIZE_R;
+    if (!near) { if (prizeT !== 0) { prizeT = 0; hud(); } }
+    else if (!steadyHands()) prizeT = Math.max(0, prizeT - dt * 2);
+    else {
+      prizeT += dt;
+      if (prizeT >= T.PRIZE_T) { takePrize(); prizeT = 0; }
+    }
+  }
 
   /* doors: a card opens one instantly, otherwise you stand still and pick it */
   const shut = nearestShutDoor();
@@ -3272,7 +3302,7 @@ function updateMeter(dt) {
       : (emitters.some(e => e.kind === 'search' && e.cam && !e.dead
           && inFan(player.x, player.y, e.x, e.y, e.ang, 0.13, e.r, e.rays, 16)) ? 'camera' : 'search');
     meter = Math.min(1, meter + T.SEE_FILL * D().fill * (MOD().fill || 1) * mult * dt);
-    if (wasBelow && meter >= 0.55 && !searchOnly) bumpAlert();
+    if (wasBelow && meter >= 0.55 && !searchOnly) { fSeen = true; bumpAlert(); }
     redPulse = Math.max(redPulse, meter);
     if (meter >= 1) identify();
   } else {
@@ -3329,6 +3359,7 @@ function vibrateFor(m) { if (m > 0.55 && navigator.vibrate) { vibT -= 0.016; if 
 /* The hunt starts. Deliberately not raiseAlarm: this is the drones knowing
    where you are, not the building screaming - the alarm is the take's job. */
 function identify() {
+  fSeen = true;
   meter = 1;
   madeT = 0;
   if (made) return;
@@ -3344,6 +3375,31 @@ function identify() {
   addShake('plate', player.x, player.y);
   sfx.ping(1);
   toast(told > 1 ? 'THEY HAVE YOU — ' + told + ' COMING' : 'THEY HAVE YOU — MOVE', 2.4);
+}
+
+/* The hinge. Everything before this is preparation; everything after is a
+   chase you chose to start. */
+function takePrize() {
+  if (!prize || prize.taken) return;
+  prize.taken = true;
+  heldPrize = true;
+  exitOpen = true;      /* the prize IS the key - say so here, not somewhere else */
+  exitFull = realCoins >= coinsTotal;
+  phase = 'out';
+  score += T.PRIZE_SCORE;
+  burst(prize.x, prize.y, glowGoldS, 30, 260);
+  addShake('crate', prize.x, prize.y);
+  /* the building wakes: this is an alarm, not one drone noticing something */
+  /* The building wakes - it does not hand them your position. Identifying you
+     here would mean no floor could ever be ghosted again, and the perfect heist
+     is the thing worth chasing. They converge on the empty plinth. */
+  raiseAlarm(prize.x, prize.y, T.PRIZE_NOISE, null);
+  for (const b of bots) {
+    if (b.kind === 'sentry') continue;
+    b.state = 'invest'; b.stateT = 0; b.lastX = prize.x; b.lastY = prize.y;
+  }
+  toast('YOU HAVE IT — GET OUT', 3);
+  hud();
 }
 
 function caught() {
@@ -3383,12 +3439,16 @@ function caught() {
 function nextMap() {
   const last = mapIdx >= MAPS.length - 1;
   /* you escaped either way; the bonus is what leaving early costs you */
-  if (exitFull) score += T.CLEAR_BONUS;
+  /* Paid for getting out with the prize. It used to require every coin on the
+     floor, which is exactly the exhaustive sweep this redesign is trying to
+     stop rewarding. */
+  if (heldPrize) score += T.CLEAR_BONUS;
   /* and what you kept on the way through */
   const kept = CLEAN.filter(c => c.held());
   let cleanPay = kept.length * T.CLEAN_EACH;
   /* the whole floor, taken without being seen, heard or noticed */
-  const ghost = kept.length === CLEAN.length && exitFull;
+  /* a ghost is a floor nobody knew you were on - not a floor you vacuumed */
+  const ghost = kept.length === CLEAN.length && heldPrize;
   if (ghost) {
     cleanPay += T.CLEAN_ALL;
     ghostStreak++;
@@ -4035,6 +4095,7 @@ function render() {
   for (const pl of plates) drawPlate(pl);
   for (const cr of crates) if (!cr.broken) drawCrate(cr);
   for (const f of safes) drawSafe(f);
+  if (prize && !prize.taken) drawPrize(prize);
   for (const j of jams) drawJam(j);
   for (const m of mirrors) drawMirror(m);
   for (const i of glassList) drawGlass(i);
@@ -4649,6 +4710,54 @@ function drawJam(j) {
   ctx.restore();
 }
 
+
+/* The one thing on the floor worth the trip. It has to read as different in
+   kind from a coin, not merely bigger - a coin is currency, this is the job. */
+function drawPrize(p) {
+  const wob = Math.sin(time * 1.6 + p.ph) * 2.2;
+  const k = prizeT / T.PRIZE_T;
+  ctx.save();
+  ctx.translate(p.x, p.y + wob);
+
+  /* a standing halo, so it is findable from across a dark room */
+  const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, 34);
+  halo.addColorStop(0, 'rgba(255,214,120,.42)');
+  halo.addColorStop(1, 'rgba(255,190,80,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.fill();
+
+  /* the plinth it is sitting on */
+  ctx.fillStyle = 'rgba(14,11,22,.85)';
+  ctx.beginPath(); ctx.ellipse(0, 9, 13, 4.5, 0, 0, TAU); ctx.fill();
+
+  /* a cut stone: four facets, so a slow turn catches the light unevenly */
+  ctx.rotate(time * 0.5 + p.ph);
+  const r = 9.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -r); ctx.lineTo(r * 0.72, 0); ctx.lineTo(0, r); ctx.lineTo(-r * 0.72, 0);
+  ctx.closePath();
+  const face = ctx.createLinearGradient(-r, -r, r, r);
+  face.addColorStop(0, '#fff0c4');
+  face.addColorStop(0.5, '#ffd166');
+  face.addColorStop(1, '#c9962f');
+  ctx.fillStyle = face; ctx.fill();
+  ctx.strokeStyle = 'rgba(60,40,10,.75)'; ctx.lineWidth = 1.1; ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.moveTo(-r * 0.72, 0); ctx.lineTo(r * 0.72, 0);
+  ctx.strokeStyle = 'rgba(255,247,220,.5)'; ctx.lineWidth = 0.9; ctx.stroke();
+  ctx.restore();
+
+  /* the take, drawn as a ring closing on it rather than a bar somewhere else -
+     your eyes are here, so the progress belongs here too */
+  if (k > 0) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.strokeStyle = 'rgba(255,209,102,.9)';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(0, 0, 21, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
+    ctx.restore();
+  }
+}
 
 function drawSafe(f) {
   const S = T.TILE, px = f.gx * S, py = f.gy * S;
@@ -5589,7 +5698,9 @@ function setName(v) {
 /* One notch per incident, with a cooldown so a single scare cannot stack, and
    it never resets until the run does. */
 function bumpAlert() {
-  fSeen = true;
+  /* deliberately does NOT set fSeen. The building being on edge and a drone
+     having looked at you are different facts, and only the second one should
+     cost you the clean bonus. */
   if (alertCool > 0 || alertLvl >= T.ALERT_MAX) return;
   alertLvl++; alertCool = T.ALERT_COOL;
   toast('ALERT LEVEL ' + alertLvl + ' — THEY ARE FASTER NOW', 2.2);
@@ -5793,8 +5904,9 @@ function tossCoin() {
   coinList.push({ x: tx, y: ty, ph: rand(0, TAU), got: false, seen: true });
   makeNoise(tx, ty, T.TOSS_NOISE);
   sfx.pickup(); burst(tx, ty, glowGoldS, 10, 130);
-  exitOpen = realCoins >= Math.max(1, Math.ceil(coinsTotal * T.EXIT_EARLY));
-  exitFull = realCoins >= coinsTotal;
+  /* spending a coin cannot shut the door - only the prize decides that - but it
+     can cost you the clean sweep */
+  exitFull = heldPrize && realCoins >= coinsTotal;
   hud();
   return true;
 }
@@ -6775,7 +6887,7 @@ window.__fp = {
   get mode() { return mode; }, get mapIdx() { return mapIdx; }, get loop() { return loop; },
   get coins() { return coins; }, get coinsTotal() { return coinsTotal; }, get meter() { return meter; },
   get exitOpen() { return exitOpen; }, get exitFull() { return exitFull; },
-  exitNeed() { return Math.max(1, Math.ceil(coinsTotal * T.EXIT_EARLY)); }, get blackout() { return blackout; }, get score() { return score; },
+  exitNeed() { return coinsTotal; }, get blackout() { return blackout; }, get score() { return score; },
   get aim() { return player.aim; }, get pos() { return { x: player.x, y: player.y }; },
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
@@ -6860,6 +6972,10 @@ window.__fp = {
 },
   setMeter(v) { meter = v; },
   get made() { return made; }, setMade(v) { made = !!v; madeT = 0; },
+  get phase() { return phase; }, get heldPrize() { return heldPrize; },
+  prizeAt() { return prize ? { x: prize.x, y: prize.y, taken: prize.taken } : null; },
+  prizeT() { return +prizeT.toFixed(3); }, takePrize() { takePrize(); },
+  prizeCount() { return MAPS.filter(m => m.rows.join('').includes('*')).length; },
   identify() { identify(); }, contactR() { return T.CONTACT_R; },
   hunters() { return bots.filter(b => b.state === 'chase').length; }, forceBlackout() { blackout = 3.6; },
   runLog() { return runLog.slice(); }, caughtBy() { return caughtBy; },
@@ -6897,7 +7013,7 @@ window.__fp = {
   forceSiren() { sirenT = 5; nextSiren = 1e9; },
   forceFog() { fogT = 6; nextFog = 1e9; },
   aimStick(dx, dy) { if (sticks.R) { sticks.R.dx = dx; sticks.R.dy = dy; } },
-  clearCoins() { for (const c of coinList) if (!c.got) { c.got = true; coins++; if (!c.bonus) realCoins++; } if (realCoins >= coinsTotal) { exitOpen = true; exitFull = true; } hud(); },
+  clearCoins() { for (const c of coinList) if (!c.got) { c.got = true; coins++; if (!c.bonus) realCoins++; } takePrize(); if (realCoins >= coinsTotal) { exitFull = true; } exitOpen = true; hud(); },
   /* light-gated coins */
   get coinsLit() { return coinList.filter(c => !c.got && coinLight(c) === 'lit').length; },
   get coinsDark() { return coinList.filter(c => !c.got && coinLight(c) === 'dark').length; },
@@ -6914,6 +7030,8 @@ window.__fp = {
     return v;
   },
   get walkSpeed() { return T.WALK; }, get sprintSpeed() { return T.SPRINT; },
+  haulDrag() { return +haulDrag().toFixed(3); }, haulK() { return +haulK().toFixed(3); },
+  goldLeft() { return coinList.filter(c => !c.got && !c.bonus).length; },
   get searchLit() { return searchLit; },
   searchPoint() { const e = emitters.find(x => x.kind === 'search'); return e ? { x: e.x, y: e.y, ang: e.ang, r: e.r } : null; },
   /* aim is driven by the mouse world point each frame, so set that, not player.aim */
