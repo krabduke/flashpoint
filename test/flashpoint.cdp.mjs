@@ -2790,7 +2790,7 @@ ok('and claims nothing on a floor that is quiet', pau.hazHouse.length === 0, JSO
    growing a gadget, which is what caught the tripwire missing from here - and
    again when the three heist tools took it from fourteen rows to seventeen */
 ok('the control list agrees with the item bar',
-  pau.keysAgree === true && pau.rows === pau.want && pau.rows === 18,
+  pau.keysAgree === true && pau.rows === pau.want && pau.rows === 19,
   `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows} of ${pau.want} wanted`);
 ok('pausing again re-reads the run instead of replaying the last look',
   pau.refreshed.score === '9999' && pau.refreshed.gold === '7/12', JSON.stringify(pau.refreshed));
@@ -5330,6 +5330,141 @@ ok('nothing starts on your doorstep on any floor of any loop',
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
 
+/* ---- jewels and the floor plan ----
+   Loot you may leave, and knowledge you must walk for. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const ltx = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; meter = 0; alertLvl = 0; blackout = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  o.perFloor = [];
+  for (let i = 0; i < MAPS.length; i++) { mapIdx = i; loadMap(i);
+    o.perFloor.push({ j: __fp.jewelCount(), w: __fp.planCount() }); }
+  mapIdx = 1; loop = 0; loadMap(1); invuln = 9e9; bots.length = 0;
+
+  /* a jewel is worth four coins and heard further than one */
+  const j = __fp.jewelAt(0);
+  o.hasJewel = !!j;
+  const c0 = __fp.coins, s0 = __fp.score;
+  noise.length = 0;
+  __fp.teleport(j.x, j.y);
+  for (let i = 0; i < 4; i++) update(1 / 60);
+  o.jewel = { coins: __fp.coins - c0, score: __fp.score - s0,
+              noise: noise.reduce((m, n) => Math.max(m, n.r), 0), got: __fp.jewelAt(0).got };
+  /* against a plain coin picked up the same way */
+  const cc = coinList.find(c => !c.got && !c.bonus);
+  const c1 = __fp.coins; noise.length = 0;
+  __fp.teleport(cc.x, cc.y);
+  for (let i = 0; i < 4; i++) update(1 / 60);
+  o.coin = { coins: __fp.coins - c1, noise: noise.reduce((m, n) => Math.max(m, n.r), 0) };
+
+  /* the plan: knowledge you have to walk to */
+  mapIdx = 1; loadMap(1); invuln = 9e9; bots.length = 0;
+  o.planBefore = __fp.hasPlan();
+  const w = __fp.planAt(0);
+  __fp.teleport(w.x, w.y);
+  for (let i = 0; i < 4; i++) update(1 / 60);
+  o.planAfter = __fp.hasPlan();
+  o.mode = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the loot block ran at all', !ltx.threw, ltx.threw || 'ok');
+ok('every floor after the first has something optional worth the detour',
+  ltx.perFloor.slice(1).every(f => f.j >= 1),
+  JSON.stringify(ltx.perFloor.map(f => f.j)));
+ok('and every floor hides its own plan', ltx.perFloor.every(f => f.w === 1),
+  JSON.stringify(ltx.perFloor.map(f => f.w)));
+ok('a jewel pays four coins', ltx.hasJewel && ltx.jewel.coins === 4 && ltx.jewel.got === true,
+  JSON.stringify(ltx.jewel));
+/* the trade: it is worth more and it carries further */
+ok('and is heard further than a coin is',
+  ltx.jewel.noise > ltx.coin.noise, `jewel ${ltx.jewel.noise} vs coin ${ltx.coin.noise}`);
+ok('the plan is not yours until you walk to it',
+  ltx.planBefore === false && ltx.planAfter === true,
+  `${ltx.planBefore} -> ${ltx.planAfter}`);
+ok('the loot block measured a running game', ltx.mode === 'playing', ltx.mode);
+
+/* ---- lockers ----
+   The chase needed somewhere to go. A locker breaks line of sight instantly,
+   which would be a free win if it were free - so whether it saves you was
+   decided a moment earlier, by whether anything was looking. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const lock = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; meter = 0; alertLvl = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  mapIdx = 0; loop = 0; loadMap(0); invuln = 9e9;
+  o.count = __fp.lockerCount();
+  o.everyFloor = (() => { let least = 99;
+    for (let i = 0; i < MAPS.length; i++) { mapIdx = i; loadMap(i);
+      least = Math.min(least, __fp.lockerCount()); }
+    mapIdx = 0; loadMap(0); invuln = 9e9; return least; })();
+
+  /* unseen: a drone parked on top of the locker cannot find you */
+  const l = __fp.lockerAt(0);
+  if (!l) return JSON.stringify({ threw: 'floor 0 has no locker' });
+  __fp.teleport(l.x, l.y);
+  const b = bots.find(x => x.kind === 'drone');   /* a listener has no eyes; it is not a sight control */
+  /* A locker sits in a nook with two open sides, so "thirty pixels to the right"
+     is often solid wall - and a drone standing inside a wall has no line of
+     sight to anything. Put it on a cell that is actually open. */
+  const step = [[40, 0], [-40, 0], [0, 40], [0, -40]]
+    .find(([dx, dy]) => !isWall(l.x + dx, l.y + dy)) || [40, 0];
+  b.x = l.x + step[0]; b.y = l.y + step[1]; b.state = 'patrol';
+  /* a drone that is not looking at you cannot see you, locker or no locker -
+     the control has to be a drone that genuinely has you */
+  b.face = Math.atan2(player.y - b.y, player.x - b.x);
+  blackout = 0;   /* a blackout left running by an earlier block blinds it too */
+  o.seenBefore = botSees(b);
+  /* two wrong guesses is enough: report every gate botSees actually applies */
+  o.why = (() => {
+    const dx = player.x - b.x, dy = player.y - b.y, d = Math.hypot(dx, dy);
+    return { kind: b.kind, d: Math.round(d), range: Math.round(botRange(b)),
+      off: +Math.abs(angDiff(Math.atan2(dy, dx), b.face)).toFixed(2),
+      half: +(b.half || 0).toFixed(2), los: losClear(b.x, b.y, player.x, player.y),
+      smoke: smokeAcross(b.x, b.y, player.x, player.y),
+      blackout, hid: __fp.hiding().inLocker, state: b.state };
+  })();
+  o.hid = __fp.hide();
+  o.hiding = __fp.hiding();
+  o.seenWhileHidden = botSees(b);
+  for (let i = 0; i < 120; i++) update(1 / 60);
+  o.afterWaiting = { mode, hiding: __fp.hiding() };
+
+  /* seen: something that watched you get in comes and opens it */
+  __fp.hide();
+  mapIdx = 0; loadMap(0); invuln = 9e9; mode = 'playing';
+  const l2 = __fp.lockerAt(0);
+  __fp.teleport(l2.x, l2.y);
+  const b2 = bots.find(x => x.kind === 'drone');
+  b2.x = l2.x + 26; b2.y = l2.y; b2.state = 'chase';
+  __fp.setMade(true);
+  o.hid2 = __fp.hide();
+  o.seenGettingIn = __fp.hiding().seenGettingIn;
+  invuln = 0;
+  for (let i = 0; i < 120; i++) update(1 / 60);
+  o.caughtInIt = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the locker block ran at all', !lock.threw, lock.threw || 'ok');
+ok('every floor has somewhere to hide', lock.everyFloor >= 1, `fewest on any floor: ${lock.everyFloor}`);
+ok('a drone can see you standing beside one', lock.seenBefore === true,
+  JSON.stringify(lock.why));
+ok('and cannot once you are inside it',
+  lock.hid === true && lock.seenWhileHidden === false, JSON.stringify(lock.hiding || null));
+ok('hiding unseen keeps you', !!lock.afterWaiting && lock.afterWaiting.mode === 'playing'
+  && lock.afterWaiting.hiding.inLocker === true, JSON.stringify(lock.afterWaiting));
+/* the gamble: it is only cover if nothing watched you take it */
+ok('but something that watched you get in comes and opens it',
+  lock.hid2 === true && lock.seenGettingIn === true && lock.caughtInIt === 'caught',
+  `seen=${lock.seenGettingIn} ended=${lock.caughtInIt}`);
+
 /* ---- the shift change, and where they think you are ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
@@ -5780,7 +5915,7 @@ const contact = JSON.parse(await evl(`(() => {
   mapIdx = 0; loadMap(0); __fp.setMade(false);
   mode = 'playing'; invuln = 0;
   __fp.teleport(spawnPt.x, spawnPt.y);
-  const b = bots.find(x => x.kind !== 'sentry');
+  const b = bots.find(x => x.kind === 'drone');   /* a listener has no eyes; it is not a sight control */
   const before = mode;
   /* stand a drone on top of the player: nothing else should be needed */
   b.x = player.x; b.y = player.y;

@@ -667,6 +667,7 @@
   <div id="jobCard" class="overlay hidden">
     <div class="card">
       <p class="floor-eyebrow">The fence is waiting</p>
+      <p id="jobBrief" class="hint" style="max-width:40ch;margin:2px auto 10px;font-style:italic"></p>
       <h1 id="jobTitle" style="font-size:clamp(24px,5vw,42px)">CONTRACT CLEAR</h1>
       <div class="stats">
         <div class="stat"><b id="jobTake" class="gold">0</b><span>ON THE TABLE</span></div>
@@ -807,6 +808,13 @@ const T = {
   /* the beat expires: patrols swap routes partway through a floor, so a memorised
      loop stops being free without turning the quiet act into a stopwatch */
   SHIFT_AT: 52, SHIFT_JITTER: 14,
+  /* A locker breaks line of sight instantly, which would be a free win if
+     nothing had seen you use it. Something that did comes and opens it. */
+  LOCKER_R: 40, LOCKER_OPEN_R: 34, LOCKER_GRACE: 0.45,
+  /* a jewel is four coins that rings like six - greed with the volume up */
+  JEWEL_VALUE: 4, JEWEL_NOISE: 1.6,
+  /* the blueprint is knowledge, not power: walls only, never a drone */
+  BLUEPRINT_R: 30,
   /* a torch in a blacked-out building is the most conspicuous thing in it.
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
@@ -953,6 +961,44 @@ const angDiff = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if
 let seed = 1; const srand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 
 /* ---------- maps: # wall  . floor  P spawn  E exit  c coin  L lamp  N neon  x prop ---------- */
+/* One named thing per floor, and the line that makes it worth the trip. Written
+   to be read in the two seconds a floor card is on screen, so each is a noun and
+   a consequence - never a paragraph. */
+const PRIZES = [
+  ['THE ASHGROVE LOCKET',   'Somebody still wears the other half.'],
+  ['THE BONDED CRATE',      'Sealed in Rotterdam. Never opened here.'],
+  ['THE KESTREL LEDGER',    'Names, dates, and what each one cost.'],
+  ['WARD SIX KEYRING',      'Opens rooms the ward pretends it closed.'],
+  ['THE VERNAY DIAMOND',    'Behind glass since 1908. Lit from below.'],
+  ['THE COLD KEY',          'One certificate. Every door downstream of it.'],
+  ['DEPOSIT 114',           'Unclaimed for thirty years. Still paid for.'],
+  ['THE MANIFEST',          'What came off the boat, and what did not.'],
+  ['THE CORE SAMPLE',       'Drawn from under the city. Nobody says from where.'],
+  ['STUDY OF A THIEF',      'A small oil. The face has been scraped away.'],
+  ['THE VIAL',              'Kept at four degrees. Do not let it warm.'],
+  ['BEARER BONDS',          'Worth whatever the hand holding them says.'],
+  ['THE SUNSTONE',          'It throws light it was never given.'],
+  ['THE ROOT CERTIFICATE',  'Sign anything. Be anyone. For a while.'],
+  ['THE DROWNED RELIQUARY', 'Down here since the flood. Someone kept paying rent.'],
+  ['LEDGER OF ACCOUNTS',    'Not what was owed. Who was owed.'],
+  ['THE NIGHTINGALE',       'A bird that only sings for one family.'],
+  ['THE CRUCIBLE',          'Still warm. It has never been allowed to cool.'],
+  ['THE LAST COPY',         'Every other one was collected and burned.'],
+  ['THE SPIRE KEY',         'The building was built around the lock.']
+];
+const prizeOf = (i) => PRIZES[i] || ['THE PRIZE', 'Worth the trip.'];
+
+/* Five contracts, five clients, one night. The brief is what you are told;
+   what you find is the game's business. */
+const CONTRACTS = [
+  ['SMALL THINGS FIRST', 'A woman who will not give her name pays cash for keepsakes. Start where nobody is watching.'],
+  ['THE COLLECTION',     'The same buyer, bolder now. Glass cases and card readers, and a fee that says he expects you to fail.'],
+  ['WHAT THE CITY KEEPS','Someone upstairs wants the things this city files away. He does not say why, and the money does not ask.'],
+  ['DEEPER WATER',       'The fence stops meeting you in daylight. The buildings stop having lobbies.'],
+  ['THE LONG NIGHT',     'Last four. Whatever you are carrying by dawn is what you were.']
+];
+const contractOf = (j) => CONTRACTS[Math.min(j, CONTRACTS.length - 1)];
+
 const MAPS = [
   { name: 'THE HOUSE', depth: 'HOUSE', theme: 'house', coins: 5, bots: 1, rows: [
     '############################',
@@ -961,97 +1007,97 @@ const MAPS = [
     '#..........c...##...####..L#',
     '#....####......##...#..#...#',
     '#....#..#......##...#..#####',
-    '#....####..L...x....#......#',
-    '#...................#..c...#',
+    '#....####..L...x....#.....A#',
+    '#...............W...#..c...#',
     '####.########.#######......#',
     '#....#......#......L...#####',
     '#.c..#..x...#..#######.....#',
     '#....#......#..#.....#..c..#',
     '#....#....L....#..x..#.....#',
     '#....########..#.....#..####',
-    '#..L.........f.#.....#.....#',
-    '#..............#.....#....E#',
+    '#..L.........f.#.....#....A#',
+    '#..............#....A#....E#',
     '############################',
     '############################'
   ], routes: [[[3,2],[12,2],[22,2],[22,9],[13,15],[4,15],[4,10],[3,2]]] },
   { name: 'THE WAREHOUSE', depth: 'WAREHOUSE', theme: 'warehouse', coins: 6, bots: 1, rows: [
     '############################',
-    '#.P.....x..L......*x....c..#',
+    '#.P.....x..L......*x....c.A#',
     '#####.######.######.######.#',
     '#..c..............#........#',
     '#.#####.#####.###.V.####.#.#',
     '#.....#x#L....#...#......#.#',
     '###.#.###..####.###.####.#.#',
     '#...#...#....#..#....#...#.#',
-    '#.####.####.##.#..x..#.###.#',
+    '#.####.####.##.#.Wx..#.###A#',
     '#.#c.....#.s...#.....#.....#',
     '#.#.#######.####.#######.#.#',
     '#.#.#....#..x#...#c...#..#.#',
     '#.#.V.LO.#....#..#.LO.#.##.#',
     '#...#....#..O..#.#....#....#',
     '#.###.####..x..#.#.####c##.#',
-    '#....c..........Z...#..x.E.#',
-    '#####.#####.####.###.#.....#',
+    '#....c..........Z...#J.x.E.#',
+    '#####.#####.####.###.#....A#',
     '############################'
   ], routes: [[[3,3],[24,3],[24,9],[3,9],[3,13],[24,13],[24,15],[3,15],[3,3]]] },
   { name: 'NEON HEIGHTS', depth: 'CITY', theme: 'city', coins: 7, bots: 2, rows: [
     '############################',
-    '#.Pc..........#...L*......c#',
+    '#.Pc..........#...L*.....Ac#',
     '#.d.######..#####..#######.#',
-    '#...######..#####..#######.#',
+    '#...######..#####.W#######.#',
     '#...######..####M..#######.#',
     '#...N......c..#......x....N#',
     '#L....x.......#..f.........#',
-    '#...######.######..#######.#',
+    '#...######.######..#######A#',
     '#...######..#####..#######.#',
     '##.########.##############.#',
     '#c........N..#x...R.......c#',
     '#.............#.......x..L##',
-    '#...######..#####..M######.#',
+    '#...######..#####..M######J#',
     '#...######..#####..#######.#',
-    '#...######..#####..#######.#',
+    '#...######..#####..#######A#',
     '#..c....x.....#..N........c#',
     '#..........L#.............E#',
     '############################'
   ], routes: [[[2,2],[2,9],[2,15],[9,15],[10,10],[10,6],[2,6],[2,2]],[[26,16],[26,10],[17,10],[17,5],[24,5],[26,5],[26,16]]] },
   { name: 'THE ABANDONED', depth: 'WARD', theme: 'ward', coins: 8, bots: 2, rows: [
     '############################',
-    '#.P...x..#.....N#...x...c.*#',
+    '#.P...x..#.....N#.W.x...c.*#',
     '#.K......#..x...#.~~.......#',
     '#..####..#......#.~.####...#',
     '#..#..c..#.e..x.#.I.#..L..x#',
     '#..#.....#......#...#......#',
     '#..####..##V#D###...#..#####',
-    '#......#....H......x#c.....#',
+    '#......#....H......x#c....J#',
     '####.#####.########.####.###',
-    '#..c......#x..L..#....N....#',
+    '#..c......#x..L..#....N...A#',
     '#..#####..#......#...x.....#',
     '#.......#.#.######..######.#',
-    '#.c...#...#.#...x.#......x.#',
+    '#.c...#...#.#...x.#...A..x.#',
     '#...f.#...V.#...#.#####.####',
     '#.....#####.#.Ec#....c.....#',
     '#..x........#...#.###..x.~~#',
-    '#....L...c..#...#........~.#',
+    '#....L...c..#...#........~A#',
     '############################'
   ], routes: [[[3,1],[24,1],[24,7],[13,7],[13,10],[3,11],[3,7],[3,1]],[[22,9],[16,9],[15,13],[15,16],[22,16],[25,9],[25,16],[19,16],[15,16],[15,13],[20,12],[25,12],[25,9]]] },
   { name: 'THE MUSEUM', depth: 'MUSEUM', theme: 'museum', coins: 9, bots: 2, spd: 1.0, rows: [
     '############################',
-    '#.P..........!#....*....x..#',
+    '#.P..........!#....*....x.A#',
     '#....####..####..####c.....#',
     '#....####C.####..####......#',
     '#....####..M###..####......#',
-    '#...m....#....!R.$.........#',
+    '#...m....#....!R.$J........#',
     '#....####..####..####......#',
     '#....####..####..####..S..##',
     '#.c..####c.#####c####....c.#',
-    '##.##.....#...#Z#....#####.#',
+    '##.##.....#...#Z#....#####A#',
     '#..S..........#......s.....#',
     '#....####..####..####......#',
-    '#....####..####..####......#',
+    '#....####..####.W####......#',
     '#....M###..####..####......#',
     '#.............#............#',
     '#...c......c..#...c......c.#',
-    '#.......x.....#...x.......E#',
+    '#.......x.....#A..x.......E#',
     '############################'
   ], routes: [[[2,2],[25,2],[25,15],[2,15],[2,9],[13,9],[13,1],[2,2]],[[13,5],[3,5],[3,12],[24,12],[24,5],[13,5]]] },
   { name: 'THE SERVER FARM', depth: 'SERVER', theme: 'server', coins: 10, bots: 2, spd: 1.05,
@@ -1060,44 +1106,44 @@ const MAPS = [
     '#.P....#...c#....#.*cY#...c#',
     '#......#....#.IK.#....#....#',
     '#......#..e.#....#....#....#',
-    '#...........D.#............#',
+    '#...........D.#...W........#',
     '#......V....#.f..#..O.#....#',
     '#......#....#....#...C#....#',
     '#......#....#....#....#...c#',
-    '#......c....!.#.c..........#',
+    '#......c....!.#.c.....A....#',
     '#############..##V##.####.##',
     '#......#....#....#....#....#',
     '#......#....#....#....#....#',
-    '#............#...........O.#',
+    '#...........J#...........OA#',
     '#......#....#....#....#....#',
     '#......#....#....#....#....#',
     '#......#....#....#....#...c#',
-    '#c........c.!.#...c.......E#',
+    '#c........c.!.#...c...A...E#',
     '############################'
   ], routes: [[[3,1],[24,1],[24,4],[3,4],[3,1]],[[3,8],[24,8],[24,12],[3,12],[3,8]],[[3,16],[24,16],[24,13],[15,13],[15,16],[3,16]]] },
   { name: 'THE BANK VAULT', depth: 'BANK', theme: 'bank', coins: 10, bots: 3, spd: 1.1, siren: true, rows: [
     '############################',
-    '#.P......#.....!...*.$.....#',
+    '#.P......#.....!...*.$J....#',
     '#.#######..#######..######.#',
     '#.#....c#..#....c#..#...c#.#',
     '#.#.....#..#.KI..#..#....#.#',
-    '#.G.....#..#.....#.C#....#.#',
+    '#.G.....#..#.....#WC#....#.#',
     '#.M##D###..###.###..##.###.#',
-    '#........s...#R............#',
+    '#........s...#R...........A#',
     '#........#...#Y...........##',
     '##........#.c#....##c.....c#',
     '#.###.###..###.###..##.###.#',
     '#!#....C#..#.....#..#....#.#',
     '#.#c....#..#..d..#..#.f..#.#',
-    '#.#.....G..#.....#..#....#.#',
-    '#.#.....#..#.....#..#....#.#',
+    '#.#.....GJ.#.....#..#....#.#',
+    '#.#.....#..#.....#..#....#A#',
     '#.M######..#######..######c#',
-    '#.......Y.c...#!..c.......E#',
+    '#.......Y.c...#!..c..A....E#',
     '############################'
   ], routes: [[[2,1],[25,1],[25,8],[2,8],[2,1]],[[2,9],[25,9],[25,16],[2,16],[2,9]],[[5,4],[14,4],[22,4],[22,13],[14,13],[5,13],[5,4]]] },
   { name: 'THE FOG DOCKS', depth: 'DOCKS', theme: 'docks', coins: 11, bots: 3, spd: 1.15, fog: true, rows: [
     '############################',
-    '#P......c####..c..*..####.c#',
+    '#P......c####..c..*..####Ac#',
     '#..####..####..####..####..#',
     '#..####..####..####..####..#',
     '#..####........####.e......#',
@@ -1109,30 +1155,30 @@ const MAPS = [
     '#......~~I...c#....~~~.....#',
     '#..f...~..####.....~~.####.#',
     '#.~~####..####..####..####.#',
-    '#...####..####..####..####.#',
-    '#.O.####..####..####..####.#',
+    '#...####..####W.####..####.#',
+    '#.O.####..####..####..####A#',
     '#............#m...........c#',
-    '#.c.......c...#...c.......E#',
+    '#.c.......c..J#A..c.......E#',
     '############################'
   ], routes: [[[1,1],[26,1],[26,5],[1,5],[1,1]],[[1,10],[26,10],[26,16],[1,16],[1,10]],[[7,5],[19,5],[19,10],[7,10],[7,5]]] },
   { name: 'THE CORE', depth: 'CORE', theme: 'core', coins: 12, bots: 3, spd: 1.25, siren: true, blackout: true, rows: [
     '############################',
-    '#.P....!.....#c....*.Hc....#',
+    '#.P....!.....#c....*.HcA...#',
     '#.K.####..f.......d.####...#',
     '#...####............####.s.#',
     '#...####....OS......###M...#',
     '#..e..........#..Z.........#',
     '#..........######....C.....#',
     '#.###G#...c######....#V###c#',
-    '#.#...D....#######c......#.#',
-    '###c..#.R########.##.G...###',
+    '#.#...D....#######c..J...#.#',
+    '###c..#.R########.##.G..A###',
     '#.##V##....######....###G#!#',
-    '#..........######..I...c...#',
+    '#..........######..I...cJ..#',
     '#....C....Y...c............#',
     '#...####............###M...#',
-    '#...####....O.......####...#',
+    '#...####...WO.......####...#',
     '#...####............####..c#',
-    '#c....$...c..S...#c..!....E#',
+    '#c....$...c..S...#c..!.A..E#',
     '############################'
   ], routes: [[[1,1],[26,1],[26,16],[1,16],[1,1]],[[9,5],[18,5],[18,12],[9,12],[9,5]],[[4,8],[4,16],[13,16],[13,12],[8,12],[8,8],[4,8]]] },
   { name: 'THE GALLERY', depth: 'GALLERY', theme: 'museum', coins: 12, bots: 3, spd: 1.28, siren: true, rows: [
@@ -1142,34 +1188,34 @@ const MAPS = [
     '#.C....c....L###############',
     '#...L..####V.####.....######',
     '#########c............######',
-    '#########.c....##.c...######',
+    '#########.c....##.c..A######',
     '#########.....c#############',
     '###....##...c.c#############',
     '###....##.C.L..#############',
     '###....!c....###############',
-    '###..!.M###G.#######.......#',
+    '###..!.M###GJ#######......A#',
     '###......sc..#....c........#',
-    '#########Lcfc..#####.BL...E#',
+    '#########Lcfc..#####ABL...E#',
     '#########......#############',
-    '#########.*....#############',
+    '#########W*....#############',
     '############################',
     '############################'
   ], routes: [[[19,5],[20,5],[20,12],[11,9],[13,8]], [[4,3],[11,7],[13,13],[12,14],[5,10]], [[4,9],[5,9],[12,5],[25,12],[12,12]]] },
   { name: 'THE COLD STORE', depth: 'COLD', theme: 'docks', coins: 13, bots: 3, spd: 1.32, fog: true, rows: [
     '############################',
-    '###############..*H..c######',
-    '##########.....Lcc..~.######',
+    '###############..*HW.c######',
+    '##########.J...Lcc..~.######',
     '##########.G###....!..######',
     '########....######.#########',
     '########c...######.#########',
     '##Pf..#M............LcL#####',
-    '##L..c...~c......~..~...####',
+    '##L..c...~c......~..~..A####',
     '##....##########.~..e...####',
     '################.Bc...O.####',
     '###################.###.####',
-    '######.cc~~...#####.###.####',
+    '######.cc~~...#####A###.####',
     '######.c..c..c#####.###.####',
-    '######...........O..V....###',
+    '######...........O..V...A###',
     '######L.......#######.~..###',
     '######........#######....###',
     '#####################...E###',
@@ -1185,41 +1231,41 @@ const MAPS = [
     '#.....##.....C####B#########',
     '########......##...L.#######',
     '########......$#.....#######',
-    '########....C..#....c##.c..#',
-    '########.!..c.!#.....##....#',
-    '#c....#####VM..#G######....#',
-    '#.c.........#c.c.m........##',
+    '########....C.J#....c##.c..#',
+    '########.!..c.!#....A##....#',
+    '#c....#####VM..#G######...A#',
+    '#.c.......W.#c.cJm........##',
     '#...O.########.##########.##',
     '###########....c..#######L##',
-    '###########.......#....c.E##',
+    '###########.......#...Ac.E##',
     '###########......c##########',
     '############################'
   ], routes: [[[13,8],[11,2],[24,10],[14,15],[11,9]], [[2,4],[3,4],[11,7],[10,8],[9,8]], [[13,4],[19,8],[18,8],[18,9],[17,9]], [[13,9],[11,2],[25,10],[24,10],[15,15]]] },
   { name: 'THE ATRIUM', depth: 'ATRIUM', theme: 'museum', coins: 14, bots: 4, spd: 1.4, rows: [
     '############################',
-    '#s..G..#..c...#L.x#....c..##',
+    '#s.JG..#..c...#L.x#....c..##',
     '#..c.M.#...L.x#...#c.c..M.##',
     '#x....C...x.#.....c.L.c...##',
     '######.#####################',
-    '#...L..#....S.#...##########',
-    '#..c...#..$...#.G.##########',
+    '#A..L..#....S.#...##########',
+    '#..c.W.#..$...#.G.##########',
     '#...x..#.L....#P..##########',
     '#..G...x.#.......C##########',
     '#...G..#......#...##########',
     '#..c...#......#...##########',
     '#......#..G.R.#..C##########',
     '#####.######################',
-    '#..G..c#......#..x.c......##',
+    '#AJG..c#......#..x.c......##',
     '#*x..........L#...#..c.L..##',
-    '#f...L.#L...c...c.#......E##',
+    '#f...LA#L...c...c.#......E##',
     '############################',
     '############################'
   ], routes: [[[11,2], [16,2], [22,2], [4,8], [4,14], [11,14], [11,2]], [[16,2], [16,8], [11,8], [4,8], [16,14], [22,14], [16,2]], [[4,2], [16,2], [22,2], [16,8], [11,8], [4,8], [4,2]], [[4,2], [11,2], [11,8], [4,14], [16,14], [22,14], [4,2]]] },
   { name: 'THE SUBLEVEL', depth: 'SUBLEVEL', theme: 'server', coins: 15, bots: 4, spd: 1.42, rows: [
     '############################',
     '#!...C#.c....#.......c*x.e##',
-    '#.L.c.#.......c.B.x#V.....##',
-    '#..x.c...#...C.....#..V...##',
+    '#.L.c.#.......c.B.x#V....J##',
+    '#..x.c...#...C.....#..V..A##',
     '#.##############c###.#######',
     '#..O.L.c...V.###.###....!.##',
     '#.....#..V...###.###......##',
@@ -1228,10 +1274,10 @@ const MAPS = [
     '#..x..#...c..###.###.Y....##',
     '#...c.#O.....###V###......##',
     '##.#############.###########',
-    '#....c########...C....c.c.##',
+    '#....c########...C..W.c.cA##',
     '#x.c..########.....#V..L..##',
     '#....Y########..c..#..O..j##',
-    '#.....########c...x#.L...E##',
+    '#.....########c...x#AL...E##',
     '############################',
     '############################'
   ], routes: [[[3,2], [10,2], [16,2], [23,2], [3,14], [16,14], [3,2]], [[3,2], [10,2], [23,2], [3,8], [3,14], [23,14], [3,2]], [[3,2], [16,2], [23,8], [10,8], [3,8], [3,14], [3,2]], [[16,2], [23,8], [3,8], [3,14], [16,14], [23,14], [16,2]]] },
@@ -1239,39 +1285,39 @@ const MAPS = [
     '############################',
     '#hH..L#.Z....c#L..c...L..M##',
     '#*c.x.x....#L.c.....#c....##',
-    '#..~.~#.c....c#.....#..~..##',
+    '#A.~.~#.c....c#.....#..~..##',
     '##c##########.#######~######',
     '#..L.c#.L.....#######..x..##',
     '#.L...#....H..#######.....##',
-    '#~#.O.#..c....#######....x##',
+    '#~#.O.#.Wc....#######....x##',
     '#.....#.......#######..P..##',
     '#~...~....~...#######.....##',
     '#...~.#..~....#######.x...##',
     '##.#########################',
-    '#.x...#x...~.....~..########',
+    '#Ax...#x...~.....~..########',
     '#..c....~.c...#L....########',
-    '#.....#..c.c..#.~...########',
-    '#f..~.#.c.L...#..~.E########',
+    '#J....#..c.c..#.~...########',
+    '#f..~A#.c.L...#..~.E########',
     '############################',
     '############################'
   ], routes: [[[3,2], [10,2], [23,2], [3,8], [3,14], [17,14], [3,2]], [[17,2], [23,2], [10,8], [3,14], [10,14], [17,14], [17,2]], [[10,2], [23,8], [10,8], [3,8], [3,14], [17,14], [10,2]], [[3,2], [10,2], [17,2], [23,2], [3,8], [10,14], [3,2]]] },
   { name: 'THE ARCHIVE', depth: 'ARCHIVE', theme: 'bank', coins: 16, bots: 4, spd: 1.44, siren: true, rows: [
     '############################',
-    '#######...c........#.!..!.##',
+    '#######...c......J.#.!..!A##',
     '#######..x.x#.C..G........##',
     '#######.....#..c...#......##',
     '##################G####.####',
     '#L..!.#######C..$..#x.x...##',
-    '#Y....#######......#...G..##',
+    '#Y....#######......#...GJ.##',
     '#c....#######..P.....L....##',
     '#...c.#######I.....#c..#.L##',
-    '#.c.......E#..c.!..#.c..x.##',
+    '#.c..W....E#..c.!..#.c..x.##',
     '#.....#######.....C#......##',
-    '#.#####################.####',
+    '#A#####################.####',
     '#....Y#.........x#......c.##',
     '#...c.......c.#.....L.....##',
     '#j....#..c.L#......#.....*##',
-    '#$c..x#.c...#.....c#c...Ys##',
+    '#$c..x#Ac...#.....c#c...Ys##',
     '############################',
     '############################'
   ], routes: [[[9,2], [16,2], [23,2], [16,8], [9,14], [16,14], [9,2]], [[9,2], [23,2], [16,8], [3,8], [3,14], [16,14], [9,2]], [[9,2], [16,2], [23,2], [16,8], [3,8], [16,14], [9,2]], [[9,2], [16,2], [3,8], [9,14], [16,14], [23,14], [9,2]]] },
@@ -1280,64 +1326,64 @@ const MAPS = [
     '#########c.L.c.B.#...c.x..##',
     '#########.N..#......#.....##',
     '#########...........#..P..##',
-    '#########....#......#.....##',
-    '####.L....c..#.x...c#.....##',
+    '#########.W..#......#.....##',
+    '####AL....c..#.x...c#.....##',
     '####V#######################',
     '#.......c.L#....V.N.#L..x.##',
     '#.c.....#c..M#c....x#.....##',
-    '#m..$...#.......#.x..c....##',
+    '#m.J$...#.......#.x..c....##',
     '#c.L....#.H..#.x.x..#...N.##',
-    '#.......#..c.#L.....#....c##',
+    '#A......#..c.#L.....#....c##',
     '#####.#############.########',
     '#*...........N#....c.H.M..##',
     '#.....H.######....L.#.....##',
-    '#d..c...######......#L.c.E##',
+    '#d..c..A######......#L.c.E##',
     '############################',
     '############################'
   ], routes: [[[11,3], [17,3], [23,9], [11,9], [4,14], [23,14], [11,3]], [[11,3], [23,3], [23,9], [11,9], [4,14], [23,14], [11,3]], [[17,3], [23,3], [23,9], [11,9], [4,14], [23,14], [17,3]], [[17,3], [23,3], [23,9], [17,9], [4,14], [17,14], [17,3]]] },
   { name: 'THE FURNACE', depth: 'FURNACE', theme: 'core', coins: 16, bots: 4, spd: 1.46, rows: [
     '############################',
-    '#...#..#.#.....#.##.#....M##',
+    '#A..#..#.#.....#.##.#....M##',
     '#.....c..#...Ox#...!##....##',
     '#...#....##.#..#.##.###Pc###',
     '#..O#M.#.....#....#....L..##',
     '#...#...##..##.#c.c.#!.C.c##',
     '##.#########################',
     '#...#...####c#.c.C#.L..Oc.##',
-    '#.O.#c......s..#....#.....##',
+    '#AOJ#c......s..#....#.....##',
     '#..M##.O.#.....#.#.##.!#..##',
     '#.e.#E...#..#.##....#.#c..##',
     '###.###################.####',
     '#...#...##.#...#.c..#.....##',
     '#...#...O#....L#.#L......c##',
     '#.c...#.##.#..##..c.#..c..##',
-    '#..##x......#...c#*.##....##',
+    '#A.##x......#.W.c#*.##....##',
     '############################',
     '############################'
   ], routes: [[[2,3], [2,14], [18,14], [23,14], [12,9]], [[2,3], [7,3], [2,9], [7,14], [12,14], [23,14]], [[23,14], [12,14], [2,9], [2,3], [12,9]], [[2,14], [2,9], [12,14], [18,9], [12,9]]] },
   { name: 'THE STACKS', depth: 'STACKS', theme: 'warehouse', coins: 17, bots: 4, spd: 1.47, rows: [
     '############################',
     '##...#.#.......#...#......##',
-    '#.#....#..c..#.GOL##c.O...##',
-    '#..VO........#........CPc.##',
+    '#.#....#..c..#JGOL##c.O...##',
+    '#..VO...W....#........CPc.##',
     '##.#########################',
-    '#....#.##.C..##.....c.#...##',
+    '#A...#.##.C..##.....c.#...##',
     '#......#.#.Y##.c.eV##..#..##',
     '#......#.....#.....#.c.c#.##',
-    '#.....G#....c#..#.###....c##',
+    '#....JG#....c#..#.###....c##',
     '#...V..#..#....#...###.#.###',
-    '##..###E.#..##.....#...c.L##',
+    '##.A###E.#..##.....#...c.L##',
     '##.######################.##',
     '#...#c...O...#.c##..c##...##',
     '##.....#....##.....#.#.cc.##',
     '#.O#c..#.Y...#.x#d##..L...##',
-    '#.cxL..#....V....#.*....#.##',
+    '#AcxL..#....V....#.*....#.##',
     '############################',
     '############################'
   ], routes: [[[23,14], [23,8], [10,14], [4,14], [23,2]], [[10,14], [4,14], [4,8], [23,14], [10,8]], [[10,2], [4,2], [4,14], [10,14], [23,8], [23,2]], [[10,8], [23,8], [23,14], [10,14], [4,14], [23,2]]] },
   { name: 'THE SPIRE', depth: 'SPIRE', theme: 'city', coins: 18, bots: 4, spd: 1.5, fog: true, siren: true, blackout: true, rows: [
     '############################',
-    '#....#YMc......#.#*..V....##',
+    '#A...#YMc.....W#.#*..V....##',
     '#....#...#.#..c#...#.#.#.###',
     '#.x......f.#.....##..#.cY.##',
     '###.#####################.##',
@@ -1346,12 +1392,12 @@ const MAPS = [
     '###.###...H#...c.#..##.M..##',
     '##h.V#.N.#c...N.x##..#.N..##',
     '##...#.#c..#c.c.##$..##..###',
-    '#....#E#.###...#.#.#.#.c#.##',
+    '#A...#E#.###...#.#J#.#.c#.##',
     '#.....#c..N#.#...#........##',
     '####.#######################',
     '#..#c#....c#.H.c.#..###P..##',
     '#..L.....#...c.#.#...#....##',
-    '#c...#.....#.#.....#......##',
+    '#c..A#.....#.#.....#......##',
     '############################',
     '############################'
   ], routes: [[[8,14], [14,14], [24,14], [14,8], [8,8]], [[8,2], [3,8], [14,14], [19,14], [24,14], [14,8]], [[14,2], [24,8], [14,8], [3,14], [8,14]], [[8,14], [19,14], [24,14], [24,2], [24,8], [14,8]]] }
@@ -1379,6 +1425,8 @@ let burstT = 0, burstCool = 0;
 /* banked is yours whatever happens next; atRisk dies with you */
 let banked = 0, atRisk = 0, jobIdx = 0;
 let shiftAt = 0, shifted = false;
+let lockers = [], hidIn = null, hidT = 0, hidSeen = false;
+let jewels = [], plans = [], hasPlan = false;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
 let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
@@ -1492,7 +1540,7 @@ function saveGhost() {
 let exitVertical = true;
 let listenPts = [], sentryPts = [];
 let caughtHold = 0;
-let wipeT = 0, wipeName = '', wipeCond = '';
+let wipeT = 0, wipeName = '', wipeCond = '', wipeWant = '';
 let fogBanks = [];
 let splashes = [], lastDt = 0.016;
 let alertLvl = 0, alertCool = 0;
@@ -1965,6 +2013,8 @@ function loadMap(idx) {
   grid = new Uint8Array(T.COLS * T.ROWS);
   coinList = []; emitters = []; propsXY = []; powerups = [];
   prize = null;   /* before the tile loop, or the tiles fill it and this empties it */
+  lockers = []; hidIn = null; hidT = 0; hidSeen = false;
+  jewels = []; plans = []; hasPlan = false;
   doors = []; keycards = [];
   plates = [];
   mirrors = []; mirrorBeam = null;
@@ -2007,6 +2057,9 @@ function loadMap(idx) {
     if (ch === 'K') keycards.push({ x: cx, y: cy, got: false, ph: rand(0, TAU) });
     if (ch === 'B') powerups.push({ x: cx, y: cy, kind: 'B', got: false, ph: rand(0, TAU) });
     if (ch === 'R' || ch === 'Z' || ch === 'I') powerups.push({ x: cx, y: cy, kind: ch, got: false, ph: rand(0, TAU) });
+    if (ch === 'A') lockers.push({ gx: x, gy: y, x: cx, y: cy, open: 0 });
+    if (ch === 'J') jewels.push({ gx: x, gy: y, x: cx, y: cy, got: false, ph: rand(0, TAU) });
+    if (ch === 'W') plans.push({ gx: x, gy: y, x: cx, y: cy, got: false, ph: rand(0, TAU) });
     if (ch === '*') prize = { gx: x, gy: y, x: cx, y: cy, taken: false, ph: rand(0, TAU) };
     if (ch === 'x') propsXY.push({ x: cx, y: cy, k: TH.props[irand(TH.props.length)], r: rand(0, TAU) });
   }
@@ -2468,6 +2521,7 @@ function update(dt) {
      fast by default and Shift buys quiet instead. Fast still makes noise - that
      is what D2's heavy pockets, L2's muffle and every listener on the floor are
      built on, and a silent default would take all of it with it. */
+  if (hidIn) { mvx = 0; mvy = 0; }
   const careful = !!keys.sprint;
   let sprinting = !careful && (mvx !== 0 || mvy !== 0);
   if (sticks.L) {
@@ -2733,6 +2787,33 @@ function update(dt) {
     }
   }
   for (const f of safes) if (f.flash > 0) f.flash = Math.max(0, f.flash - dt * 1.4);
+
+  /* Jewels: the same walk-onto-it as a coin, four times the money, and louder
+     to carry. Always behind glass or in a safe, so one is a detour you chose. */
+  for (const j of jewels) {
+    if (j.got) continue;
+    if (Math.hypot(j.x - player.x, j.y - player.y) > 20) continue;   /* same reach as a coin */
+    j.got = true;
+    coins += T.JEWEL_VALUE;
+    score += coinValue() * T.JEWEL_VALUE;
+    makeNoise(j.x, j.y, T.NOISE_PICKUP * T.JEWEL_NOISE);
+    burst(j.x, j.y, glowGoldS, 18, 190);
+    sfx.pickup(j, 1);
+    toast('A JEWEL \u2014 WORTH FOUR, HEARD LIKE SIX', 2.2);
+    hud();
+  }
+
+  /* The floor plan. Knowledge, not power: it shows the building and never the
+     people in it, which is the difference between a map and a radar. */
+  for (const p of plans) {
+    if (p.got) continue;
+    if (Math.hypot(p.x - player.x, p.y - player.y) > T.BLUEPRINT_R) continue;
+    p.got = true; hasPlan = true;
+    sfx.unlock();
+    burst(p.x, p.y, glowGoldS, 12, 150);
+    toast('THE FLOOR PLAN \u2014 YOU KNOW THE WALLS NOW', 2.6);
+    hud();
+  }
 
   /* The prize. Deliberately the same held, committed action as a safe, because
      the player already knows that verb - what is new is what happens after. */
@@ -3370,6 +3451,9 @@ function seesYourLight(b, patches) {
 }
 
 function botSees(b) {
+  /* inside a locker you are not in the room. The thing that can still end you
+     is one that watched you climb in - handled where hiding is updated. */
+  if (hidIn) return false;
   if (b.kind === 'listen') return false;      /* it has no eyes at all */
   if (b.kind === 'sentry' && b.awake <= 0) return false;   /* and this one is asleep */
   if (blackout > 0 && b.state !== 'chase') return false;
@@ -3511,6 +3595,25 @@ function updateMeter(dt) {
       if (n) toast('SHIFT CHANGE — THEY ARE WALKING SOMEWHERE ELSE', 2.6);
     }
   }
+  /* In a locker you are not there. What can still end you is something that
+     watched you climb in and has come to open it. */
+  if (hidIn) {
+    hidT += dt;
+    for (const l of lockers) if (l.open > 0) l.open = Math.max(0, l.open - dt);
+    hidIn.open = Math.min(1, hidIn.open + dt * 0.9);
+    if (hidSeen && hidT > T.LOCKER_GRACE) {
+      for (const b of bots) {
+        if (b.kind === 'sentry') continue;
+        if (Math.hypot(b.x - hidIn.x, b.y - hidIn.y) < T.LOCKER_OPEN_R) {
+          toast('IT OPENED THE DOOR', 2);
+          hidIn = null;
+          caughtBy = 'contact';
+          caught();
+          break;
+        }
+      }
+    }
+  } else for (const l of lockers) if (l.open > 0) l.open = Math.max(0, l.open - dt * 1.6);
   if (phase === 'out') {
     exfilT += dt;
     responseT += dt;
@@ -3603,7 +3706,7 @@ function takePrize() {
     if (b.kind === 'sentry') continue;
     b.state = 'invest'; b.stateT = 0; b.lastX = prize.x; b.lastY = prize.y;
   }
-  toast('YOU HAVE IT — GET OUT', 3);
+  toast(prizeOf(mapIdx)[0] + ' — GET OUT', 3);
   hud();
 }
 
@@ -3636,7 +3739,11 @@ function renderJobCard() {
 function openJobCard() {
   mode = 'job';
   const pay = jobPayout();
-  $('jobTitle').textContent = 'CONTRACT ' + (jobIdx + 1) + ' CLEAR';
+  $('jobTitle').textContent = 'CONTRACT ' + (jobIdx + 1) + ' CLEAR — ' + contractOf(jobIdx)[0];
+  const nx = $('jobBrief');
+  if (nx) nx.textContent = mapIdx < MAPS.length - 1
+    ? contractOf(jobIdx + 1)[1]
+    : 'There is nothing after this one. There was never meant to be.';
   renderJobCard();
   $('jobCard').classList.remove('hidden');
 }
@@ -3755,6 +3862,7 @@ function nextMap() {
   mapIdx = (mapIdx + 1) % MAPS.length;
   if (mapIdx === 0) { loop++; pickMod(); }
   wipeT = motionFull() ? T.WIPE_T : 0; wipeName = MAPS[mapIdx].name;
+  wipeWant = prizeOf(mapIdx)[0];
   wipeCond = MOD().name ? (MOD().name + (modSwapped() ? ' \u00b7 SWAPPED HERE' : '')) : '';
   loadMap(mapIdx);
   hud();
@@ -3814,6 +3922,10 @@ function win() {
   if (dailyOn) bits.push('<b>DAILY ' + todaySeed() + '</b>');
   bits.push(alertLvl === 0 ? 'never <b>detected</b>' : 'alert level <b>' + alertLvl + '</b>');
   bits.push('in <b>' + fmtTime(runT) + '</b>');
+  /* the haul, named. A list of things you took reads as a night; a number reads
+     as a scoreboard. */
+  const took = runLog.filter(f => f.g !== undefined).length;
+  if (took > 0) bits.push('<b>' + took + '</b> taken');
   /* the three sentences a heist run is actually about */
   const gh = runLog.filter(f => f.g).length;
   if (gh > 0) bits.push('<b>' + gh + '</b> floor' + (gh > 1 ? 's' : '') + ' ghosted');
@@ -4209,6 +4321,20 @@ function drawMinimap() {
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
   g.imageSmoothingEnabled = true;
+  /* A found plan draws the building underneath your own memory of it. Walls
+     only - a drone never appears on it, or the plan would be a radar and the
+     whole game would be about reading a corner of the screen. */
+  if (hasPlan) {
+    g.save();
+    g.globalAlpha = 0.34;
+    for (let gy = 0; gy < T.ROWS; gy++) for (let gx = 0; gx < T.COLS; gx++) {
+      if (!grid[gy * T.COLS + gx]) continue;
+      g.fillStyle = '#4a4470';
+      g.fillRect(gx * (w / T.COLS), gy * (h / T.ROWS),
+        Math.ceil(w / T.COLS), Math.ceil(h / T.ROWS));
+    }
+    g.restore();
+  }
   g.drawImage(miniCv, 0, 0, GW, GH, 0, 0, w, h);
   const sx = w / (T.COLS * T.TILE), sy = h / (T.ROWS * T.TILE);
   /* the way out, but only once you have actually laid eyes on it */
@@ -4389,6 +4515,9 @@ function render() {
   drawWakes();
   for (const pl of plates) drawPlate(pl);
   for (const cr of crates) if (!cr.broken) drawCrate(cr);
+  for (const j of jewels) if (!j.got) drawJewel(j);
+  for (const p of plans) if (!p.got) drawPlan(p);
+  for (const l of lockers) drawLocker(l);
   for (const f of safes) drawSafe(f);
   if (prize && !prize.taken) drawPrize(prize);
   for (const j of jams) drawJam(j);
@@ -5057,6 +5186,73 @@ function drawPrize(p) {
     ctx.beginPath(); ctx.arc(0, 0, 21, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
     ctx.restore();
   }
+}
+
+/* A door in the wall you can be behind. It has to read as usable from across a
+   room, or nobody dives for it when it matters. */
+/* A jewel has to read as worth more than a coin from across a dark room, so it
+   is sharper, colder and it flashes rather than glows. */
+function drawJewel(j) {
+  const k = 0.5 + 0.5 * Math.sin(time * 2.4 + j.ph);
+  ctx.save();
+  ctx.translate(j.x, j.y);
+  const halo = ctx.createRadialGradient(0, 0, 1, 0, 0, 16);
+  halo.addColorStop(0, 'rgba(180,240,255,' + (0.3 + 0.2 * k).toFixed(3) + ')');
+  halo.addColorStop(1, 'rgba(160,220,255,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(0, 0, 16, 0, TAU); ctx.fill();
+  ctx.rotate(time * 0.9 + j.ph);
+  const r = 6.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -r); ctx.lineTo(r * 0.62, -r * 0.2);
+  ctx.lineTo(r * 0.4, r * 0.8); ctx.lineTo(-r * 0.4, r * 0.8);
+  ctx.lineTo(-r * 0.62, -r * 0.2); ctx.closePath();
+  const f = ctx.createLinearGradient(-r, -r, r, r);
+  f.addColorStop(0, '#eafcff'); f.addColorStop(0.5, '#8fe4ff'); f.addColorStop(1, '#3aa8d8');
+  ctx.fillStyle = f; ctx.fill();
+  ctx.strokeStyle = 'rgba(20,50,70,.8)'; ctx.lineWidth = 0.9; ctx.stroke();
+  ctx.restore();
+}
+
+/* A rolled plan on the floor: mundane, and the most valuable thing in the room
+   if you intend to cut a wall. */
+function drawPlan(p) {
+  const bob = Math.sin(time * 1.8 + p.ph) * 1.4;
+  ctx.save();
+  ctx.translate(p.x, p.y + bob);
+  ctx.fillStyle = 'rgba(160,190,230,.9)';
+  ctx.fillRect(-9, -4, 18, 8);
+  ctx.strokeStyle = 'rgba(30,40,60,.85)'; ctx.lineWidth = 1;
+  ctx.strokeRect(-9, -4, 18, 8);
+  ctx.strokeStyle = 'rgba(60,90,130,.9)';
+  ctx.beginPath();
+  ctx.moveTo(-5, -4); ctx.lineTo(-5, 4);
+  ctx.moveTo(1, -4); ctx.lineTo(1, 4);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLocker(l) {
+  const S = T.TILE, px = l.gx * S, py = l.gy * S;
+  const you = hidIn === l;
+  ctx.save();
+  ctx.fillStyle = you ? '#2a2340' : '#221c30';
+  ctx.fillRect(px + 5, py + 3, S - 10, S - 6);
+  ctx.strokeStyle = 'rgba(10,8,14,.9)'; ctx.lineWidth = 1.6;
+  ctx.strokeRect(px + 5, py + 3, S - 10, S - 6);
+  /* the seam, opening as it is used */
+  const gap = (l.open || 0) * (S - 14) * 0.42;
+  ctx.strokeStyle = you ? 'rgba(255,209,102,.8)' : 'rgba(150,140,190,.5)';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(px + S / 2 - gap, py + 5); ctx.lineTo(px + S / 2 - gap, py + S - 5);
+  ctx.moveTo(px + S / 2 + gap, py + 5); ctx.lineTo(px + S / 2 + gap, py + S - 5);
+  ctx.stroke();
+  /* handles, so it reads as a door rather than a cupboard-shaped wall */
+  ctx.fillStyle = you ? '#ffd166' : '#6a6190';
+  ctx.fillRect(px + S / 2 - gap - 4, py + S / 2 - 2, 2.5, 4);
+  ctx.fillRect(px + S / 2 + gap + 1.5, py + S / 2 - 2, 2.5, 4);
+  ctx.restore();
 }
 
 function drawSafe(f) {
@@ -5902,6 +6098,17 @@ function drawFloorWipe() {
     ctx.beginPath();
     ctx.moveTo(W / 2 - w / 2 - 14, H / 2 + 18); ctx.lineTo(W / 2 + w / 2 + 14, H / 2 + 18);
     ctx.stroke();
+    /* what you came for, under the name of the place you came to */
+    if (wipeWant) {
+      ctx.globalAlpha = nameA * 0.9;
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '700 ' + Math.round(Math.min(W, H) * 0.022) + 'px Orbitron, monospace';
+      ctx.fillText(wipeWant, W / 2, H / 2 - Math.round(Math.min(W, H) * 0.05));
+      ctx.globalAlpha = nameA * 0.6;
+      ctx.fillStyle = '#9a92bb';
+      ctx.font = '400 ' + Math.round(Math.min(W, H) * 0.016) + 'px Archivo, system-ui, sans-serif';
+      ctx.fillText(prizeOf(mapIdx)[1], W / 2, H / 2 + 40);
+    }
     /* the condition belongs on the card that announces the floor, not only in
        a toast that has gone by the time you are playing */
     if (wipeCond) {
@@ -6496,6 +6703,32 @@ function tossCoin() {
    a function declaration silently wins over an earlier one - naming this burst()
    turned every particle burst in the game into a player dash, which set fSprint,
    made noise and drew nothing. */
+const nearLocker = () => {
+  let best = null, bd = T.LOCKER_R;
+  for (const l of lockers) {
+    const d = Math.hypot(l.x - player.x, l.y - player.y);
+    if (d < bd) { bd = d; best = l; }
+  }
+  return best;
+};
+
+/* Getting in is instant, because the whole point is the dive for cover. Whether
+   it saves you was decided a moment earlier, by whether anything was looking. */
+function toggleHide() {
+  if (mode !== 'playing') { sfx.ui(); return false; }
+  if (hidIn) { hidIn = null; hidT = 0; hidSeen = false; hud(); sfx.ui(); return true; }
+  const l = nearLocker();
+  if (!l) { sfx.ui(); return false; }
+  hidIn = l; hidT = 0;
+  /* the honest question: did anything have eyes on you as you went in */
+  hidSeen = made || bots.some(b => b.kind !== 'sentry' && b.state === 'chase' && botSees(b));
+  player.x = l.x; player.y = l.y; player.vx = 0; player.vy = 0;
+  makeNoise(l.x, l.y, 120);
+  toast(hidSeen ? 'THEY SAW YOU GET IN' : 'HIDDEN', 2);
+  hud();
+  return true;
+}
+
 function dash() {
   if (mode !== 'playing' || burstCool > 0 || burstT > 0) { sfx.ui(); return false; }
   burstT = T.BURST_T;
@@ -6788,6 +7021,7 @@ const CONTROLS = [
   ['THERMAL LANCE', ['2']],
   ['KEYCARD CLONER', ['3']],
   ['MUTE', ['M']],
+  ['HIDE', ['H']],
   ['BURST', ['SPACE']],
   ['NEW RUN', ['R']],
 ];
@@ -7007,6 +7241,7 @@ window.addEventListener('keydown', e => {
     else if (mode === 'won') continueEndless();
   }
   if ((e.key === 'r' || e.key === 'R') && (mode === 'playing' || mode === 'caught')) startGame();
+  if ((e.key === 'h' || e.key === 'H') && mode === 'playing') { toggleHide(); }
   if ((e.key === 'f' || e.key === 'F') && mode === 'playing' && !battDead) { beamOn = !beamOn; sfx.ui(); hud(); }
   if ((e.key === 'q' || e.key === 'Q') && mode === 'playing') { throwFlare(); }
   if ((e.key === 'e' || e.key === 'E') && mode === 'playing') { tossCoin(); }
@@ -7626,6 +7861,15 @@ window.__fp = {
   job() { return { idx: jobIdx, banked, atRisk, payout: jobPayout(),
     len: T.JOB_LEN, jobs: Math.ceil(MAPS.length / T.JOB_LEN) }; },
   jobEnd(i) { return jobEnd(i); }, jobOf(i) { return jobOf(i); },
+  lockerCount() { return lockers.length; },
+  jewelCount() { return jewels.length; }, planCount() { return plans.length; },
+  hasPlan() { return hasPlan; },
+  jewelAt(i) { const j = jewels[i || 0]; return j ? { x: j.x, y: j.y, got: j.got } : null; },
+  planAt(i) { const p = plans[i || 0]; return p ? { x: p.x, y: p.y, got: p.got } : null; },
+  lockerAt(i) { const l = lockers[i || 0]; return l ? { x: l.x, y: l.y } : null; },
+  hiding() { return { inLocker: !!hidIn, seenGettingIn: hidSeen, t: +hidT.toFixed(2) }; },
+  hide() { return toggleHide(); },
+  nearestLocker() { const l = nearLocker(); return l ? { x: l.x, y: l.y } : null; },
   shiftState() { return { at: +shiftAt.toFixed(1), done: shifted,
     routes: bots.filter(b => b.kind === 'drone').map(b => b.routeIdx || 0) }; },
   lastSeenMark() {
@@ -7638,6 +7882,15 @@ window.__fp = {
     return n ? { x: Math.round(x / n), y: Math.round(y / n), n } : null;
   },
   bankNow() { jobBank(); }, pushOn() { jobPushOn(); },
+  prizeOf(i) { return prizeOf(i); }, contractOf(j) { return contractOf(j); },
+  storyCheck() {
+    /* every floor must have its own named thing, or the card lies */
+    const names = PRIZES.map(p => p[0]);
+    return { floors: MAPS.length, prizes: PRIZES.length,
+      unique: new Set(names).size, contracts: CONTRACTS.length,
+      blanks: PRIZES.filter(p => !p[0] || !p[1]).length };
+  },
+  wipeWant() { return wipeWant; },
   shop() { return loadout.map(id => ({ id, price: shopPrice(id),
     have: __gadgetCharges(id), cap: T.CAP[id] || 0, can: canBuy(id) })); },
   buy(id) { return buyCharge(id); },

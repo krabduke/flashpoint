@@ -241,12 +241,12 @@ written.
 
 ## P · A building that is not the same twice
 
-- [ ] P1 Campaign conditions — let the D7 modifiers apply to a normal run, chosen
+- [x] P1 Campaign conditions — let the D7 modifiers apply to a normal run, chosen
       per floor rather than per loop, so floor 7 is not the same floor 7
-- [ ] P2 Say which condition is on, on the floor card and in the pause briefing
-- [ ] P3 Conditions that suit the floor — no BROWNOUT on a floor whose whole
+- [x] P2 Say which condition is on, on the floor card and in the pause briefing
+- [x] P3 Conditions that suit the floor — no BROWNOUT on a floor whose whole
       point is its lamps; pick from what actually makes that floor different
-- [ ] P4 A daily run pins its conditions to the seed, so the same day is the
+- [x] P4 A daily run pins its conditions to the seed, so the same day is the
       same building for everyone
 
 ## Q · What the run was
@@ -313,10 +313,10 @@ that has been the pattern that works in this codebase.
 - [x] U3  Say which condition is on, on the floor card and in the pause briefing (was P2)
 - [x] U4  Conditions that suit the floor — no BROWNOUT where the lights are already out (was P3)
 - [x] U5  A daily run pins its conditions to the seed (was P4)
-- [ ] U6  `A` lockers — step in and vanish; you cannot see out either
+- [x] U6  `A` lockers — step in and vanish; you cannot see out either
 - [x] U7  Shift change — patrols swap routes mid-floor, so a memorised beat stops being free
-- [ ] U8  Blueprint pickup — reveals the floor's walls on the minimap, never the drones
-- [ ] U9  `J` jewels — high value, silent to carry, always behind glass or a safe
+- [x] U8  Blueprint pickup — reveals the floor's walls on the minimap, never the drones
+- [x] U9  `J` jewels — high value, silent to carry, always behind glass or a safe
 - [x] U10 A prize on the deep floors — optional, guarded, worth going out of your way for — **superseded**: every floor carries a prize, not just the deep ones
 - [ ] U11 Two exits on some floors — one close and watched, one far and quiet
 - [x] U12 Ghost streak — consecutive ghosted floors multiply, and the run says so
@@ -515,3 +515,9 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-04 · U7 · shift change around 52s (+/-14 jitter): drones rotate onto each other's routes by INDEX, since a drone's route is not the same array object as the one in MAPS and indexOf answers -1, 5 assertions
 - 2026-09-04 · U13 · the minimap marks where they think you are, averaged from the same lastX/lastY the search AI steers on, and only while someone is actually looking, 2 assertions
 - 2026-09-04 · harness · boot is waited on rather than timed. A fixed 2200ms sleep before the first assertion had been a bet on how long the page takes to load, and the bet got tighter every time the game grew - it lost today with ReferenceError: __fp is not defined
+- 2026-09-04 · P1-P4 · found already built and never ticked: condition chips on the menu, wipeCond on the floor card, MOD() named in the pause briefing with (SWAPPED), modClash() refusing a condition a floor already does, and a daily run seeding its condition from the date. Verified in the source and in five harness references before ticking
+- 2026-09-05 · story · twenty named prizes with a line each and five clients whose briefs cool as the night goes on, surfaced on the floor card and at the fence. Nothing new to read: the same beats, now with a reason
+- 2026-09-05 · U6 · 60 lockers, three a floor, in nooks. Hiding is a gamble - whether it saves you was decided a moment earlier by whether anything had eyes on you, and something that watched you climb in comes and opens it, 6 assertions
+- 2026-09-05 · U9 · 33 jewels behind glass, in safes or down dead ends: worth four coins and heard at 608 against a coin's 380, 4 assertions
+- 2026-09-05 · U8 · a floor plan on every floor, drawn under your own memory of the building - walls only, never a drone, which is the line between a map and a radar, 2 assertions
+- 2026-09-05 · trap · T.COIN_R does not exist and 'distance > undefined' is false, so the jewel guard never skipped: every jewel on every floor was taken on frame one, each firing a 608 noise. Four unrelated AI timing blocks failed from phantom noise. Sixth name-I-assumed of the session
