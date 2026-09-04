@@ -5373,6 +5373,43 @@ ok('going deeper leaves it on the table and moves you on',
 ok('and being taken loses everything that was still on it',
   job.afterCaught.atRisk === 0, JSON.stringify(job.afterCaught));
 
+/* the shop turns the fence from a yes/no into a three-way question */
+const shop = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; endless = false;
+  __fp.setDiff('standard'); __fp.setMod(-1); __fp.resetRunLog();
+  __fp.setLoadout(['flare', 'smoke']);
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+  for (let f = 0; f < 4 && !__fp.jobCardShown(); f++) {
+    __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+    for (let i = 0; i < 6; i++) update(1 / 60);
+  }
+  o.atCard = __fp.jobCardShown();
+  o.before = { take: __fp.job().atRisk, shop: __fp.shop() };
+  const buyable = o.before.shop.find(s => s.can);
+  o.bought = buyable ? __fp.buy(buyable.id) : false;
+  o.id = buyable ? buyable.id : null;
+  o.after = { take: __fp.job().atRisk, shop: __fp.shop() };
+  /* and it cannot be bought with money you do not have */
+  o.brokeBuy = (() => { const s = __fp.shop()[0]; return __fp.buy(s.id + '_nope'); })();
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the shop block ran at all', !shop.threw, shop.threw || 'ok');
+ok('the fence sells kit out of the take', shop.atCard === true && shop.bought === true,
+  `card=${shop.atCard} bought=${shop.bought} (${shop.id})`);
+ok('buying costs you exactly what it said it would', (() => {
+  const b = shop.before.shop.find(s => s.id === shop.id);
+  return shop.after.take === shop.before.take - b.price;
+})(), `${shop.before.take} -> ${shop.after.take}`);
+ok('and the charge actually arrives', (() => {
+  const b = shop.before.shop.find(s => s.id === shop.id);
+  const a = shop.after.shop.find(s => s.id === shop.id);
+  return a.have === b.have + 1;
+})(), JSON.stringify(shop.after.shop));
+ok('a gadget you cannot buy is not sold to you', shop.brokeBuy === false, `${shop.brokeBuy}`);
+
 /* ---- the burst ----
    A chase you can only walk away from is not a chase. This is the one thing the
    player can spend to out-accelerate one, and it is loud enough that spending it

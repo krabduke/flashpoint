@@ -317,12 +317,12 @@ that has been the pattern that works in this codebase.
 - [ ] U7  Shift change — patrols swap routes mid-floor, so a memorised beat stops being free
 - [ ] U8  Blueprint pickup — reveals the floor's walls on the minimap, never the drones
 - [ ] U9  `J` jewels — high value, silent to carry, always behind glass or a safe
-- [ ] U10 A prize on the deep floors — optional, guarded, worth going out of your way for
+- [x] U10 A prize on the deep floors — optional, guarded, worth going out of your way for — **superseded**: every floor carries a prize, not just the deep ones
 - [ ] U11 Two exits on some floors — one close and watched, one far and quiet
 - [x] U12 Ghost streak — consecutive ghosted floors multiply, and the run says so
 - [ ] U13 Last-seen marker — the minimap shows where they think you are, not where you are
 - [x] U14 Noise rings — a brief ring showing how far the sound you just made carried
-- [ ] U15 A choice at the stairs — one of three boons between floors
+- [x] U15 A choice at the stairs — one of three boons between floors — **superseded**: the choice moved to the fence between contracts, bought out of the take
 
 ## V · Three more floors
 
@@ -511,3 +511,4 @@ Append one line per completed item: `date · id · commit · note`.
     these from a mystery into a message.
 - 2026-09-04 · redesign · being seen starts a hunt instead of ending the run; the prize opens the exit and gold became optional score; greed costs speed; the escape act climbs and takes the dark away; three screen beats; three heist tools; a dash. Removed EXIT_EARLY, CLEAR_BONUS's all-coins demand, fSeen being set by bumpAlert, and a duplicate exit chevron
 - 2026-09-04 · contracts · twenty floors are five contracts of four, each ending at a fence: bank it or leave it on the table, +25% per contract cleared, and being taken loses whatever was still on it, 7 assertions
+- 2026-09-04 · shop · kit is bought at the fence out of the take, so buying banks less and the contract asks three questions instead of one; a full gadget refuses the sale, 5 assertions

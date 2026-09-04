@@ -268,6 +268,25 @@
   .kitchip:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
   #kitCount{color:#ffd166}
   #jobTake.gold{color:#ffd166;text-shadow:0 0 20px rgba(255,190,80,.45)}
+  #shopGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));
+    gap:6px;width:min(330px,84vw);margin:8px auto 0}
+  .shopchip{
+    pointer-events:auto;cursor:pointer;-webkit-appearance:none;appearance:none;
+    display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;
+    border-radius:9px;background:rgba(18,13,38,.72);border:1px solid rgba(120,110,170,.28);
+    font-family:'Orbitron',monospace;color:#c9bfe8;
+    transition:border-color .16s ease,color .16s ease;
+  }
+  .shopchip b{font-size:8px;font-weight:700;letter-spacing:.12em}
+  /* the price is the loudest thing on the chip, because it is the decision */
+  .shopchip s{text-decoration:none;font-size:11px;font-weight:700;color:#ffd166;
+    font-variant-numeric:tabular-nums}
+  .shopchip u{text-decoration:none;font-size:8px;color:#6a6190;font-variant-numeric:tabular-nums}
+  .shopchip:hover:not([disabled]){border-color:rgba(255,209,102,.6);color:#ffe9a8}
+  .shopchip[disabled]{cursor:default;opacity:.42}
+  .shopchip.full s{color:#7dffc4}
+  .shopchip.poor s{color:#8a6a4a}
+  .shopchip:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
   /* one shared line rather than seven cramped ones: the chips are 8px type and
      a description inside them would not survive a phone */
   #kitWhat{min-height:2.1em;margin:7px 2px 0;font-size:9.5px;line-height:1.5;
@@ -654,7 +673,9 @@
         <div class="stat"><b id="jobBanked">0</b><span>ALREADY YOURS</span></div>
         <div class="stat"><b id="jobBonus">&mdash;</b><span>DEPTH BONUS</span></div>
       </div>
-      <p id="jobNote" class="hint" style="max-width:38ch;margin:14px auto 0"></p>
+      <p class="floor-eyebrow" style="margin-top:16px">Kit, out of the take</p>
+      <div id="shopGrid" role="group" aria-label="Buy kit"></div>
+      <p id="jobNote" class="hint" style="max-width:40ch;margin:14px auto 0"></p>
       <button class="btn" id="jobBankBtn" style="margin-top:16px">TAKE IT AND GO</button>
       <button class="btn ghost" id="jobOn"></button>
     </div>
@@ -780,6 +801,9 @@ const T = {
      is worth more and risks all of it, which is the only decision a score has
      ever needed. */
   JOB_LEN: 4, JOB_BONUS: 0.25,
+  /* kit is bought out of the take, so buying is banking less - the fence asks
+     three questions, not one */
+  SHOP_PER_POINT: 260,
   /* a torch in a blacked-out building is the most conspicuous thing in it.
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
@@ -3559,19 +3583,35 @@ function takePrize() {
 
 /* Between contracts. Everything you are carrying is on the table until you
    take it off, and the longer you stay the more it is worth. */
+function renderJobCard() {
+  const pay = jobPayout();
+  $('jobTake').textContent = pay;
+  $('jobBanked').textContent = banked;
+  $('jobBonus').textContent = jobIdx > 0 ? '+' + Math.round(T.JOB_BONUS * jobIdx * 100) + '%' : '\u2014';
+  const g = $('shopGrid');
+  if (g) g.innerHTML = loadout.map(id => {
+    const gd = GADGETS.find(x => x.id === id);
+    const price = shopPrice(id), have = __gadgetCharges(id), cap = T.CAP[id] || 0;
+    const full = have >= cap, afford = atRisk >= price;
+    return '<button class="shopchip' + (full ? ' full' : afford ? '' : ' poor') + '"'
+      + ' type="button" data-buy="' + id + '"' + (full || !afford ? ' disabled' : '') + '>'
+      + '<b>' + gd.label + '</b>'
+      + '<s>' + (full ? 'FULL' : price) + '</s>'
+      + '<u>' + have + '/' + cap + '</u></button>';
+  }).join('');
+  const more = mapIdx < MAPS.length - 1;
+  $('jobOn').style.display = more ? '' : 'none';
+  $('jobOn').textContent = more ? 'GO DEEPER \u2014 ' + jobName(jobIdx + 1) + ' \u2192' : '';
+  $('jobNote').textContent = more
+    ? 'Walk away and ' + pay + ' is yours. Spend it on kit and you bank less. Go on and all of it rides on the next four floors.'
+    : 'Nothing deeper than this. Take it.';
+}
+
 function openJobCard() {
   mode = 'job';
   const pay = jobPayout();
   $('jobTitle').textContent = 'CONTRACT ' + (jobIdx + 1) + ' CLEAR';
-  $('jobTake').textContent = pay;
-  $('jobBanked').textContent = banked;
-  $('jobBonus').textContent = jobIdx > 0 ? '+' + Math.round(T.JOB_BONUS * jobIdx * 100) + '%' : '—';
-  const more = mapIdx < MAPS.length - 1;
-  $('jobOn').style.display = more ? '' : 'none';
-  $('jobOn').textContent = more ? 'GO DEEPER — ' + jobName(jobIdx + 1) + ' →' : '';
-  $('jobNote').textContent = more
-    ? 'Walk away and ' + pay + ' is yours. Go on and it rides on the next four floors.'
-    : 'Nothing deeper than this. Take it.';
+  renderJobCard();
   $('jobCard').classList.remove('hidden');
 }
 
@@ -6774,6 +6814,32 @@ function togglePause() {
 const __gadgetCharges = (id) => ({ flare: flares, smoke: smokePellets, emp: empCharges,
   decoy: decoyCharges, mag: magCharges, hush: hushCharges, jam: jamCharges,
   drill: drillCharges, lance: lanceCharges, cloner: clonerCharges }[id] || 0);
+const addCharge = (id) => {
+  if (id === 'flare') flares = Math.min(T.CAP.flare, flares + 1);
+  else if (id === 'smoke') smokePellets = Math.min(T.CAP.smoke, smokePellets + 1);
+  else if (id === 'emp') empCharges = Math.min(T.CAP.emp, empCharges + 1);
+  else if (id === 'decoy') decoyCharges = Math.min(T.CAP.decoy, decoyCharges + 1);
+  else if (id === 'mag') magCharges = Math.min(T.CAP.mag, magCharges + 1);
+  else if (id === 'hush') hushCharges = Math.min(T.CAP.hush, hushCharges + 1);
+  else if (id === 'jam') jamCharges = Math.min(T.CAP.jam, jamCharges + 1);
+  else if (id === 'drill') drillCharges = Math.min(T.CAP.drill, drillCharges + 1);
+  else if (id === 'lance') lanceCharges = Math.min(T.CAP.lance, lanceCharges + 1);
+  else if (id === 'cloner') clonerCharges = Math.min(T.CAP.cloner, clonerCharges + 1);
+  else return false;
+  return true;
+};
+const shopPrice = (id) => gadgetCost(id) * T.SHOP_PER_POINT;
+/* full is full: a button that takes your money for nothing is a bug wearing a
+   feature's clothes */
+const canBuy = (id) => atRisk >= shopPrice(id) && __gadgetCharges(id) < (T.CAP[id] || 0);
+function buyCharge(id) {
+  if (mode !== 'job' || !canBuy(id)) { sfx.ui(); return false; }
+  atRisk -= shopPrice(id);
+  addCharge(id);
+  sfx.pickup();
+  renderJobCard();
+  return true;
+}
 function hud() {
   coinsEl.textContent = coins + '/' + coinsTotal;
   /* amber the moment walking out becomes a choice, so you know without having
@@ -6997,6 +7063,10 @@ $('condGrid').addEventListener('click', e => {
 }));
 $('condGrid').addEventListener('pointerleave', e => {
   if (e.pointerType === 'mouse') describeCond(condIdx);
+});
+$('shopGrid').addEventListener('click', e => {
+  const b = e.target.closest('button[data-buy]');
+  if (b) buyCharge(b.dataset.buy);
 });
 $('jobBankBtn').addEventListener('click', () => { sfx.ui(); jobBank(); });
 $('jobOn').addEventListener('click', () => { sfx.ui(); jobPushOn(); });
@@ -7511,6 +7581,9 @@ window.__fp = {
     len: T.JOB_LEN, jobs: Math.ceil(MAPS.length / T.JOB_LEN) }; },
   jobEnd(i) { return jobEnd(i); }, jobOf(i) { return jobOf(i); },
   bankNow() { jobBank(); }, pushOn() { jobPushOn(); },
+  shop() { return loadout.map(id => ({ id, price: shopPrice(id),
+    have: __gadgetCharges(id), cap: T.CAP[id] || 0, can: canBuy(id) })); },
+  buy(id) { return buyCharge(id); },
   jobCardShown() { return !$('jobCard').classList.contains('hidden'); },
   dash() { return dash(); },
   burstState() { return { t: +burstT.toFixed(3), cool: +burstCool.toFixed(3) }; },
