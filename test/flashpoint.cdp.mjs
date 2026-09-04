@@ -3603,8 +3603,9 @@ const lsn = JSON.parse(await evl(`(() => {
   const revive = () => { mode = 'playing'; paused = false; caughtHold = 0; meter = 0; invuln = 9e9; };
   const run = (vx, frames) => { meter = 0; invuln = 0;
     for (let i = 0; i < frames; i++) { player.vx = vx; player.vy = 0; updateMeter(1 / 60); }
-    const out = { meter: +meter.toFixed(3), lock: __fp.listenLock, mode };
+    const out = { meter: +meter.toFixed(3), lock: __fp.listenLock, mode, made: __fp.made };
     revive();
+    __fp.setMade(false);
     return out; };
   o.still = run(0, 60);
   o.moving = run(90, 60);
@@ -3627,8 +3628,14 @@ const lsn = JSON.parse(await evl(`(() => {
     return +((r - b2) / n).toFixed(2);
   };
   const parkAll = () => { for (const b of bots) { b.x = -900; b.y = -900; b.path = []; b.state = 'patrol'; } };
-  const settle = who => { parkAll(); who.x = spot.x; who.y = spot.y; who.face = look;
-    for (let i = 0; i < 4; i++) update(1 / 60); render(); };
+  const settle = who => { parkAll(); invuln = 999;
+    const pin = () => { who.x = spot.x; who.y = spot.y; who.face = look; };
+    pin();
+    /* re-pin after every step: this used to hold still only because the player
+       was caught above and update() early-returned. Being seen no longer ends
+       the run, so the world is live here and a drone will steer away. */
+    for (let i = 0; i < 4; i++) { update(1 / 60); pin(); }
+    render(); };
   settle(L); o.redNearListener = redAt(spot.x - 60, spot.y);
   settle(D); o.redNearDrone = redAt(spot.x - 60, spot.y);
   o.coneMode = mode;
@@ -3662,10 +3669,13 @@ ok('it casts no cone where a drone would',
   `same spot: listener=${lsn.redNearListener} drone=${lsn.redNearDrone} mode=${lsn.coneMode}`);
 ok('hearing something makes it flinch, which is the only tell it gives you',
   lsn.heardRing.before === 0 && lsn.heardRing.after > 0.5, JSON.stringify(lsn.heardRing));
-/* the meter runs above fill on purpose and caught() freezes update(), so every
-   later measurement would quietly be of a stopped game */
+/* A listener filling the meter used to end the run outright. It now identifies
+   you and calls it in, which is what its design note always claimed it was for:
+   a blind unit whose real weapon is the radio. */
+ok('a listener that has you starts a hunt rather than ending the run',
+  lsn.moving.mode === 'playing' && lsn.moving.made === true, JSON.stringify(lsn.moving));
 ok('and the block never measured a frozen game',
-  lsn.still.mode === 'playing' && lsn.moving.mode === 'caught' && lsn.heardRing.mode === 'playing',
+  lsn.still.mode === 'playing' && lsn.moving.mode === 'playing' && lsn.heardRing.mode === 'playing',
   `${lsn.still.mode} / ${lsn.moving.mode} / ${lsn.heardRing.mode}`);
 
 
@@ -4818,6 +4828,70 @@ ok('nothing starts on your doorstep on any floor of any loop',
   spw.under150 === 0, `${spw.under150} of ${spw.total}; closest ${spw.closest[0].nearest}px (${spw.closest[0].kind})`);
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
+
+/* ---- being seen starts the hunt; only contact ends the run ----
+   This is the change the whole design turns on. Before it, filling the meter
+   ended the run in 1.09s and E1-E8's flanking and search never ran at all. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const hunt = JSON.parse(await evl(`(() => {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 999; alertLvl = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  mapIdx = 0; loadMap(0); __fp.setMade(false); __fp.setMeter(0);
+
+  /* a full meter used to be death; it is now an identification */
+  __fp.setMeter(0.99); __fp.identify();
+  o.identified = { mode, made: __fp.made, hunters: __fp.hunters() };
+
+  /* and it survives a frame of the real loop rather than only the call */
+  for (let i = 0; i < 30; i++) update(1 / 60);
+  o.stillPlaying = mode;
+
+  /* break sight and they keep coming for a while, then give up on you */
+  __fp.teleport(spawnPt.x, spawnPt.y);
+  for (const b of bots) { b.x = spawnPt.x + 900; b.y = spawnPt.y + 900; }
+  let held = 0;
+  for (let i = 0; i < 60; i++) { update(1 / 60); if (__fp.made) held++; }
+  o.heldAfterBreak = held;
+  for (let i = 0; i < 240; i++) update(1 / 60);
+  o.madeAfterLong = __fp.made;
+
+  /* a hunting drone can never simply outrun you in the open */
+  o.chaseCap = { chase: __fp.botSpeedMult && T.BOT_CHASE * __fp.botSpeedMult,
+    cap: T.SPRINT * T.CHASE_CAP, sprint: T.SPRINT };
+  return JSON.stringify(o);
+})()`));
+ok('filling the meter no longer ends the run',
+  hunt.identified.mode === 'playing' && hunt.stillPlaying === 'playing',
+  JSON.stringify(hunt.identified) + ' then ' + hunt.stillPlaying);
+ok('it starts a hunt instead', hunt.identified.made === true && hunt.identified.hunters > 0,
+  `${hunt.identified.hunters} hunting`);
+ok('breaking line of sight does not make them forget at once',
+  hunt.heldAfterBreak > 30, `${hunt.heldAfterBreak} of 60 frames still hunted`);
+ok('but they do lose you eventually', hunt.madeAfterLong === false, JSON.stringify(hunt.madeAfterLong));
+ok('and a chase can never outrun you in open ground',
+  hunt.chaseCap.cap < hunt.chaseCap.sprint,
+  `chase caps at ${hunt.chaseCap.cap} against your ${hunt.chaseCap.sprint}`);
+
+/* contact is the only thing that ends a run now - and it must, or the game
+   has no failure state at all */
+const contact = JSON.parse(await evl(`(() => {
+  mode = 'playing'; paused = false; invuln = 0; meter = 0;
+  mapIdx = 0; loadMap(0); __fp.setMade(false);
+  mode = 'playing'; invuln = 0;
+  __fp.teleport(spawnPt.x, spawnPt.y);
+  const b = bots.find(x => x.kind !== 'sentry');
+  const before = mode;
+  /* stand a drone on top of the player: nothing else should be needed */
+  b.x = player.x; b.y = player.y;
+  update(1 / 60);
+  return JSON.stringify({ before, after: mode, r: __fp.contactR(),
+    cause: document.getElementById('cCause').textContent });
+})()`));
+ok('a drone reaching you ends the run', contact.before === 'playing' && contact.after === 'caught',
+  `${contact.before} -> ${contact.after}`);
+ok('and the card says it ran you down', /RAN YOU DOWN/.test(contact.cause), contact.cause);
 
 /* ---- the caught card names what got you ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

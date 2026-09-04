@@ -743,6 +743,9 @@ const T = {
      Capped just under SPRINT so sprinting is always an escape - a loud one. */
   CHASE_FLOOR: 0.045, CHASE_LOOP: 0.10, CHASE_ADREN: 0.18, CHASE_ADREN_T: 4,
   CHASE_CAP: 0.94, RADIO_R: 400, RADIO_FLOOR: 4,
+  /* they have to reach you now: a shade over both radii, so a drone that is
+     genuinely on top of you takes you and a near miss does not */
+  CONTACT_R: 26, MADE_HOLD: 2.4,
   /* a torch in a blacked-out building is the most conspicuous thing in it.
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
@@ -1282,6 +1285,9 @@ let bots = [], noise = [], stepLog = [], panLog = [], listenLock = false, listen
 let lasers = [], sirenT = 0, nextSiren = 1e9, fogT = 0, nextFog = 1e9, flScale = 1, botSpd = 1, blackoutMap = false;
 let rusty = [], cats = [], belts = [], surging = null, nextSurge = 1e9;
 let meter = 0, seenTimer = 0, invuln = 0, freeze = 0;
+/* made: they have positively identified you and are coming. Not a death
+   sentence - the middle of the story rather than the end of it. */
+let made = false, madeT = 0;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
 let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
@@ -1948,7 +1954,7 @@ function loadMap(idx) {
 
   coinsTotal = coinList.length; coins = 0; realCoins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
-  meter = 0; seenTimer = 0; exitOpen = false; exitFull = false; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
+  meter = 0; seenTimer = 0; made = false; madeT = 0; exitOpen = false; exitFull = false; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
   /* a wipe left over from the previous floor would darken the new one */
   if (mode !== 'playing') wipeT = 0;
@@ -2685,7 +2691,7 @@ function update(dt) {
          away from a contact point that is under your own feet */
       const lvx = l.x2 - l.x1, lvy = l.y2 - l.y1, lvn = Math.hypot(lvx, lvy) || 1;
       addShake('laser', player.x + lvy / lvn * 40, player.y - lvx / lvn * 40);
-      if (meter >= 1) { caught(); return; }
+      if (meter >= 1) identify();
     }
     if (!l.on) l.zapped = false;
   }
@@ -2720,6 +2726,19 @@ function update(dt) {
 
   /* bots */
   updateBots(dt);
+  /* Death is geometry: a drone has to actually reach you. Sentries are bolted
+     down and listeners are blind, but both can still put hands on you if you
+     walk into them, so the only exemption is the spawn grace. */
+  if (invuln <= 0 && mode === 'playing') {
+    for (const b of bots) {
+      if (b.kind === 'sentry') continue;
+      if (Math.hypot(b.x - player.x, b.y - player.y) < T.CONTACT_R) {
+        caughtBy = b.kind === 'listen' ? 'listener' : 'contact';
+        caught();
+        break;
+      }
+    }
+  }
   /* cats */
   updateCats(dt);
 
@@ -3255,11 +3274,18 @@ function updateMeter(dt) {
     meter = Math.min(1, meter + T.SEE_FILL * D().fill * (MOD().fill || 1) * mult * dt);
     if (wasBelow && meter >= 0.55 && !searchOnly) bumpAlert();
     redPulse = Math.max(redPulse, meter);
-    if (meter >= 1) caught();
+    if (meter >= 1) identify();
   } else {
     seenTimer += dt;
     if (seenTimer > T.GRACE) meter = Math.max(0, meter - T.METER_DRAIN * dt);
     if (meter === 0) for (const b of bots) b.alerted = false;
+    /* Break line of sight and they do not simply forget: MADE_HOLD is how long
+       they keep coming to where you were, which is what makes the search AI
+       worth having. */
+    if (made) {
+      madeT += dt;
+      if (madeT >= T.MADE_HOLD && meter === 0) made = false;
+    }
   }
   if (meter > 0.28) { beatT -= dt; if (beatT <= 0) { sfx.beat(); beatN++; beatT = lerp(0.9, 0.32, meter); } }
   else beatT = 0;
@@ -3300,6 +3326,26 @@ function killSting() {
 let vibT = 0;
 function vibrateFor(m) { if (m > 0.55 && navigator.vibrate) { vibT -= 0.016; if (vibT <= 0) { navigator.vibrate(12); vibT = lerp(0.9, 0.25, m); } } }
 
+/* The hunt starts. Deliberately not raiseAlarm: this is the drones knowing
+   where you are, not the building screaming - the alarm is the take's job. */
+function identify() {
+  meter = 1;
+  madeT = 0;
+  if (made) return;
+  made = true;
+  let told = 0;
+  for (const b of bots) {
+    if (b.kind === 'sentry') continue;
+    b.state = 'chase'; b.stateT = 0; b.alerted = true;
+    b.lastX = player.x; b.lastY = player.y;
+    told++;
+  }
+  redPulse = 1;
+  addShake('plate', player.x, player.y);
+  sfx.ping(1);
+  toast(told > 1 ? 'THEY HAVE YOU — ' + told + ' COMING' : 'THEY HAVE YOU — MOVE', 2.4);
+}
+
 function caught() {
   if (mode !== 'playing') return;
   mode = 'caught'; freeze = 0.15;
@@ -3319,7 +3365,8 @@ function caught() {
     listener: ['IT HEARD YOU FIRST', 'a listener called your position in'],
     camera:   ['A CAMERA HAD YOU', 'it never blinked and never moved'],
     search:   ['THE SWEEP FOUND YOU', 'the searchlight crossed you and stayed'],
-    laser:    ['YOU CROSSED THE BEAM', 'the grid screamed before you cleared it']
+    laser:    ['YOU CROSSED THE BEAM', 'the grid screamed before you cleared it'],
+    contact:  ['THEY RAN YOU DOWN', 'you were seen, and then you were cornered']
   };
   const cz = CAUSE[caughtBy] || ['THE LIGHT TOUCHED YOU', ''];
   $('cCause').textContent = cz[0];
@@ -6811,7 +6858,10 @@ window.__fp = {
   for (const c of coinList) if (!c.got && Math.hypot(c.x - player.x, c.y - player.y) < 20) { c.got = true; coins++; }
   hud(); 
 },
-  setMeter(v) { meter = v; }, forceBlackout() { blackout = 3.6; },
+  setMeter(v) { meter = v; },
+  get made() { return made; }, setMade(v) { made = !!v; madeT = 0; },
+  identify() { identify(); }, contactR() { return T.CONTACT_R; },
+  hunters() { return bots.filter(b => b.state === 'chase').length; }, forceBlackout() { blackout = 3.6; },
   runLog() { return runLog.slice(); }, caughtBy() { return caughtBy; },
   setCause(c) { caughtBy = c; }, runSafes() { return runSafes; },
   faceBot(deg) { if (bots[0]) bots[0].face = deg * Math.PI / 180; },
