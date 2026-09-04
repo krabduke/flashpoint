@@ -10,7 +10,7 @@ carries on. Nothing here depends on conversation context.
 `ALL CHECKS PASSED`, and the change has a harness assertion of its own where the
 behaviour is assertable. Visual work gets a screenshot check instead.
 
-**Three traps this harness sets, all of them paid for:**
+**Nineteen traps this harness sets, every one of them paid for:**
 
 1. `update()` returns early unless `mode === 'playing' && !paused`. A block that
    gets the player caught leaves every later `drive()` running against a frozen
@@ -493,3 +493,19 @@ Append one line per completed item: `date · id · commit · note`.
     dumps it on whichever iteration triggers the flush. Measure frames the way
     frames actually happen, and check the GPU flag before believing any canvas
     number: --disable-gpu alone moved render mean from 0.22ms to 13.6ms.
+
+18. **Defining a name that already exists is silent, and JavaScript picks the
+    later one.** A new movement verb called `burst()` replaced the particle
+    emitter of the same name across the whole game - every visual burst became a
+    player dash that set `fSprint`, made noise and drew nothing. Nine assertions
+    failed in four unrelated areas and none of them named the cause; the tell was
+    `burst(prize.x, prize.y, glowGoldS, 30, 260)` passing five arguments to a
+    function that takes none. Same failure as the duplicate `__fp.safeT` hook.
+    Grep the identifier before defining it - function, hook, or const.
+19. **Assert the setup before asserting the behaviour.** Five failures in the
+    screen-beats block were all the measurement: a whole-canvas average, a control
+    taken in a different phase, a control patch containing a lamp, a ring sampled
+    on the sprite's own frame, and a subject that was never in shot because
+    `camNow` is lerped inside `render()` and stepping `update()` moves the camera
+    not at all. One line checking that the setup did what you think turns each of
+    these from a mystery into a message.

@@ -2765,7 +2765,7 @@ ok('and claims nothing on a floor that is quiet', pau.hazHouse.length === 0, JSO
    growing a gadget, which is what caught the tripwire missing from here - and
    again when the three heist tools took it from fourteen rows to seventeen */
 ok('the control list agrees with the item bar',
-  pau.keysAgree === true && pau.rows === pau.want && pau.rows === 17,
+  pau.keysAgree === true && pau.rows === pau.want && pau.rows === 18,
   `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows} of ${pau.want} wanted`);
 ok('pausing again re-reads the run instead of replaying the last look',
   pau.refreshed.score === '9999' && pau.refreshed.gold === '7/12', JSON.stringify(pau.refreshed));
@@ -4577,6 +4577,8 @@ const cln = JSON.parse(await evl(`(() => {
   /* the whole floor, kept */
   mapIdx = 0; loadMap(0); bots.length = 0; invuln = 9e9;
   __fp.clearCoins();
+  o.flagsBeforeGhost = __fp.floorFlags;
+  o.heldBeforeGhost = __fp.cleanHeld();
   const b1 = score; nextMap();
   o.ghost = { gained: score - b1, want: T.CLEAR_BONUS + 3 * o.pay.each + o.pay.all };
   /* kept clean, but walked out early: the marks pay, the two totals do not */
@@ -4605,7 +4607,8 @@ ok('and each goes out on its own as you lose it',
   && JSON.stringify(cln.afterSeen) === '[false,false,true]',
   `${JSON.stringify(cln.afterSprint.lit)} then ${JSON.stringify(cln.afterSeen)}`);
 ok('ghosting a whole floor pays every part of it',
-  cln.ghost.gained === cln.ghost.want, `${cln.ghost.gained} of ${cln.ghost.want}`);
+  cln.ghost.gained === cln.ghost.want,
+  `${cln.ghost.gained} of ${cln.ghost.want} · flags ${JSON.stringify(cln.flagsBeforeGhost)} · kept ${JSON.stringify(cln.heldBeforeGhost)}`);
 /* the marks are yours either way; the ghost bonus is not, and neither is K1's */
 ok('walking out early still pays for what you kept',
   cln.earlyClean.gained === cln.earlyClean.want,
@@ -5301,6 +5304,64 @@ ok('nothing starts on your doorstep on any floor of any loop',
   spw.under150 === 0, `${spw.under150} of ${spw.total}; closest ${spw.closest[0].nearest}px (${spw.closest[0].kind})`);
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
+
+/* ---- the burst ----
+   A chase you can only walk away from is not a chase. This is the one thing the
+   player can spend to out-accelerate one, and it is loud enough that spending it
+   to explore is a bad idea. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const brst = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; meter = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+  __fp.teleport(spawnPt.x, spawnPt.y);
+
+  /* how far you cover in a fifth of a second, running flat out, with and without */
+  const runFor = (frames) => {
+    const x0 = player.x, y0 = player.y;
+    for (let i = 0; i < frames; i++) { keys.right = true; keys.sprint = false; update(1 / 60); }
+    keys.right = false;
+    return Math.round(Math.hypot(player.x - x0, player.y - y0));
+  };
+  __fp.teleport(spawnPt.x, spawnPt.y);
+  o.plain = runFor(12);
+
+  __fp.teleport(spawnPt.x, spawnPt.y);
+  o.fired = __fp.dash();
+  o.stateAfterFire = __fp.burstState();
+  o.withBurst = runFor(12);
+
+  /* and it cannot be held down */
+  o.secondImmediately = __fp.dash();
+  o.coolAfter = __fp.burstState().cool;
+
+  /* it is heard: a burst has to cost you something a walk does not */
+  __fp.teleport(spawnPt.x, spawnPt.y);
+  noise.length = 0;
+  for (let i = 0; i < 12; i++) { keys.right = true; update(1 / 60); }
+  keys.right = false;
+  o.walkNoise = noise.reduce((m, n) => Math.max(m, n.r), 0);
+  /* clear the cooldown the honest way: let it run out */
+  for (let i = 0; i < T.BURST_COOL * 60 + 10; i++) update(1 / 60);
+  noise.length = 0;
+  __fp.dash();
+  o.burstNoise = noise.reduce((m, n) => Math.max(m, n.r), 0);
+  o.mode = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the burst block ran at all', !brst.threw, brst.threw || 'ok');
+ok('a burst actually moves you further', brst.fired === true && brst.withBurst > brst.plain * 1.3,
+  `${brst.plain}px plain vs ${brst.withBurst}px bursting`);
+ok('and it cannot simply be held down',
+  brst.secondImmediately === false && brst.coolAfter > 0,
+  JSON.stringify({ second: brst.secondImmediately, cool: brst.coolAfter }));
+ok('it is loud, which is what stops it being free',
+  brst.burstNoise > brst.walkNoise, `walk carries ${brst.walkNoise}, a burst ${brst.burstNoise}`);
+ok('the burst block measured a running game', brst.mode === 'playing', brst.mode);
 
 /* ---- the three screen beats ----
    Pixel-sampled, because "I added a draw call" is not evidence that anything
