@@ -318,7 +318,7 @@ that has been the pattern that works in this codebase.
 - [x] U8  Blueprint pickup — reveals the floor's walls on the minimap, never the drones
 - [x] U9  `J` jewels — high value, silent to carry, always behind glass or a safe
 - [x] U10 A prize on the deep floors — optional, guarded, worth going out of your way for — **superseded**: every floor carries a prize, not just the deep ones
-- [ ] U11 Two exits on some floors — one close and watched, one far and quiet
+- [x] U11 Two exits on some floors — one close and watched, one far and quiet
 - [x] U12 Ghost streak — consecutive ghosted floors multiply, and the run says so
 - [x] U13 Last-seen marker — the minimap shows where they think you are, not where you are
 - [x] U14 Noise rings — a brief ring showing how far the sound you just made carried
@@ -521,3 +521,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-05 · U9 · 33 jewels behind glass, in safes or down dead ends: worth four coins and heard at 608 against a coin's 380, 4 assertions
 - 2026-09-05 · U8 · a floor plan on every floor, drawn under your own memory of the building - walls only, never a drone, which is the line between a map and a radar, 2 assertions
 - 2026-09-05 · trap · T.COIN_R does not exist and 'distance > undefined' is false, so the jewel guard never skipped: every jewel on every floor was taken on frame one, each firing a 608 noise. Four unrelated AI timing blocks failed from phantom noise. Sixth name-I-assumed of the session
+- 2026-09-05 · U11 · a second way out on the twelve deep floors, 662-1092px from the first. exitPt keeps meaning one point - the NEAREST one - so the trigger, compass, beacon and minimap never had to learn about the second door, 6 assertions

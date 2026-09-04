@@ -5330,6 +5330,59 @@ ok('nothing starts on your doorstep on any floor of any loop',
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
 
+/* ---- two ways out ----
+   exitPt keeps meaning a single point - it just means the NEAREST one now, so
+   the arrow, the beacon, the compass and the minimap never had to learn about
+   the second door. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const twoE = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; meter = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  o.perFloor = [];
+  for (let i = 0; i < MAPS.length; i++) { mapIdx = i; loadMap(i); o.perFloor.push(__fp.exitCount()); }
+
+  /* a floor that has two: exitPt must follow whichever you are closer to */
+  const two = o.perFloor.findIndex(n => n > 1);
+  o.floor = two;
+  mapIdx = two; loop = 0; loadMap(two); invuln = 9e9; bots.length = 0;
+  const es = __fp.exitsAt();
+  o.gap = Math.round(Math.hypot(es[0].x - es[1].x, es[0].y - es[1].y));
+  __fp.teleport(es[0].x + 60, es[0].y);
+  for (let i = 0; i < 3; i++) update(1 / 60);
+  o.nearFirst = __fp.nearestExit();
+  __fp.teleport(es[1].x + 60, es[1].y);
+  for (let i = 0; i < 3; i++) update(1 / 60);
+  o.nearSecond = __fp.nearestExit();
+
+  /* and either one gets you out */
+  __fp.clearCoins();
+  const before = mapIdx;
+  __fp.teleport(es[1].x, es[1].y);
+  for (let i = 0; i < 6; i++) update(1 / 60);
+  o.leftBySecond = { was: before, now: mapIdx, card: __fp.jobCardShown() };
+  o.mode = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the exits block ran at all', !twoE.threw, twoE.threw || 'ok');
+ok('the early floors keep one way out', twoE.perFloor.slice(0, 8).every(n => n === 1),
+  JSON.stringify(twoE.perFloor));
+ok('and the deep ones offer two', twoE.perFloor.slice(8).every(n => n === 2),
+  JSON.stringify(twoE.perFloor));
+ok('the two doors are genuinely far apart', twoE.gap > 400, `${twoE.gap}px`);
+/* the whole trick: everything that reads exitPt keeps working because it now
+   means the nearest door rather than the only one */
+ok('exitPt follows whichever door you are closer to',
+  Math.round(twoE.nearFirst.x) !== Math.round(twoE.nearSecond.x)
+  || Math.round(twoE.nearFirst.y) !== Math.round(twoE.nearSecond.y),
+  `${JSON.stringify(twoE.nearFirst)} then ${JSON.stringify(twoE.nearSecond)}`);
+ok('and the far door gets you out just as well as the near one',
+  twoE.leftBySecond.now !== twoE.leftBySecond.was || twoE.leftBySecond.card === true,
+  JSON.stringify(twoE.leftBySecond));
+
 /* ---- jewels and the floor plan ----
    Loot you may leave, and knowledge you must walk for. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });

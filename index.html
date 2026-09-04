@@ -1177,7 +1177,7 @@ const MAPS = [
     '#....C....Y...c............#',
     '#...####............###M...#',
     '#...####...WO.......####...#',
-    '#...####............####..c#',
+    '#E..####............####..c#',
     '#c....$...c..S...#c..!.A..E#',
     '############################'
   ], routes: [[[1,1],[26,1],[26,16],[1,16],[1,1]],[[9,5],[18,5],[18,12],[9,12],[9,5]],[[4,8],[4,16],[13,16],[13,12],[8,12],[8,8],[4,8]]] },
@@ -1194,7 +1194,7 @@ const MAPS = [
     '###....##.C.L..#############',
     '###....!c....###############',
     '###..!.M###GJ#######......A#',
-    '###......sc..#....c........#',
+    '###E.....sc..#....c........#',
     '#########Lcfc..#####ABL...E#',
     '#########......#############',
     '#########W*....#############',
@@ -1204,7 +1204,7 @@ const MAPS = [
   { name: 'THE COLD STORE', depth: 'COLD', theme: 'docks', coins: 13, bots: 3, spd: 1.32, fog: true, rows: [
     '############################',
     '###############..*HW.c######',
-    '##########.J...Lcc..~.######',
+    '##########EJ...Lcc..~.######',
     '##########.G###....!..######',
     '########....######.#########',
     '########c...######.#########',
@@ -1235,7 +1235,7 @@ const MAPS = [
     '########.!..c.!#....A##....#',
     '#c....#####VM..#G######...A#',
     '#.c.......W.#c.cJm........##',
-    '#...O.########.##########.##',
+    '#E..O.########.##########.##',
     '###########....c..#######L##',
     '###########.......#...Ac.E##',
     '###########......c##########',
@@ -1244,7 +1244,7 @@ const MAPS = [
   { name: 'THE ATRIUM', depth: 'ATRIUM', theme: 'museum', coins: 14, bots: 4, spd: 1.4, rows: [
     '############################',
     '#s.JG..#..c...#L.x#....c..##',
-    '#..c.M.#...L.x#...#c.c..M.##',
+    '#E.c.M.#...L.x#...#c.c..M.##',
     '#x....C...x.#.....c.L.c...##',
     '######.#####################',
     '#A..L..#....S.#...##########',
@@ -1264,7 +1264,7 @@ const MAPS = [
   { name: 'THE SUBLEVEL', depth: 'SUBLEVEL', theme: 'server', coins: 15, bots: 4, spd: 1.42, rows: [
     '############################',
     '#!...C#.c....#.......c*x.e##',
-    '#.L.c.#.......c.B.x#V....J##',
+    '#EL.c.#.......c.B.x#V....J##',
     '#..x.c...#...C.....#..V..A##',
     '#.##############c###.#######',
     '#..O.L.c...V.###.###....!.##',
@@ -1283,7 +1283,7 @@ const MAPS = [
   ], routes: [[[3,2], [10,2], [16,2], [23,2], [3,14], [16,14], [3,2]], [[3,2], [10,2], [23,2], [3,8], [3,14], [23,14], [3,2]], [[3,2], [16,2], [23,8], [10,8], [3,8], [3,14], [3,2]], [[16,2], [23,8], [3,8], [3,14], [16,14], [23,14], [16,2]]] },
   { name: 'THE CISTERN', depth: 'CISTERN', theme: 'docks', coins: 15, bots: 4, spd: 1.42, fog: true, rows: [
     '############################',
-    '#hH..L#.Z....c#L..c...L..M##',
+    '#hHE.L#.Z....c#L..c...L..M##',
     '#*c.x.x....#L.c.....#c....##',
     '#A.~.~#.c....c#.....#..~..##',
     '##c##########.#######~######',
@@ -1304,7 +1304,7 @@ const MAPS = [
   { name: 'THE ARCHIVE', depth: 'ARCHIVE', theme: 'bank', coins: 16, bots: 4, spd: 1.44, siren: true, rows: [
     '############################',
     '#######...c......J.#.!..!A##',
-    '#######..x.x#.C..G........##',
+    '#######..x.x#.C..G.......E##',
     '#######.....#..c...#......##',
     '##################G####.####',
     '#L..!.#######C..$..#x.x...##',
@@ -1329,7 +1329,7 @@ const MAPS = [
     '#########.W..#......#.....##',
     '####AL....c..#.x...c#.....##',
     '####V#######################',
-    '#.......c.L#....V.N.#L..x.##',
+    '#E......c.L#....V.N.#L..x.##',
     '#.c.....#c..M#c....x#.....##',
     '#m.J$...#.......#.x..c....##',
     '#c.L....#.H..#.x.x..#...N.##',
@@ -1357,7 +1357,7 @@ const MAPS = [
     '#...#...##.#...#.c..#.....##',
     '#...#...O#....L#.#L......c##',
     '#.c...#.##.#..##..c.#..c..##',
-    '#A.##x......#.W.c#*.##....##',
+    '#A.##x......#.W.c#*.##...E##',
     '############################',
     '############################'
   ], routes: [[[2,3], [2,14], [18,14], [23,14], [12,9]], [[2,3], [7,3], [2,9], [7,14], [12,14], [23,14]], [[23,14], [12,14], [2,9], [2,3], [12,9]], [[2,14], [2,9], [12,14], [18,9], [12,9]]] },
@@ -1377,13 +1377,13 @@ const MAPS = [
     '#...#c...O...#.c##..c##...##',
     '##.....#....##.....#.#.cc.##',
     '#.O#c..#.Y...#.x#d##..L...##',
-    '#AcxL..#....V....#.*....#.##',
+    '#AcxL..#....V....#.*....#E##',
     '############################',
     '############################'
   ], routes: [[[23,14], [23,8], [10,14], [4,14], [23,2]], [[10,14], [4,14], [4,8], [23,14], [10,8]], [[10,2], [4,2], [4,14], [10,14], [23,8], [23,2]], [[10,8], [23,8], [23,14], [10,14], [4,14], [23,2]]] },
   { name: 'THE SPIRE', depth: 'SPIRE', theme: 'city', coins: 18, bots: 4, spd: 1.5, fog: true, siren: true, blackout: true, rows: [
     '############################',
-    '#A...#YMc.....W#.#*..V....##',
+    '#A...#YMc.....W#.#*..V...E##',
     '#....#...#.#..c#...#.#.#.###',
     '#.x......f.#.....##..#.cY.##',
     '###.#####################.##',
@@ -1409,6 +1409,9 @@ let mode = 'menu', paused = false, time = 0;
 let mapIdx = 0, loop = 0, endless = false, runT = 0;
 let coins = 0, realCoins = 0, coinsTotal = 5, score = 0;
 let grid = null, spawnPt = { x: 0, y: 0 }, exitPt = { x: 0, y: 0 };
+/* Some floors have two. exitPt is kept pointing at whichever is closer, so
+   nothing that already reads exitPt has to learn about the second one. */
+let exits = [];
 let coinList = [], emitters = [], propsXY = [];
 let bots = [], noise = [], stepLog = [], panLog = [], listenLock = false, listenLockBy = null;
 let lasers = [], sirenT = 0, nextSiren = 1e9, fogT = 0, nextFog = 1e9, flScale = 1, botSpd = 1, blackoutMap = false;
@@ -2014,6 +2017,7 @@ function loadMap(idx) {
   coinList = []; emitters = []; propsXY = []; powerups = [];
   prize = null;   /* before the tile loop, or the tiles fill it and this empties it */
   lockers = []; hidIn = null; hidT = 0; hidSeen = false;
+  exits = [];
   jewels = []; plans = []; hasPlan = false;
   doors = []; keycards = [];
   plates = [];
@@ -2031,7 +2035,7 @@ function loadMap(idx) {
     const cx = (x + 0.5) * T.TILE, cy = (y + 0.5) * T.TILE;
     if (ch === '#') grid[y * T.COLS + x] = 1;
     if (ch === 'P') spawnPt = { x: cx, y: cy };
-    if (ch === 'E') exitPt = { x: cx, y: cy };
+    if (ch === 'E') { exits.push({ x: cx, y: cy }); exitPt = exits[0]; }
     if (ch === 'c') coinList.push({ x: cx, y: cy, ph: rand(0, TAU), got: false, seen: false });
     if (ch === 'L') emitters.push({ x: cx, y: cy, r: rand(130, 175), col: TH.lamp, flick: rand(0, 9), kind: 'lamp', base: 1 });
     if (ch === 'N') emitters.push({ x: cx, y: cy, r: rand(95, 140), col: rng() < 0.5 ? TH.lamp : TH.accent, flick: rand(0, 9), kind: 'neon', base: 1 });
@@ -2063,7 +2067,7 @@ function loadMap(idx) {
     if (ch === '*') prize = { gx: x, gy: y, x: cx, y: cy, taken: false, ph: rand(0, TAU) };
     if (ch === 'x') propsXY.push({ x: cx, y: cy, k: TH.props[irand(TH.props.length)], r: rand(0, TAU) });
   }
-  emitters.push({ x: exitPt.x, y: exitPt.y, r: 95, col: '#4dffb8', flick: rand(0, 9), kind: 'exit', base: .7 });
+  for (const e of exits) emitters.push({ x: e.x, y: e.y, r: 95, col: '#4dffb8', flick: rand(0, 9), kind: 'exit', base: .7 });
   lasers = (M.lasers || []).map(l => ({
     x1: (l[0] + .5) * T.TILE, y1: (l[1] + .5) * T.TILE, x2: (l[2] + .5) * T.TILE, y2: (l[3] + .5) * T.TILE,
     ph: rand(0, TAU), on: true, zapped: false
@@ -2267,7 +2271,7 @@ function validateMaps() {
         if (ch === 'c') cs.push(y * T.COLS + x);
       }
     }
-    if (!P || !E) return 'map ' + m + ' missing P/E';
+    if (!P || !E) return 'map ' + m + ' missing P/E';   /* E is the last one seen; any is fine */
     const seen = new Uint8Array(T.COLS * T.ROWS);
     const q = [P]; seen[P] = 1;
     while (q.length) {
@@ -2945,7 +2949,16 @@ function update(dt) {
   if (puWas !== Math.ceil(puLens) + ',' + Math.ceil(puShoe) + ',' + Math.ceil(puGhost)) hud();
 
   /* exit */
-  if (exitOpen && Math.hypot(exitPt.x - player.x, exitPt.y - player.y) < 26) { nextMap(); return; }
+  /* whichever is closer is the one everything else points at */
+  if (exits.length > 1) {
+    let best = exits[0], bd = 1e9;
+    for (const e of exits) {
+      const d = Math.hypot(e.x - player.x, e.y - player.y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    exitPt = best;
+  }
+  if (exitOpen && exits.some(e => Math.hypot(e.x - player.x, e.y - player.y) < 26)) { nextMap(); return; }
 
   /* noise queue */
   for (let i = noise.length - 1; i >= 0; i--) { const n = noise[i]; n.t -= dt; if (n.t <= 0) noise.splice(i, 1); }
@@ -4604,7 +4617,8 @@ function render() {
     }
   }
   /* the exit: a green promise you can always see */
-  drawExit();
+  if (exits.length > 1) for (const e of exits) drawExit(e.x, e.y);
+  else drawExit();
   /* searchlights sweep the floors */
   for (const e of emitters) if (e.kind === 'search' && !e.dead) drawSearch(e);
   for (const e of emitters) if (e.cam) drawCamHousing(e);
@@ -5770,8 +5784,8 @@ function drawLootShape(kind, tw) {
 }
 
 
-function drawExit() {
-  const x = exitPt.x, y = exitPt.y, S = T.TILE;
+function drawExit(ex, ey) {
+  const x = ex === undefined ? exitPt.x : ex, y = ey === undefined ? exitPt.y : ey, S = T.TILE;
   const pulse = 0.5 + 0.5 * Math.sin(time * (exitOpen ? 4 : 1.5));
   const open = exitOpen ? 1 : 0;
   const gap = open * (S * 0.34);          /* how far each shutter has withdrawn */
@@ -7771,7 +7785,10 @@ window.__fp = {
   get mode() { return mode; }, get mapIdx() { return mapIdx; }, get loop() { return loop; },
   get coins() { return coins; }, get coinsTotal() { return coinsTotal; }, get meter() { return meter; },
   get exitOpen() { return exitOpen; }, get exitFull() { return exitFull; },
-  exitNeed() { return coinsTotal; }, get blackout() { return blackout; }, get score() { return score; },
+  exitNeed() { return coinsTotal; },
+  exitCount() { return exits.length; },
+  exitsAt() { return exits.map(e => ({ x: e.x, y: e.y })); },
+  nearestExit() { return { x: exitPt.x, y: exitPt.y }; }, get blackout() { return blackout; }, get score() { return score; },
   get aim() { return player.aim; }, get pos() { return { x: player.x, y: player.y }; },
   get botState() { return bots.map(b => b.state); }, get botsN() { return bots.length; },
   get botGlow() { return bots.map(b => +b.glow.toFixed(2)); },
