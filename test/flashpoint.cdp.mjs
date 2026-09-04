@@ -66,12 +66,26 @@ const shot = async name => {
 let fails = 0;
 const ok = (name, pass, info = '') => { if (!pass) fails++; console.log(`${pass ? 'PASS' : 'FAIL'} :: ${name}${info ? '  (' + info + ')' : ''}`); };
 const eq = async (name, expr, want) => { const got = await evl(expr); ok(name, JSON.stringify(got) === JSON.stringify(want), `got ${JSON.stringify(got)}`); };
+/* Boot is done when __fp exists, not when a timer says so. Every navigate that
+   is followed by a fixed sleep is betting on how long the page takes, and that
+   bet gets tighter every time the game grows. */
+const booted = async (ms = 6000) => {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if (await evl('typeof __fp !== "undefined" && __fp.mode !== undefined')) return Date.now() - t0;
+    await sleep(60);
+  }
+  return -1;
+};
 
 await send('Runtime.enable'); await send('Page.enable');
 
 /* menu + validity */
 await send('Page.navigate', { url: FILE });
-await sleep(2200);
+await sleep(400);
+const bootMs = await booted();
+ok('the page booted before anything was asked of it', bootMs >= 0,
+  bootMs >= 0 ? `ready after ${bootMs}ms` : 'timed out waiting for __fp');
 await eq('maps valid', '__fp.mapCheck', 'ok');
 await eq('boots in menu', '__fp.mode', 'menu');
 await shot('menu');
@@ -5315,6 +5329,54 @@ ok('nothing starts on your doorstep on any floor of any loop',
   spw.under150 === 0, `${spw.under150} of ${spw.total}; closest ${spw.closest[0].nearest}px (${spw.closest[0].kind})`);
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
+
+/* ---- the shift change, and where they think you are ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const shft = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; meter = 0; alertLvl = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  /* a floor with more than one route, or there is nothing to swap to */
+  let pick = -1;
+  for (let i = 0; i < MAPS.length; i++) if ((MAPS[i].routes || []).length > 1) { pick = i; break; }
+  o.floor = pick;
+  mapIdx = pick; loop = 0; loadMap(pick);
+  invuln = 9e9;   /* loadMap resets it - set it AFTER, or this stands still and dies */
+  o.before = __fp.shiftState();
+  /* stand still for longer than the shift takes */
+  const secs = o.before.at + 3;
+  for (let i = 0; i < secs * 60; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
+  o.after = __fp.shiftState();
+  o.mode = mode;
+
+  /* the marker: it must follow what they BELIEVE, not where you are */
+  mapIdx = pick; loadMap(pick); invuln = 9e9; mode = 'playing'; __fp.setMade(false);
+  o.quiet = __fp.lastSeenMark();
+  const b = bots.find(x => x.kind === 'drone');
+  __fp.teleport(spawnPt.x, spawnPt.y);
+  b.state = 'invest'; b.lastX = spawnPt.x + 600; b.lastY = spawnPt.y + 300;
+  o.marked = __fp.lastSeenMark();
+  o.playerAt = { x: Math.round(player.x), y: Math.round(player.y) };
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the shift block ran at all', !shft.threw, shft.threw || 'ok');
+ok('a floor with more than one patrol exists to test', shft.floor >= 0, `floor ${shft.floor}`);
+ok('the beat expires partway through the quiet half',
+  shft.before.done === false && shft.after.done === true,
+  `${JSON.stringify(shft.before.routes)} -> ${JSON.stringify(shft.after.routes)}`);
+/* the point is not that a flag flipped - it is that they are somewhere else */
+ok('and they are genuinely walking different routes afterwards',
+  JSON.stringify(shft.before.routes) !== JSON.stringify(shft.after.routes),
+  `${JSON.stringify(shft.before.routes)} -> ${JSON.stringify(shft.after.routes)}`);
+ok('the shift block measured a running game', shft.mode === 'playing', shft.mode);
+ok('nothing is marked while nobody is looking for you', shft.quiet === null,
+  JSON.stringify(shft.quiet));
+ok('the marker sits where they think you are, not where you are',
+  shft.marked && Math.hypot(shft.marked.x - shft.playerAt.x, shft.marked.y - shft.playerAt.y) > 300,
+  `${JSON.stringify(shft.marked)} vs you at ${JSON.stringify(shft.playerAt)}`);
 
 /* ---- contracts ----
    Twenty floors with one score at the end asks nothing of the player. Four

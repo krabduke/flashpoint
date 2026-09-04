@@ -804,6 +804,9 @@ const T = {
   /* kit is bought out of the take, so buying is banking less - the fence asks
      three questions, not one */
   SHOP_PER_POINT: 260,
+  /* the beat expires: patrols swap routes partway through a floor, so a memorised
+     loop stops being free without turning the quiet act into a stopwatch */
+  SHIFT_AT: 52, SHIFT_JITTER: 14,
   /* a torch in a blacked-out building is the most conspicuous thing in it.
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
@@ -1375,6 +1378,7 @@ let exfilT = 0, responseT = 0, takeT = 0;
 let burstT = 0, burstCool = 0;
 /* banked is yours whatever happens next; atRisk dies with you */
 let banked = 0, atRisk = 0, jobIdx = 0;
+let shiftAt = 0, shifted = false;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
 let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
@@ -2064,6 +2068,7 @@ function loadMap(idx) {
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; made = false; madeT = 0; exitOpen = false; exitFull = false;
   phase = 'in'; heldPrize = false; prizeT = 0; exfilT = 0; responseT = 0; takeT = 0;
+  shiftAt = T.SHIFT_AT + rand(-T.SHIFT_JITTER, T.SHIFT_JITTER); shifted = false;
   burstT = 0; burstCool = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
   /* a wipe left over from the previous floor would darken the new one */
@@ -2112,7 +2117,8 @@ function spawnBots() {
   const M = MAPS[mapIdx];
   const want = Math.min(M.bots + loop + (MOD().bots || 0), 6);
   for (let i = 0; i < want; i++) {
-    const route = (M.routes && M.routes[i % M.routes.length]) || fallbackRoute();
+    const routeIdx = (M.routes && M.routes.length) ? i % M.routes.length : 0;
+    const route = (M.routes && M.routes[routeIdx]) || fallbackRoute();
     /* start each bot at a different waypoint along the route to prevent clustering */
     const routeLen = route.length;
     let startIdx = i * (Math.floor(routeLen / Math.max(1, want))) % routeLen;
@@ -2148,8 +2154,7 @@ function spawnBots() {
       half: T.BOT_HALF, rays: new Array(T.BOT_RAYS + 1), sweepP: rand(0, TAU), blink: 0, eyeGlint: 0, chaseT: 0, glow: 0, chirpT: 0, saidHeat: 0, peekT: 0, peekCool: rand(0, 3), peekTo: 0, searchPts: [], wary: 0, radioT: 0,
       /* drawn through rng() so a daily run reproduces the same personalities */
       sweepK: rand(0.7, 1.4), paceK: rand(0.9, 1.12), peekK: rand(0.7, 1.5),
-      dwellK: rand(0, 1), dwellT: 0
-    });
+      dwellK: rand(0, 1), dwellT: 0, routeIdx});
   }
   /* Listeners hold a post rather than walking a beat. A one-point route means
      the patrol code already in place walks them back to where they started once
@@ -3485,6 +3490,27 @@ function updateMeter(dt) {
   }
   if (meter > 0.28) { beatT -= dt; if (beatT <= 0) { sfx.beat(); beatN++; beatT = lerp(0.9, 0.32, meter); } }
   else beatT = 0;
+  /* Partway through, the shift changes. Nobody is looking for you - they are
+     just walking somewhere else now, which is enough to make a memorised beat
+     worthless without adding a clock to the quiet half. */
+  if (!shifted && phase === 'in' && floorT > shiftAt) {
+    shifted = true;
+    const routes = (MAPS[mapIdx].routes || []).filter(r => r && r.length);
+    if (routes.length > 1) {
+      let n = 0;
+      for (const b of bots) {
+        if (b.kind !== 'drone' || !b.route) continue;
+        /* by index, not by identity: a drone's route is not the same array
+           object as the one in MAPS, so indexOf on it answers -1 and every
+           drone would be handed route zero */
+        b.routeIdx = ((b.routeIdx || 0) + 1) % routes.length;
+        b.route = routes[b.routeIdx];
+        b.wp = 0; b.path = [];
+        n++;
+      }
+      if (n) toast('SHIFT CHANGE — THEY ARE WALKING SOMEWHERE ELSE', 2.6);
+    }
+  }
   if (phase === 'out') {
     exfilT += dt;
     responseT += dt;
@@ -4190,6 +4216,26 @@ function drawMinimap() {
   if (surveyG[ei] >= MINI_SEEN) {
     g.fillStyle = exitOpen ? (exitFull ? '#4dffb8' : '#ffc46e') : 'rgba(77,255,184,.4)';
     g.fillRect(exitPt.x * sx - 2, exitPt.y * sy - 2, 4, 4);
+  }
+  /* Where they think you are, which is only ever interesting when it is not
+     where you are. Drawn from the same lastX/lastY the search AI steers on, so
+     the marker cannot drift away from what the drones actually believe. */
+  let bx = 0, by = 0, bn = 0;
+  for (const b of bots) {
+    if (b.kind === 'sentry' || !(b.state === 'chase' || b.state === 'invest')) continue;
+    if (!b.lastX && !b.lastY) continue;
+    bx += b.lastX; by += b.lastY; bn++;
+  }
+  if (bn) {
+    const mx = (bx / bn) * sx, my = (by / bn) * sy;
+    const p = 0.5 + 0.5 * Math.sin(time * 4);
+    g.strokeStyle = 'rgba(255,90,74,' + (0.5 + 0.4 * p).toFixed(3) + ')';
+    g.lineWidth = 1.2;
+    g.beginPath(); g.arc(mx, my, 3 + p * 1.6, 0, TAU); g.stroke();
+    g.beginPath();
+    g.moveTo(mx - 4.5, my); g.lineTo(mx + 4.5, my);
+    g.moveTo(mx, my - 4.5); g.lineTo(mx, my + 4.5);
+    g.stroke();
   }
   g.fillStyle = '#fff6da';
   g.beginPath(); g.arc(player.x * sx, player.y * sy, 2.1, 0, TAU); g.fill();
@@ -7580,6 +7626,17 @@ window.__fp = {
   job() { return { idx: jobIdx, banked, atRisk, payout: jobPayout(),
     len: T.JOB_LEN, jobs: Math.ceil(MAPS.length / T.JOB_LEN) }; },
   jobEnd(i) { return jobEnd(i); }, jobOf(i) { return jobOf(i); },
+  shiftState() { return { at: +shiftAt.toFixed(1), done: shifted,
+    routes: bots.filter(b => b.kind === 'drone').map(b => b.routeIdx || 0) }; },
+  lastSeenMark() {
+    let x = 0, y = 0, n = 0;
+    for (const b of bots) {
+      if (b.kind === 'sentry' || !(b.state === 'chase' || b.state === 'invest')) continue;
+      if (!b.lastX && !b.lastY) continue;
+      x += b.lastX; y += b.lastY; n++;
+    }
+    return n ? { x: Math.round(x / n), y: Math.round(y / n), n } : null;
+  },
   bankNow() { jobBank(); }, pushOn() { jobPushOn(); },
   shop() { return loadout.map(id => ({ id, price: shopPrice(id),
     have: __gadgetCharges(id), cap: T.CAP[id] || 0, can: canBuy(id) })); },

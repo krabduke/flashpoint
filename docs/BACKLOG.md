@@ -314,13 +314,13 @@ that has been the pattern that works in this codebase.
 - [x] U4  Conditions that suit the floor — no BROWNOUT where the lights are already out (was P3)
 - [x] U5  A daily run pins its conditions to the seed (was P4)
 - [ ] U6  `A` lockers — step in and vanish; you cannot see out either
-- [ ] U7  Shift change — patrols swap routes mid-floor, so a memorised beat stops being free
+- [x] U7  Shift change — patrols swap routes mid-floor, so a memorised beat stops being free
 - [ ] U8  Blueprint pickup — reveals the floor's walls on the minimap, never the drones
 - [ ] U9  `J` jewels — high value, silent to carry, always behind glass or a safe
 - [x] U10 A prize on the deep floors — optional, guarded, worth going out of your way for — **superseded**: every floor carries a prize, not just the deep ones
 - [ ] U11 Two exits on some floors — one close and watched, one far and quiet
 - [x] U12 Ghost streak — consecutive ghosted floors multiply, and the run says so
-- [ ] U13 Last-seen marker — the minimap shows where they think you are, not where you are
+- [x] U13 Last-seen marker — the minimap shows where they think you are, not where you are
 - [x] U14 Noise rings — a brief ring showing how far the sound you just made carried
 - [x] U15 A choice at the stairs — one of three boons between floors — **superseded**: the choice moved to the fence between contracts, bought out of the take
 
@@ -512,3 +512,6 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-04 · redesign · being seen starts a hunt instead of ending the run; the prize opens the exit and gold became optional score; greed costs speed; the escape act climbs and takes the dark away; three screen beats; three heist tools; a dash. Removed EXIT_EARLY, CLEAR_BONUS's all-coins demand, fSeen being set by bumpAlert, and a duplicate exit chevron
 - 2026-09-04 · contracts · twenty floors are five contracts of four, each ending at a fence: bank it or leave it on the table, +25% per contract cleared, and being taken loses whatever was still on it, 7 assertions
 - 2026-09-04 · shop · kit is bought at the fence out of the take, so buying banks less and the contract asks three questions instead of one; a full gadget refuses the sale, 5 assertions
+- 2026-09-04 · U7 · shift change around 52s (+/-14 jitter): drones rotate onto each other's routes by INDEX, since a drone's route is not the same array object as the one in MAPS and indexOf answers -1, 5 assertions
+- 2026-09-04 · U13 · the minimap marks where they think you are, averaged from the same lastX/lastY the search AI steers on, and only while someone is actually looking, 2 assertions
+- 2026-09-04 · harness · boot is waited on rather than timed. A fixed 2200ms sleep before the first assertion had been a bet on how long the page takes to load, and the bet got tighter every time the game grew - it lost today with ReferenceError: __fp is not defined
