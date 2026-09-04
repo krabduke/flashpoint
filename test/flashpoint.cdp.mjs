@@ -5302,6 +5302,104 @@ ok('nothing starts on your doorstep on any floor of any loop',
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
 
+/* ---- the three screen beats ----
+   Pixel-sampled, because "I added a draw call" is not evidence that anything
+   reached the screen. Each one samples the region it governs, with a control -
+   a whole-canvas average dilutes a local effect into noise. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const scrb = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; meter = 0; alertLvl = 0;
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+  const box = (x, y, hw) => {
+    const x0 = Math.max(0, Math.min(W - hw * 2, x - hw));
+    const y0 = Math.max(0, Math.min(H - hw * 2, y - hw));
+    const d = ctx.getImageData(x0 * DPR, y0 * DPR, hw * 2 * DPR, hw * 2 * DPR).data;
+    let s = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { s += d[i] + d[i+1] + d[i+2]; n++; }
+    return Math.round(s / n);
+  };
+  const whole = () => {
+    const d = ctx.getImageData(0, 0, W * DPR, H * DPR).data;
+    let s = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { s += d[i] + d[i+1] + d[i+2]; n++; }
+    return Math.round(s / n);
+  };
+
+  /* the take beat: a flash that exists and then stops existing */
+  render(); o.beforeTake = whole();
+  __fp.takePrize();
+  render(); o.atTake = whole(); o.takeT = __fp.takeT();
+  for (let i = 0; i < 90; i++) update(1 / 60);
+  render(); o.afterTake = whole(); o.takeTLater = __fp.takeT();
+
+  /* the exit beacon: sample where the exit is on screen against a control patch */
+  const mx = T.COLS * T.TILE / 2, my = T.ROWS * T.TILE / 2;
+  const dx = mx - exitPt.x, dy = my - exitPt.y, dn = Math.hypot(dx, dy) || 1;
+  __fp.teleport(exitPt.x + dx / dn * 120, exitPt.y + dy / dn * 120);
+  /* camNow is lerped at 0.16 inside render(), not update() - so stepping the
+     simulation moves the camera not at all, and one render moves it one step.
+     Six updates and a render left the camera where it started. */
+  for (let i = 0; i < 45; i++) { update(1 / 60); render(); }
+  const ex = (exitPt.x - camNow.cx) * Z, ey = (exitPt.y - camNow.cy) * Z;
+  o.exitOnScreen = ex > 20 && ey > 20 && ex < W - 20 && ey < H - 20;
+  /* A patch 220px away is not a control - it can simply contain a lamp, which
+     is exactly what it did. Sample the ring itself against the same lighting
+     just outside it: same room, same torch, one has the beacon and one does not. */
+  const ringAvg = (cx0, cy0, r) => {
+    let s = 0, n = 0;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      const x = cx0 + Math.cos(a) * r, y = cy0 + Math.sin(a) * r;
+      if (x < 5 || y < 5 || x > W - 5 || y > H - 5) continue;
+      const d = ctx.getImageData((x - 4) * DPR, (y - 4) * DPR, 8 * DPR, 8 * DPR).data;
+      for (let k = 0; k < d.length; k += 4) { s += d[k] + d[k+1] + d[k+2]; n++; }
+    }
+    return n ? Math.round(s / n) : 0;
+  };
+  o.phaseAtRead = __fp.phase;
+  o.ex = Math.round(ex); o.ey = Math.round(ey); o.W = Math.round(W); o.H = Math.round(H);
+  o.atExit = ringAvg(ex, ey, 41);
+  o.controlPatch = ringAvg(ex, ey, 72);
+
+  /* the hunted edge: it must key off a hunter, not merely off being made */
+  /* Reload FIRST, then take both readings, so the control and the measurement
+     share a phase - reloading resets phase to 'in', and losing the exfil
+     lighting darkens the screen by more than the red edge can add back. */
+  const px = player.x, py = player.y;
+  mapIdx = 0; loadMap(0); __fp.teleport(px, py); invuln = 9e9;
+  const hunter = bots.find(b => b.kind !== 'sentry');
+  o.hasHunter = !!hunter;
+  for (const b of bots) { b.x = px - 2000; b.y = py - 2000; b.state = 'patrol'; }
+  __fp.setMade(false);
+  render(); o.calm = whole();
+  if (hunter) { hunter.x = px + 90; hunter.y = py; hunter.state = 'chase'; }
+  __fp.setMade(true);
+  render(); o.hunted = whole();
+  o.mode = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the beats block ran at all', !scrb.threw, scrb.threw || 'ok');
+ok('taking the prize flashes the screen',
+  scrb.atTake > scrb.beforeTake + 6 && scrb.takeT > 0.5,
+  `${scrb.beforeTake} -> ${scrb.atTake} (t=${scrb.takeT})`);
+/* a flash that never leaves is not a beat, it is a filter */
+ok('and the flash passes', scrb.afterTake < scrb.atTake && scrb.takeTLater === 0,
+  `${scrb.atTake} -> ${scrb.afterTake} (t=${scrb.takeTLater})`);
+ok('the test actually framed the exit', scrb.exitOnScreen,
+  `exit at ${scrb.ex},${scrb.ey} of ${scrb.W}x${scrb.H}`);
+ok('the exit is marked during the escape once you need it',
+  scrb.exitOnScreen && scrb.phaseAtRead === 'out' && scrb.atExit > scrb.controlPatch + 4,
+  `ring=${scrb.atExit} just-outside=${scrb.controlPatch} phase=${scrb.phaseAtRead} at ${scrb.ex},${scrb.ey} of ${scrb.W}x${scrb.H}`);
+ok('and being hunted leans the screen toward them',
+  scrb.hasHunter && scrb.hunted > scrb.calm + 2,
+  `${scrb.calm} -> ${scrb.hunted} (hunter=${scrb.hasHunter})`);
+ok('the beats block measured a running game', scrb.mode === 'playing', scrb.mode);
+
 /* ---- the escape act ----
    Waiting was free for the whole game. It is not free here: the building keeps
    getting faster until you are out of it, and it stops hiding you. */

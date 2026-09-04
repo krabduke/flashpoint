@@ -1324,7 +1324,7 @@ let made = false, madeT = 0;
 /* 'in' is the quiet half, 'out' is the escape. The prize is the hinge between
    them, and the only thing that opens the exit. */
 let phase = 'in', prize = null, heldPrize = false, prizeT = 0;
-let exfilT = 0, responseT = 0;
+let exfilT = 0, responseT = 0, takeT = 0;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
 let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
@@ -2013,7 +2013,7 @@ function loadMap(idx) {
   coinsTotal = coinList.length; coins = 0; realCoins = 0;
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; made = false; madeT = 0; exitOpen = false; exitFull = false;
-  phase = 'in'; heldPrize = false; prizeT = 0; exfilT = 0; responseT = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
+  phase = 'in'; heldPrize = false; prizeT = 0; exfilT = 0; responseT = 0; takeT = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
   /* a wipe left over from the previous floor would darken the new one */
   if (mode !== 'playing') wipeT = 0;
@@ -2898,6 +2898,7 @@ function update(dt) {
   for (const m of motes) { m.x += m.vx * dt; m.y += m.vy * dt; if (m.y < 0) { m.y = T.ROWS * T.TILE; m.x = rand(0, T.COLS * T.TILE); } if (m.x < 0) m.x = T.COLS * T.TILE; if (m.x > T.COLS * T.TILE) m.x = 0; }
   if (alertCool > 0) alertCool -= dt;
   redPulse = Math.max(0, redPulse - dt * 1.2);
+  if (takeT > 0) takeT = Math.max(0, takeT - dt * 1.6);
   unlockFlash = Math.max(0, unlockFlash - dt);
 }
 
@@ -3507,6 +3508,8 @@ function takePrize() {
   prize.taken = true;
   heldPrize = true;
   exitOpen = true;      /* the prize IS the key - say so here, not somewhere else */
+  takeT = 1;            /* the one cinematic beat a floor gets, and you chose it */
+  freeze = 0.12;        /* a hitch, so the moment lands before the alarm does */
   exitFull = realCoins >= coinsTotal;
   phase = 'out';
   score += T.PRIZE_SCORE;
@@ -4411,7 +4414,10 @@ function render() {
   }
 
   /* screen HUD canvas bits: detection vignette + film grain + exit arrow + sticks */
+  drawExitBeacon();
   drawVignette();
+  drawHuntedEdge();
+  drawTakeBeat();
   drawFloorWipe();
   drawCaughtHold();
   ctx.globalAlpha = 0.05; ctx.globalCompositeOperation = 'overlay';
@@ -5763,6 +5769,60 @@ function drawCaughtHold() {
   shut.addColorStop(1, 'rgba(6,3,10,' + (0.55 + k * 0.42) + ')');
   ctx.fillStyle = shut; ctx.fillRect(0, 0, W, H);
   ctx.restore();
+}
+
+/* Where the way out is, once you need it. drawExitArrow() already handles the
+   off-screen case with a compass, so this adds only the part it does not: a ring
+   standing over the exit while it IS on screen, during the escape, when knowing
+   exactly which doorway it is suddenly matters. Wide enough to sit outside the
+   shutter's own frame rather than on top of it. */
+function drawExitBeacon() {
+  if (phase !== 'out' || mode !== 'playing' || !exitPt) return;
+  const sx = (exitPt.x - camNow.cx) * Z, sy = (exitPt.y - camNow.cy) * Z;
+  if (sx < 20 || sy < 20 || sx > W - 20 || sy > H - 20) return;   /* the arrow has it */
+  const pulse = 0.55 + 0.45 * Math.sin(time * 3.4);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(77,255,184,' + (0.45 + 0.35 * pulse).toFixed(3) + ')';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(sx, sy, 38 + 5 * pulse, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+
+/* Which way the fear is coming from. Off-screen hunters are the ones you cannot
+   plan around, so the edge leans toward the nearest of them. */
+function drawHuntedEdge() {
+  if (!made || mode !== 'playing') return;
+  let near = null, nd = 1e9;
+  for (const b of bots) {
+    if (b.kind === 'sentry' || b.state !== 'chase') continue;
+    const d = Math.hypot(b.x - player.x, b.y - player.y);
+    if (d < nd) { nd = d; near = b; }
+  }
+  if (!near) return;
+  const k = clamp(1 - nd / 620, 0, 1);
+  if (k <= 0.02) return;
+  const a = Math.atan2(near.y - player.y, near.x - player.x);
+  const gx = W / 2 + Math.cos(a) * W * 0.6, gy = H / 2 + Math.sin(a) * H * 0.6;
+  const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, Math.max(W, H) * 0.72);
+  const beat = 0.55 + 0.45 * Math.sin(time * (6 + 8 * k));
+  g.addColorStop(0, 'rgba(255,60,50,' + (0.30 * k * beat).toFixed(3) + ')');
+  g.addColorStop(1, 'rgba(255,60,50,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+/* The take. A floor gets one of these and the player decided when. */
+function drawTakeBeat() {
+  if (takeT <= 0) return;
+  const k = takeT;
+  ctx.fillStyle = 'rgba(255,224,150,' + (k * k * 0.5).toFixed(3) + ')';
+  ctx.fillRect(0, 0, W, H);
+  /* a ring leaving the plinth, so the flash has a source rather than being weather */
+  if (prize) {
+    const sx = (prize.x - camNow.cx) * Z, sy = (prize.y - camNow.cy) * Z;
+    ctx.strokeStyle = 'rgba(255,240,200,' + (k * 0.65).toFixed(3) + ')';
+    ctx.lineWidth = 3 * k + 1;
+    ctx.beginPath(); ctx.arc(sx, sy, (1 - k) * Math.max(W, H) * 0.55, 0, TAU); ctx.stroke();
+  }
 }
 
 function drawVignette() {
@@ -7340,7 +7400,7 @@ window.__fp = {
   setMeter(v) { meter = v; },
   get made() { return made; }, setMade(v) { made = !!v; madeT = 0; },
   get phase() { return phase; }, get heldPrize() { return heldPrize; },
-  exfilT() { return +exfilT.toFixed(2); },
+  exfilT() { return +exfilT.toFixed(2); }, takeT() { return +takeT.toFixed(3); },
   darkLevel() { return blackout > 0 ? 0.93 : (phase === 'out' ? T.EXFIL_LIGHT : T.DARK); },
   prizeAt() { return prize ? { x: prize.x, y: prize.y, taken: prize.taken } : null; },
   prizeT() { return +prizeT.toFixed(3); }, takePrize() { takePrize(); },
