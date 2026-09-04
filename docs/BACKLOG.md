@@ -483,3 +483,13 @@ Append one line per completed item: `date · id · commit · note`.
     cannot match `const hearing` - the trailing space makes a longer name
     invisible - so a clean zero meant nothing and the run died on a collision.
     Extract every declared name and test membership instead.
+
+22. **A tight render loop measures the compositor, not the game.** Calling
+    render() 240 times synchronously reported 13.6ms mean and a 100ms p95, which
+    reads as a serious stutter. Driven by real requestAnimationFrame instead,
+    the same floor with the same code holds median 16.7ms, p99 16.8ms and ZERO
+    frames over 33ms - a locked 60fps, and that is with GPU acceleration
+    disabled. A loop that never yields makes the compositor batch its work and
+    dumps it on whichever iteration triggers the flush. Measure frames the way
+    frames actually happen, and check the GPU flag before believing any canvas
+    number: --disable-gpu alone moved render mean from 0.22ms to 13.6ms.

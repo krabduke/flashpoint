@@ -324,7 +324,7 @@ await sleep(400);
 /* gameplay hero shot: sweep the beam near a lamp */
 await evl('startGame();');
 await sleep(600);
-await evl('(function(){ const e = emitters[0]; player.x = e.x; player.y = e.y + 90; mouseWX = e.x; mouseWY = e.y; })()');
+await evl('(function(){ const e = emitters[0]; player.x = e.x; player.y = e.y + 90; __fp.aimAt(e.x, e.y); })()');
 await sleep(1400);
 await shot('play');
 
@@ -367,11 +367,11 @@ const coinPixels = `(() => {
   };
   return JSON.stringify({ state: coinLight(c), coin: rd(0), floor: rd(100) });
 })()`;
-await evl(`(() => { const c = coinList.find(x=>!x.got); player.x = c.x - 70; player.y = c.y; mouseWX = c.x; mouseWY = c.y; aimMode='mouse'; })()`);
+await evl(`(() => { const c = coinList.find(x=>!x.got); player.x = c.x - 70; player.y = c.y; __fp.aimAt(c.x, c.y); })()`);
 await sleep(400);
 const litPx = JSON.parse(await evl(coinPixels));
 ok('a lit coin is visibly brighter than the floor', litPx.state === 'lit' && litPx.coin - litPx.floor > 200, `coin=${litPx.coin} floor=${litPx.floor}`);
-await evl(`(() => { const c = coinList.find(x=>!x.got); player.x = c.x - 320; player.y = c.y; mouseWX = player.x - 200; mouseWY = player.y; })()`);
+await evl(`(() => { const c = coinList.find(x=>!x.got); player.x = c.x - 320; player.y = c.y; __fp.aimAt(player.x - 200, player.y); })()`);
 await sleep(400);
 const markPx = JSON.parse(await evl(coinPixels));
 ok('a remembered coin is still findable', markPx.state === 'mark' && markPx.coin - markPx.floor > 60, `coin=${markPx.coin} floor=${markPx.floor}`);
@@ -681,7 +681,7 @@ const lootPix = await evl(`(() => {
     loop = 0; mapIdx = i; loadMap(i); hud(); __fp.forgetCoins();
     const c = coinList.find(z => !z.got);
     player.x = c.x - 60; player.y = c.y;
-    mouseWX = c.x; mouseWY = c.y;
+    __fp.aimAt(c.x, c.y);
     for (let k = 0; k < 30; k++) update(0.016);
     paused = true; render();
     const sx = (c.x - camNow.cx) * Z, sy = (c.y - camNow.cy) * Z;
@@ -732,7 +732,7 @@ await sleep(2200);
 const droneLook = await evl(`(() => {
   mode = 'playing'; invuln = 999; loop = 0; mapIdx = 0; loadMap(0); hud();
   const b = bots[0];
-  player.x = b.x - 90; player.y = b.y; mouseWX = b.x; mouseWY = b.y;
+  player.x = b.x - 90; player.y = b.y; __fp.aimAt(b.x, b.y);
   for (let k = 0; k < 3; k++) update(0.016);
   if (!revealed(b)) return JSON.stringify({ err: 'drone not lit' });
   paused = true;
@@ -1531,7 +1531,7 @@ const beamNotice = await evl(`(() => {
   /* put the drone well off to the side, facing away, with a clear view of the
      floor the beam is lighting - it must not be able to see the player */
   player.x = spawnPt.x; player.y = spawnPt.y;
-  mouseWX = player.x + 300; mouseWY = player.y;
+  __fp.aimAt(player.x + 300, player.y);
   update(0.016);
   const patches = __fp.beamPatches();
   if (!patches.length) return JSON.stringify({ err: 'no beam patches' });
@@ -1688,7 +1688,7 @@ const bounced = await evl(`(() => {
   const sides = [[-1,0],[1,0],[0,-1],[0,1]].filter(([dx,dy]) => !isWall(m.x + dx*S, m.y + dy*S));
   const [dx, dy] = sides[0];
   player.x = m.x + dx * S * 1.5; player.y = m.y + dy * S * 1.5;
-  mouseWX = m.x; mouseWY = m.y;
+  __fp.aimAt(m.x, m.y);
   update(0.016);
   const mb = __fp.mirrorBeam;
   if (!mb) return JSON.stringify({ ok: false, why: 'no reflected beam' });
@@ -2142,7 +2142,7 @@ const pulledIn = await evl(`(() => {
   const c = coinList.find(z => !z.got);
   /* park a coin just inside reach, beam pointed the other way so it is unlit */
   player.x = c.x - 70; player.y = c.y;
-  mouseWX = player.x - 300; mouseWY = player.y;
+  __fp.aimAt(player.x - 300, player.y);
   update(0.016);
   const litBefore = coinLight(c);
   const dBefore = Math.hypot(c.x - player.x, c.y - player.y);
@@ -2289,7 +2289,7 @@ const goldLost = await evl(`(() => {
   const c = coinList.find(z => !z.got);
   c.x = lamp.x + 10; c.y = lamp.y;
   player.x = lamp.x + 900; player.y = lamp.y;
-  mouseWX = player.x + 100; mouseWY = player.y;
+  __fp.aimAt(player.x + 100, player.y);
   update(0.016);
   const before = coinLight(c);
   player.x = lamp.x; player.y = lamp.y;
@@ -2421,7 +2421,7 @@ const flareLights = await evl(`(() => {
   mapIdx = 0; loadMap(0); hud(); __fp.forgetCoins();
   const c = __fp.coinPoints()[0];
   player.x = c.x - 300; player.y = c.y;
-  mouseWX = player.x - 200; mouseWY = player.y;
+  __fp.aimAt(player.x - 200, player.y);
   castCone(flHits, player.x, player.y, player.aim, T.FL_HALF, T.FL_RAYS, flRange());
   const before = coinList.filter(z => !z.got && coinLight(z) === 'lit').length;
   emitters.push({ x: c.x, y: c.y, r: T.FLARE_R, col: '#ffb347', flick: 0, kind: 'flare', base: 1, life: T.FLARE_T });
@@ -4423,6 +4423,128 @@ ok('and at 150% the item bar is still on the screen',
 ok('the HUD does not overflow its own width either',
   ui.hudRight <= ui.vw + 1, `${ui.hudRight} of ${ui.vw}`);
 ok('and it goes back', ui.back === '1', ui.back);
+
+/* ---- the torch follows the cursor, not a patch of floor ---- */
+const torch = JSON.parse(await evl(`(() => {
+  mode = 'playing'; invuln = 9e9; mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+  /* put the player in open ground so a wall does not stop the walk */
+  const open = [];
+  for (let gy = 2; gy < T.ROWS - 2; gy++) for (let gx = 2; gx < T.COLS - 6; gx++)
+    if (!grid[gy * T.COLS + gx] && !grid[gy * T.COLS + gx + 1] && !grid[gy * T.COLS + gx + 2]
+        && !grid[gy * T.COLS + gx + 3]) open.push([gx, gy]);
+  const [sx, sy] = open[0];
+  player.x = sx * T.TILE + 20; player.y = sy * T.TILE + 20;
+  player.vx = player.vy = 0;
+
+  /* aim straight ahead down the corridor, then run that way without touching
+     the mouse. The cursor has not moved, so the beam must not swing. */
+  const cam0 = camFit();
+  const scrX = (player.x + 260 - cam0.cx) * Z, scrY = (player.y - cam0.cy) * Z;
+  __fp.aimAtScreen(scrX, scrY);
+  update(1 / 60);                      /* aim is resolved in update, not on set */
+  const before = __fp.aimTarget().aim;
+  const x0 = player.x;
+  for (let i = 0; i < 60; i++) { keys.right = true; update(1 / 60); }
+  keys.right = false;
+  const after = __fp.aimTarget().aim;
+  return JSON.stringify({ before: +before.toFixed(3), after: +after.toFixed(3),
+    swing: +Math.abs(after - before).toFixed(3), moved: Math.round(player.x - x0) });
+})()`));
+ok('the player actually moved for this test', torch.moved > 60, `${torch.moved}px`);
+ok('running with the mouse still does not swing the torch',
+  torch.swing < 0.12, `aim ${torch.before} -> ${torch.after} (${torch.swing} rad)`);
+
+/* ---- movement forgives a corner, but never posts you through a wall ---- */
+/* A single offset proves nothing: at r=10 in a 40px gap the player fits with
+   10px to spare either side, so one sample can pass for reasons unrelated to
+   the fix. Sweep every approach line instead and count how many get through. */
+const corner = JSON.parse(await evl(`(() => {
+  mode = 'playing'; invuln = 9e9; mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+  const solid = (gx, gy) => grid[gy * T.COLS + gx] === 1;
+  let gap = null;
+  for (let gy = 1; gy < T.ROWS - 1 && !gap; gy++)
+    for (let gx = 2; gx < T.COLS - 2 && !gap; gx++)
+      if (!solid(gx, gy) && solid(gx, gy - 1) && solid(gx, gy + 1)
+          && !solid(gx - 1, gy) && !solid(gx + 1, gy)) gap = { gx, gy };
+  if (!gap) return JSON.stringify({ skip: true });
+
+  const attempt = (offset, nudge, down) => {
+    const was = player.nudge; player.nudge = nudge;
+    player.x = (gap.gx - 1.6) * T.TILE; player.y = gap.gy * T.TILE + 20 + offset;
+    player.vx = player.vy = 0;
+    for (let i = 0; i < 80; i++) {
+      keys.right = true; if (down) keys.down = true;
+      update(1 / 60);
+    }
+    keys.right = false; keys.down = false;
+    const through = player.x > (gap.gx + 0.9) * T.TILE;
+    player.nudge = was;
+    return through;
+  };
+  /* offsets within +-10 already fit a 40px gap at r=10 and prove nothing. The
+     interesting band is the one that clips the lip by a pixel or three. */
+  const sweep = (nudge, lo, hi) => {
+    let ok = 0, n = 0;
+    for (let off = lo; off <= hi; off++) { n++; if (attempt(off, nudge, false)) ok++; }
+    return { ok, n };
+  };
+  return JSON.stringify({
+    fitsOff: sweep(0, -9, 9), fitsOn: sweep(T.NUDGE, -9, 9),
+    clipOff: sweep(0, 11, 16), clipOn: sweep(T.NUDGE, 11, 16),
+    clipOffNeg: sweep(0, -16, -11), clipOnNeg: sweep(T.NUDGE, -16, -11), gap });
+})()`));
+if (corner.skip) {
+  ok('a doorway was found to test', false, 'no one-tile doorway on floor 1');
+} else {
+  ok('an approach that already fitted still fits',
+    corner.fitsOn.ok === corner.fitsOff.ok && corner.fitsOn.ok === corner.fitsOn.n,
+    `${corner.fitsOff.ok}/${corner.fitsOff.n} -> ${corner.fitsOn.ok}/${corner.fitsOn.n}`);
+  /* the actual complaint: lining up a couple of pixels off and stopping dead */
+  const clipOff = corner.clipOff.ok + corner.clipOffNeg.ok;
+  const clipOn = corner.clipOn.ok + corner.clipOnNeg.ok;
+  const clipN = corner.clipOff.n + corner.clipOffNeg.n;
+  ok('clipping the lip of a doorway used to stop you dead', clipOff === 0,
+    `${clipOff}/${clipN} got through before`);
+  ok('and now the corner is forgiven', clipOn > clipN * 0.6,
+    `${clipOn}/${clipN} get through now`);
+}
+
+/* forgiving is not the same as porous: this is the assertion that matters */
+const solidWall = JSON.parse(await evl(`(() => {
+  mode = 'playing'; invuln = 9e9; mapIdx = 0; loadMap(0); bots.length = 0;
+  let inside = 0, tried = 0;
+  const dirs = [['right', 1, 0], ['left', -1, 0], ['up', 0, -1], ['down', 0, 1]];
+  for (let gy = 1; gy < T.ROWS - 1; gy += 2) for (let gx = 1; gx < T.COLS - 1; gx += 2) {
+    if (grid[gy * T.COLS + gx] === 1) continue;
+    for (const [k] of dirs) {
+      player.x = gx * T.TILE + 20; player.y = gy * T.TILE + 20;
+      player.vx = player.vy = 0;
+      tried++;
+      for (let i = 0; i < 45; i++) { keys[k] = true; update(1 / 60); }
+      keys[k] = false;
+      const c = cellOf(player.x, player.y);
+      if (grid[c.i] === 1) inside++;
+    }
+  }
+  return JSON.stringify({ inside, tried });
+})()`));
+ok('and no amount of shoving ever puts you inside a wall',
+  solidWall.inside === 0, `${solidWall.inside} of ${solidWall.tried} shoves ended inside geometry`);
+
+/* ---- the prebuilt tile lists must agree with the grids on every floor ---- */
+const tl = JSON.parse(await evl(`(() => {
+  const bad = [];
+  for (let i = 0; i < MAPS.length; i++) {
+    mapIdx = i; loadMap(i);
+    const l = __fp.tileLists();
+    for (const k of ['water', 'vent', 'glass'])
+      if (l[k][0] !== l[k][1]) bad.push({ floor: i + 1, k, list: l[k][0], grid: l[k][1] });
+  }
+  mapIdx = 0; loadMap(0);
+  return JSON.stringify({ bad, floors: MAPS.length });
+})()`));
+ok('the drawn tile lists match the grids on every floor',
+  tl.bad.length === 0, JSON.stringify(tl.bad));
 
 /* ---- distance is audible, not just placed in the stereo field ---- */
 const earshot = JSON.parse(await evl(`(() => {

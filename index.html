@@ -730,6 +730,7 @@
 /* ---------- tuning (iterate here) ---------- */
 const T = {
   TILE: 40, COLS: 28, ROWS: 18,
+  NUDGE: 8,   /* how far round a corner the game will help you */
   PLAYER_R: 10, WALK: 138, SNEAK: 72, SPRINT: 212,
   /* Measured before adding this: 33 of 36 floor-and-loop combinations started a
      drone within 120px of the spawn tile, several of them at zero - standing
@@ -1481,8 +1482,14 @@ try {
 let completedLevels = (() => {
   try { return JSON.parse(localStorage.getItem('flashpoint.levels') || '[]').map(n => parseInt(n)); } catch (e) { return []; }
 })();
-const player = { x: 0, y: 0, vx: 0, vy: 0, r: T.PLAYER_R, aim: -Math.PI / 2, tier: 0 };
+const player = { x: 0, y: 0, vx: 0, vy: 0, r: T.PLAYER_R, aim: -Math.PI / 2, tier: 0, nudge: T.NUDGE };
 let aimMode = 'mouse'; let mouseWX = 0, mouseWY = 0;
+/* The cursor's position on the SCREEN is what the player is expressing, and it
+   has to be re-read against the camera every frame. Storing the world point it
+   happened to sit over meant that running while the mouse was still left the
+   torch locked to a patch of floor - it swung as you passed the spot and then
+   pointed behind you. The mouse had not moved; the world under it had. */
+let mouseSX = null, mouseSY = null;
 const keys = {};
 const sticks = { L: null, R: null };
 let parts = [], motes = [], rain = [];
@@ -1491,6 +1498,9 @@ try { records = JSON.parse(localStorage.getItem('flashpoint.records') || '[]'); 
 
 /* canvases */
 let mapCv, mapCtx, darkCv, darkCtx, losGrid;
+/* built once per floor; the tiles cannot move, so re-finding them 60 times a
+   second is pure waste */
+let waterList = [], ventList = [], glassList = [];
 
 /* ---------- audio ---------- */
 let AC = null, master = null, droneO = null, droneO2 = null, droneG = null, rainN = null, airN = null, airF = null, airG = null, muted = false;
@@ -1848,6 +1858,7 @@ function loadMap(idx) {
   listenPts = []; sentryPts = []; safes = [];   /* before the tile loop fills them, not after */
   glassAt = new Uint8Array(T.COLS * T.ROWS);
   waterAt = new Uint8Array(T.COLS * T.ROWS);
+  waterList = []; ventList = []; glassList = [];
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
     const ch = rows[y][x] || '#';
     const cx = (x + 0.5) * T.TILE, cy = (y + 0.5) * T.TILE;
@@ -1866,12 +1877,12 @@ function loadMap(idx) {
     /* Glass is deliberately NOT a wall in the grid. That is what lets sight
        through it for free - losClear and both cones read the grid, so they need
        no changes at all. Only bodies are stopped, and only where bodies move. */
-    if (ch === 'G') glassAt[y * T.COLS + x] = 1;
+    if (ch === 'G') { glassAt[y * T.COLS + x] = 1; glassList.push(y * T.COLS + x); }
     if (ch === 'O') { grid[y * T.COLS + x] = 1; crates.push({ gx: x, gy: y, x: cx, y: cy, broken: false }); }
     if (ch === 'M') { grid[y * T.COLS + x] = 1; mirrors.push({ gx: x, gy: y, x: cx, y: cy, slash: true }); }
     if (ch === '!') plates.push({ gx: x, gy: y, x: cx, y: cy, fired: false, flash: 0 });
-    if (ch === '~') waterAt[y * T.COLS + x] = 1;
-    if (ch === 'V') ventAt[y * T.COLS + x] = 1;
+    if (ch === '~') { waterAt[y * T.COLS + x] = 1; waterList.push(y * T.COLS + x); }
+    if (ch === 'V') { ventAt[y * T.COLS + x] = 1; ventList.push(y * T.COLS + x); }
     if (ch === 'H') listenPts.push({ x: cx, y: cy, gx: x, gy: y });
     if (ch === 'Y') sentryPts.push({ x: cx, y: cy, gx: x, gy: y });
     if (ch === '$') { grid[y * T.COLS + x] = 1; safes.push({ gx: x, gy: y, x: cx, y: cy, cracked: false, flash: 0 }); }
@@ -2126,16 +2137,49 @@ const bodyBlocked = (wx, wy) => {
   return !!glassAt[gy * T.COLS + gx];
 };
 
-function moveCircle(o, dt) {
+/* Eight probes round the body, so a circle is tested rather than a point. */
+function bodyHits(o, x, y) {
   const r = o.r, c = 0.72;
-  let nx = o.x + o.vx * dt;
-  if (bodyBlocked(nx - r, o.y) || bodyBlocked(nx + r, o.y) || bodyBlocked(nx, o.y - r) || bodyBlocked(nx, o.y + r) ||
-    bodyBlocked(nx + r * c, o.y + r * c) || bodyBlocked(nx + r * c, o.y - r * c) || bodyBlocked(nx - r * c, o.y + r * c) || bodyBlocked(nx - r * c, o.y - r * c)) o.vx = 0;
-  else o.x = nx;
-  let ny = o.y + o.vy * dt;
-  if (bodyBlocked(o.x - r, ny) || bodyBlocked(o.x + r, ny) || bodyBlocked(o.x, ny - r) || bodyBlocked(o.x, ny + r) ||
-    bodyBlocked(o.x + r * c, ny + r * c) || bodyBlocked(o.x + r * c, ny - r * c) || bodyBlocked(o.x - r * c, ny + r * c) || bodyBlocked(o.x - r * c, ny - r * c)) o.vy = 0;
-  else o.y = ny;
+  return bodyBlocked(x - r, y) || bodyBlocked(x + r, y) || bodyBlocked(x, y - r) || bodyBlocked(x, y + r) ||
+    bodyBlocked(x + r * c, y + r * c) || bodyBlocked(x + r * c, y - r * c) ||
+    bodyBlocked(x - r * c, y + r * c) || bodyBlocked(x - r * c, y - r * c);
+}
+
+/* Corner correction.
+
+   Blocked used to mean stopped: clip the lip of a doorway by two pixels and the
+   whole axis died, so aiming for a gap and very nearly hitting it left you
+   standing still against a wall wondering what you had done wrong. Real feel in
+   a tile game comes from being forgiving about that - if a small step along the
+   other axis would clear the obstruction, take it and keep going.
+
+   Both the destination AND the intermediate position are tested, so this can
+   never post you through a wall; it only ever rounds a corner you were already
+   most of the way past. */
+function slidePast(o, nx, ny, axis, dt) {
+  const lim = o.nudge || 0;
+  if (!lim) return false;
+  for (let k = 2; k <= lim; k += 2) for (const s of [1, -1]) {
+    if (axis === 'x') {
+      if (!bodyHits(o, nx, o.y + s * k) && !bodyHits(o, o.x, o.y + s * k)) {
+        o.y += s * k; o.x = nx; return true;
+      }
+    } else {
+      if (!bodyHits(o, o.x + s * k, ny) && !bodyHits(o, o.x + s * k, o.y)) {
+        o.x += s * k; o.y = ny; return true;
+      }
+    }
+  }
+  return false;
+}
+
+function moveCircle(o, dt) {
+  const nx = o.x + o.vx * dt;
+  if (!bodyHits(o, nx, o.y)) o.x = nx;
+  else if (!(o.vx && slidePast(o, nx, o.y, 'x', dt))) o.vx = 0;
+  const ny = o.y + o.vy * dt;
+  if (!bodyHits(o, o.x, ny)) o.y = ny;
+  else if (!(o.vy && slidePast(o, o.x, ny, 'y', dt))) o.vy = 0;
 }
 function losClear(x0, y0, x1, y1) {
   const dx = x1 - x0, dy = y1 - y0, d = Math.hypot(dx, dy), steps = Math.ceil(d / 7);
@@ -2337,6 +2381,11 @@ function update(dt) {
   if (sticks.R && Math.hypot(sticks.R.dx, sticks.R.dy) > T.STICK_AIM_DEAD) {
     player.aim = Math.atan2(sticks.R.dy, sticks.R.dx); aimMode = 'stick';
   } else if (aimMode === 'mouse') {
+    if (mouseSX !== null) {
+      const cam = camFit();
+      mouseWX = mouseSX / Z + cam.cx;
+      mouseWY = mouseSY / Z + cam.cy;
+    }
     player.aim = Math.atan2(mouseWY - player.y, mouseWX - player.x);
   }
 
@@ -3932,16 +3981,16 @@ function render() {
   for (const k of smokes) drawSmoke(k);
   for (const m of emps) drawEmp(m);
   for (const d of decoys) drawDecoy(d);
-  for (let i = 0; i < ventAt.length; i++) if (ventAt[i]) drawVent(i);
+  for (const i of ventList) drawVent(i);
   if (ghostPath && mode === 'playing') drawGhost();
-  for (let i = 0; i < waterAt.length; i++) if (waterAt[i]) drawWater(i);
+  for (const i of waterList) drawWater(i);
   drawWakes();
   for (const pl of plates) drawPlate(pl);
   for (const cr of crates) if (!cr.broken) drawCrate(cr);
   for (const f of safes) drawSafe(f);
   for (const j of jams) drawJam(j);
   for (const m of mirrors) drawMirror(m);
-  for (let i = 0; i < glassAt.length; i++) if (glassAt[i]) drawGlass(i);
+  for (const i of glassList) drawGlass(i);
   for (const d of doors) drawDoor(d);
   for (const k of keycards) if (!k.got) drawKeycard(k);
   /* The whole game turns on how far a sound carried, and until now that was the
@@ -5916,7 +5965,7 @@ function startGame() {
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
   parts = []; flHits = new Float32Array(T.FL_RAYS + 1);
-  mouseWX = player.x; mouseWY = player.y - 100; aimMode = 'mouse';
+  mouseWX = player.x; mouseWY = player.y - 100; mouseSX = null; mouseSY = null; aimMode = 'mouse';
   hud();
   
   /* one lesson at a time, each waiting on the moment it matters */
@@ -5944,7 +5993,7 @@ function startFromFloor(floorIdx) {
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
   parts = []; flHits = new Float32Array(T.FL_RAYS + 1);
-  mouseWX = player.x; mouseWY = player.y - 100; aimMode = 'mouse';
+  mouseWX = player.x; mouseWY = player.y - 100; mouseSX = null; mouseSY = null; aimMode = 'mouse';
   hud();
 }
 function continueEndless() {
@@ -6189,6 +6238,7 @@ function screenToWorld(clientX, clientY) {
 window.addEventListener('pointermove', e => {
   if (e.pointerType === 'touch') return;
   if (mode !== 'playing') return;
+  mouseSX = e.clientX; mouseSY = e.clientY;
   const w = screenToWorld(e.clientX, e.clientY);
   mouseWX = w.x; mouseWY = w.y; aimMode = 'mouse';
 });
@@ -6537,6 +6587,11 @@ window.__fp = {
   },
   playerScreen() { const { cx, cy } = camFit();
     return { x: Math.round((player.x - cx) * Z), y: Math.round((player.y - cy) * Z), H: Math.round(H) }; },
+  /* the lists are a cache of the arrays; if they ever disagree, a floor draws
+     water that is not there or misses water that is */
+  tileLists() { const cnt = a => Array.from(a).reduce((s, v) => s + v, 0);
+    return { water: [waterList.length, cnt(waterAt)], vent: [ventList.length, cnt(ventAt)],
+      glass: [glassList.length, cnt(glassAt)] }; },
   hearAt(x, y) { const k = farK({ x, y });
     return { k: +k.toFixed(3), hz: Math.round(T.FAR_HZ + (T.NEAR_HZ - T.FAR_HZ) * k * k) }; },
   wakes() { return wakes.length; },
@@ -6812,7 +6867,13 @@ window.__fp = {
   get searchLit() { return searchLit; },
   searchPoint() { const e = emitters.find(x => x.kind === 'search'); return e ? { x: e.x, y: e.y, ang: e.ang, r: e.r } : null; },
   /* aim is driven by the mouse world point each frame, so set that, not player.aim */
-  aimAt(x, y) { mouseWX = x; mouseWY = y; aimMode = 'mouse'; player.aim = Math.atan2(y - player.y, x - player.x); },
+  aimAt(x, y) { const cam = camFit();
+    mouseSX = (x - cam.cx) * Z; mouseSY = (y - cam.cy) * Z;
+    mouseWX = x; mouseWY = y; aimMode = 'mouse';
+    player.aim = Math.atan2(y - player.y, x - player.x); },
+  aimAtScreen(sx, sy) { mouseSX = sx; mouseSY = sy; aimMode = 'mouse'; },
+  aimTarget() { return { wx: Math.round(mouseWX), wy: Math.round(mouseWY),
+    sx: mouseSX === null ? null : Math.round(mouseSX), aim: +player.aim.toFixed(3) }; },
   /* park the player inside a searchlight beam with line of sight, spin frozen */
   lightMeWithSearch() {
     const e = emitters.find(x => x.kind === 'search');
