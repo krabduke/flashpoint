@@ -5333,6 +5333,89 @@ ok('nothing starts on your doorstep on any floor of any loop',
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
 
+/* ---- how survivable is a chase, really? ----
+   Not a claim about the game, a measurement of it. Contact-death moved the
+   failure state; if a hunted player who simply runs is never caught, it removed
+   it instead. Reported either way so the number is on the record. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const chase = JSON.parse(await evl(`(() => {
+ try {
+  const out = [];
+  __fp.setDiff('standard'); __fp.setMod(-1);
+  for (let f = 0; f < MAPS.length; f++) {
+    mapIdx = f; loop = 0; loadMap(f);
+    mode = 'playing'; paused = false; invuln = 0; meter = 0; alertLvl = 0;
+    __fp.setMade(false);
+    /* Start them where a real detection happens - the far edge of a cone, about
+       300px - not on top of you. Seventy pixels against a contact radius of
+       twenty-six measures nothing except that a drone touching you catches you. */
+    __fp.teleport(spawnPt.x, spawnPt.y);
+    let placed = 0;
+    for (const b of bots) {
+      if (b.kind === 'sentry') continue;
+      for (const [dx, dy] of [[300,0],[-300,0],[0,300],[0,-300],[212,212],[-212,212]]) {
+        if (isWall(player.x + dx, player.y + dy)) continue;
+        b.x = player.x + dx; b.y = player.y + dy; placed++;
+        break;
+      }
+      b.state = 'chase'; b.lastX = player.x; b.lastY = player.y;
+    }
+    if (!placed) { out.push({ floor: f + 1, name: MAPS[f].name, caughtAt: -2 }); continue; }
+    const startGap = Math.round(Math.min(...bots.filter(b => b.kind !== 'sentry')
+      .map(b => Math.hypot(b.x - player.x, b.y - player.y))));
+    __fp.identify();
+    let caughtAt = -1;
+    for (let i = 0; i < 900; i++) {
+      /* Flee AWAY from the nearest hunter, not merely in the first open
+         direction - picking [1,0] every time meant the "fleeing" player ran
+         into them, and was caught in 0.7s from 300px, which is faster than a
+         drone can close on someone standing still. */
+      let nb = null, nd = 1e9;
+      for (const b of bots) {
+        if (b.kind === 'sentry') continue;
+        const dd = Math.hypot(b.x - player.x, b.y - player.y);
+        if (dd < nd) { nd = dd; nb = b; }
+      }
+      const dirs = [[1,0],[0,1],[-1,0],[0,-1]].filter(([dx,dy]) =>
+        !isWall(player.x + dx * 60, player.y + dy * 60));
+      let d = dirs[0] || [1,0];
+      if (nb && dirs.length) {
+        let best = -1e9;
+        for (const [dx,dy] of dirs) {
+          const s = Math.hypot(player.x + dx * 60 - nb.x, player.y + dy * 60 - nb.y);
+          if (s > best) { best = s; d = [dx,dy]; }
+        }
+      }
+      keys.right = d[0] > 0; keys.left = d[0] < 0;
+      keys.down = d[1] > 0; keys.up = d[1] < 0;
+      __fp.dash();
+      update(1 / 60);
+      if (mode !== 'playing') { caughtAt = +(i / 60).toFixed(1); break; }
+    }
+    keys.right = keys.left = keys.up = keys.down = false;
+    out.push({ floor: f + 1, name: MAPS[f].name, caughtAt, startGap });
+  }
+  return JSON.stringify(out);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+if (chase.threw) {
+  ok('the chase measurement ran', false, chase.threw);
+} else {
+  const caught = chase.filter(c => c.caughtAt >= 0);
+  const skipped = chase.filter(c => c.caughtAt === -2).length;
+  const gaps = chase.filter(c => c.startGap).map(c => c.startGap);
+  console.log(`MEASURE :: fleeing from ~${Math.min(...gaps)}-${Math.max(...gaps)}px, caught on `
+    + `${caught.length} of ${chase.length - skipped} floors within 15s`
+    + (caught.length ? '  (' + caught.map(c => `${c.name} @${c.caughtAt}s`).join(', ') + ')' : ''));
+  /* Both extremes are a problem: never caught means contact-death deleted the
+     failure state, always caught means fleeing is not a strategy. Report the
+     number; only assert that neither extreme holds. */
+  ok('a chase is survivable but not free',
+    caught.length >= 1 && caught.length < chase.length - skipped,
+    `caught on ${caught.length} of ${chase.length - skipped} floors`);
+}
+
 /* ---- two ways out ----
    exitPt keeps meaning a single point - it just means the NEAREST one now, so
    the arrow, the beacon, the compass and the minimap never had to learn about
