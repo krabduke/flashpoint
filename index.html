@@ -558,6 +558,9 @@
         <button class="item" id="itMag"   type="button"><b>MAGNET</b><s>G</s></button>
         <button class="item" id="itHush"  type="button"><b>MUFFLE</b><s>B</s></button>
         <button class="item" id="itJam"   type="button"><b>JAMMER</b><s>J</s></button>
+        <button class="item" id="itDrill"  type="button"><b>DRILL</b><s>1</s></button>
+        <button class="item" id="itLance"  type="button"><b>LANCE</b><s>2</s></button>
+        <button class="item" id="itCloner" type="button"><b>CLONER</b><s>3</s></button>
       </div>
     </div>
   </div>
@@ -785,6 +788,26 @@ const T = {
   /* The safe is the lockpick's verb held down for three times as long, and it
      screams the whole way. Nothing on the floor requires it. */
   SAFE_T: 4.6, SAFE_R: 46, SAFE_SCORE: 900, SAFE_NOISE: 640, SAFE_TICK: 0.5,
+  /* ---- the heist tools ----
+     Every other gadget answers "how do I avoid being caught?". These three
+     answer "how do I get in?" and "how do I take that?", and each one beats the
+     BUILDING rather than the people walking around inside it.
+
+     DRILL: the safe in a third of the time, paid for in attention. It screams
+     nearly three times a second against the dial's two, so the whole job is one
+     short burst of noise rather than a five second siege. You bring it when you
+     already know which way you are leaving. */
+  DRILL_T: 1.6, DRILL_TICK: 0.35, DRILL_NOISE: 620,
+  /* LANCE: the map is the antagonist, and this is the only thing that edits it.
+     Three seconds against a pane or a wall and there is a doorway where the
+     architect never put one - permanently, for anything that walks. It refuses
+     the outer shell, and it refuses a tile that would open into solid rock, so
+     a hole always joins two spaces that already existed. */
+  LANCE_T: 3.2, LANCE_NOISE: 120,
+  /* CLONER: the only tool in the game that asks you to walk AT them. Seventy
+     pixels from something that has not seen you, for a little over a second,
+     and you carry the card the floor otherwise hides in a corner. */
+  CLONE_R: 70, CLONE_T: 1.1,
   FLANK_R: 2.6,   /* tiles out from you that a radioed drone aims for */
   SEARCH_PTS: 5, SEARCH_R0: 1.6, SEARCH_RSTEP: 1.3, SEARCH_T: 9,
   PEEK_T: 1.25, PEEK_COOL: 5.5, PEEK_ARC: 1.15,
@@ -808,8 +831,10 @@ const T = {
   WATER_MULT: 1.4, WATER_STEP: 0.34, WALK_STEP: 0.44,
   LOADOUT_MAX: 4, LOADOUT_BUDGET: 5,
   STREAK_STEP: 0.5, STREAK_CAP: 3, NOISE_T: 0.3,
-  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, hush: 1, jam: 0 },
-  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, hush: 2, jam: 2 },
+  KIT: { flare: 1, smoke: 1, emp: 0, decoy: 0, mag: 0, hush: 1, jam: 0,
+         drill: 0, lance: 0, cloner: 0 },
+  CAP: { flare: 3, smoke: 2, emp: 2, decoy: 2, mag: 2, hush: 2, jam: 2,
+         drill: 1, lance: 1, cloner: 2 },
   /* The EMP's opposite number. That one takes their sight away in a radius;
      this takes their hearing. Two senses, two counters. */
   JAM_R: 230, JAM_T: 6,
@@ -1310,6 +1335,16 @@ let jams = [], jamCharges = 0;
 let magT = 0, magCharges = 1;
 let doors = [], keycards = [], hasKey = false, pickT = 0, pickOn = null;
 let safes = [], safeT = 0, safeOn = null, safeTick = 0;
+/* the heist tools. Each one is armed by its key and then held against a target:
+   a safe, a tile, or a drone. The charge is spent when the job lands, never
+   when the building interrupts it - a held action that eats its charge on an
+   interruption is a coin toss, and none of these are cheap enough for that. */
+let drillCharges = 0, drillT = 0, drillOn = null, drillTick = 0;
+let lanceCharges = 0, lanceT = 0, lanceOn = null;
+let clonerCharges = 0, cloneT = 0, cloneArmed = false;
+/* a cut is a hole this run made in the floor plan. cutAt answers "is this tile
+   one", cutList is what draws them; both live and die with the floor. */
+let cutAt = new Uint8Array(T.COLS * T.ROWS), cutList = [];
 let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
 let waterAt = new Uint8Array(T.COLS * T.ROWS);
@@ -1558,6 +1593,13 @@ const GADGETS = [
     what: 'the haul stops rattling, for this floor only' },
   { id: 'jam',   label: 'JAMMER', key: 'J', btn: 'itJam', cost: 3,
     what: 'a bubble the drones inside it cannot hear through' },
+  /* the three that go through the building instead of around the guards */
+  { id: 'drill',  label: 'DRILL',  key: '1', btn: 'itDrill', cost: 3,
+    what: 'a safe in a third of the time, and the whole floor hears it' },
+  { id: 'lance',  label: 'LANCE',  key: '2', btn: 'itLance', cost: 3,
+    what: 'burn a doorway through glass or wall, quietly, and keep it' },
+  { id: 'cloner', label: 'CLONER', key: '3', btn: 'itCloner', cost: 2,
+    what: 'get close to a drone that has not seen you and take its card' },
 ];
 /* trimmed from the end, so the first things you picked are the ones you keep */
 function affordable(ids) {
@@ -1873,6 +1915,8 @@ function loadMap(idx) {
   listenPts = []; sentryPts = []; safes = [];   /* before the tile loop fills them, not after */
   glassAt = new Uint8Array(T.COLS * T.ROWS);
   waterAt = new Uint8Array(T.COLS * T.ROWS);
+  /* a hole belongs to the floor that was cut, so it goes out with the floor */
+  cutAt = new Uint8Array(T.COLS * T.ROWS); cutList = [];
   waterList = []; ventList = []; glassList = [];
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
     const ch = rows[y][x] || '#';
@@ -1979,6 +2023,10 @@ function loadMap(idx) {
   hushOn = false;   /* one floor, so it lapses on the stairs */
   hasKey = false; pickT = 0; pickOn = null;
   safeT = 0; safeOn = null; safeTick = 0;
+  /* what a tool was aimed at does not survive the stairs; the charge does */
+  drillT = 0; drillOn = null; drillTick = 0;
+  lanceT = 0; lanceOn = null;
+  cloneT = 0; cloneArmed = false;
   blackout = 0; nextBlackout = blackoutMap ? rand(6, 11) : 1e9;
   spawnBots();
   renderMapCanvas();
@@ -2579,7 +2627,34 @@ function update(dt) {
      loud from the first turn of the dial. Nothing needs it - it is there to be
      weighed against walking out with what you already have. */
   const nearSafe = safes.find(f => !f.cracked && Math.hypot(f.x - player.x, f.y - player.y) < T.SAFE_R);
-  if (!nearSafe) { if (safeT !== 0) { safeT = 0; safeOn = null; } }
+
+  /* The drill, fitted to that same safe. It is the dial's job done in a third
+     of the time, and it pings half again as often while it runs - so the floor
+     hears one short scream instead of a long steady one, and everything that
+     was coming arrives while you are still standing there. */
+  if (drillOn && drillOn.cracked) { drillOn = null; drillT = 0; drillTick = 0; }
+  if (drillOn && nearSafe === drillOn && steadyHands()) {
+    drillT += dt;
+    drillTick -= dt;
+    if (drillTick <= 0) {
+      drillTick = T.DRILL_TICK;
+      makeNoise(drillOn.x, drillOn.y, T.DRILL_NOISE);
+      sfx.crate(drillOn);
+    }
+    if (drillT >= T.DRILL_T) {
+      const f = drillOn;
+      drillCharges = Math.max(0, drillCharges - 1);
+      drillOn = null; drillT = 0; drillTick = 0;
+      crackSafe(f, 'DRILLED OUT — ');
+    }
+  }
+
+  /* the dial. The drill owns the safe it is fitted to, so the two can never
+     both be turning the same door at once */
+  /* nearSafe was picked before the drill ran this frame, so it can be a door
+     the drill has just taken off its hinges - the dial must not keep turning
+     on it, or a drilled safe screams for another four and a half seconds */
+  if (!nearSafe || nearSafe.cracked || nearSafe === drillOn) { if (safeT !== 0) { safeT = 0; safeOn = null; } }
   else {
     if (safeOn !== nearSafe) { safeOn = nearSafe; safeT = 0; }
     if (!steadyHands()) {
@@ -2592,16 +2667,8 @@ function update(dt) {
       safeTick -= dt;
       if (safeTick <= 0) { safeTick = T.SAFE_TICK; makeNoise(nearSafe.x, nearSafe.y, T.SAFE_NOISE); sfx.crate(nearSafe); }
       if (safeT >= T.SAFE_T) {
-        nearSafe.cracked = true; nearSafe.flash = 1; fSafes++; runSafes++;
-        score += T.SAFE_SCORE;
         safeT = 0; safeOn = null;
-        renderMapCanvas();
-        burst(nearSafe.x, nearSafe.y, glowGoldS, 26, 240);
-        addShake('crate', nearSafe.x, nearSafe.y);
-        makeNoise(nearSafe.x, nearSafe.y, T.SAFE_NOISE);
-        sfx.unlock();
-        toast('SAFE CRACKED — ' + T.SAFE_SCORE, 2.4);
-        hud();
+        crackSafe(nearSafe, 'SAFE CRACKED — ');
       }
     }
   }
@@ -2616,6 +2683,47 @@ function update(dt) {
     else {
       prizeT += dt;
       if (prizeT >= T.PRIZE_T) { takePrize(); prizeT = 0; }
+    }
+  }
+
+  /* The lance. Three seconds against the tile you armed it on and the floor
+     plan has a hole in it that nothing ever closes. Near silent while it burns:
+     the only sound is the slug hitting the ground at the end. */
+  if (lanceOn) {
+    if (!lanceCuttable(lanceOn.gx, lanceOn.gy)) { lanceOn = null; lanceT = 0; }
+    else if (!nextToCell(lanceOn.gx, lanceOn.gy) || !steadyHands()) {
+      /* it cools rather than resetting - same forgiveness the safe gets */
+      lanceT = Math.max(0, lanceT - dt * 1.5);
+    } else {
+      lanceT += dt;
+      if (lanceT >= T.LANCE_T) {
+        const c = lanceOn;
+        lanceCharges = Math.max(0, lanceCharges - 1);
+        lanceOn = null; lanceT = 0;
+        cutTile(c.gx, c.gy);
+      }
+    }
+  }
+
+  /* The cloner. Everything else in the kit is about distance; this one only
+     works inside seventy pixels of something that is still walking its beat.
+     The moment it turns and comes for you the handshake is off. */
+  if (cloneArmed) {
+    if (hasKey) { cloneArmed = false; cloneT = 0; }
+    else {
+      const mark = cloneMark();
+      if (!mark) cloneT = 0;
+      else {
+        cloneT += dt;
+        if (cloneT >= T.CLONE_T) {
+          clonerCharges = Math.max(0, clonerCharges - 1);
+          cloneArmed = false; cloneT = 0;
+          hasKey = true;
+          sfx.unlock(); burst(player.x, player.y, glowGoldS, 14, 160);
+          toast('CARD CLONED — ONE DOOR, NO WAITING', 2.4);
+          hud();
+        }
+      }
     }
   }
 
@@ -4099,6 +4207,8 @@ function render() {
   for (const j of jams) drawJam(j);
   for (const m of mirrors) drawMirror(m);
   for (const i of glassList) drawGlass(i);
+  for (const i of cutList) drawCut(i);
+  drawLance();
   for (const d of doors) drawDoor(d);
   for (const k of keycards) if (!k.got) drawKeycard(k);
   /* The whole game turns on how far a sound carried, and until now that was the
@@ -4942,6 +5052,55 @@ function drawGlass(i) {
   ctx.restore();
 }
 
+/* A hole you made. The baked map already drew floor here the moment the cell
+   cleared, so what is left to say is which two faces were cut - and those are
+   exactly the ones still buried in masonry. Lining only those reads as an
+   opening in a wall instead of a sticker on the ground. */
+function drawCut(i) {
+  const gx = i % T.COLS, gy = (i - gx) / T.COLS, S = T.TILE;
+  const px = gx * S, py = gy * S;
+  const heat = 0.62 + 0.18 * Math.sin(time * 1.7 + i * 0.7);
+  ctx.save();
+  ctx.lineCap = 'round';
+  const edge = (x1, y1, x2, y2) => {
+    ctx.strokeStyle = 'rgba(24,16,12,.92)'; ctx.lineWidth = 5.5;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,138,76,' + (0.55 * heat).toFixed(3) + ')';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  };
+  if (!openCell(gx - 1, gy)) edge(px + 3, py + 4, px + 3, py + S - 4);
+  if (!openCell(gx + 1, gy)) edge(px + S - 3, py + 4, px + S - 3, py + S - 4);
+  if (!openCell(gx, gy - 1)) edge(px + 4, py + 3, px + S - 4, py + 3);
+  if (!openCell(gx, gy + 1)) edge(px + 4, py + S - 3, px + S - 4, py + S - 3);
+  /* slag on the floor where it ran out of the cut */
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.10 * heat;
+  ctx.drawImage(glowGoldS, px + 2, py + 2, S - 4, S - 4);
+  ctx.restore();
+}
+
+/* the lance while it is still burning: where it is pointed, and how far in */
+function drawLance() {
+  if (!lanceOn) return;
+  const S = T.TILE, px = lanceOn.gx * S, py = lanceOn.gy * S;
+  const k = clamp(lanceT / T.LANCE_T, 0, 1);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(127,212,255,' + (0.28 + 0.34 * k).toFixed(3) + ')';
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([4, 4]); ctx.lineDashOffset = -time * 30;
+  ctx.strokeRect(px + 2.5, py + 2.5, S - 5, S - 5);
+  ctx.setLineDash([]);
+  /* the cut itself, creeping across the tile as it goes */
+  const cx = px + S / 2, cy = py + S / 2, half = (S / 2 - 4) * k;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = 'rgba(200,240,255,.85)'; ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(cx - half, cy); ctx.lineTo(cx + half, cy); ctx.stroke();
+  ctx.globalAlpha = 0.35 + 0.3 * k;
+  ctx.drawImage(glowWhiteS, cx - 16, cy - 16, 32, 32);
+  ctx.restore();
+}
+
 function drawVent(i) {
   const gx = i % T.COLS, gy = (i - gx) / T.COLS, S = T.TILE;
   const px = gx * S, py = gy * S;
@@ -5434,16 +5593,39 @@ function drawPlayer() {
   ctx.drawImage(glowWhiteS, 11.6, -4.2, 8.6, 8.6);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 
-  /* picking a lock: a ring that fills while you stand still */
-  const workT = pickT > 0 ? pickT / T.PICK_T : (crateT > 0 ? crateT / T.CRATE_T : (safeT > 0 ? safeT / T.SAFE_T : 0));
+  /* picking a lock: a ring that fills while you stand still. Every held job in
+     the game reads on the same dial - the tools changed how long it takes, not
+     how you are told about it. */
+  const workT = pickT > 0 ? pickT / T.PICK_T
+    : crateT > 0 ? crateT / T.CRATE_T
+    : drillT > 0 ? drillT / T.DRILL_T
+    : lanceT > 0 ? lanceT / T.LANCE_T
+    : cloneT > 0 ? cloneT / T.CLONE_T
+    : safeT > 0 ? safeT / T.SAFE_T : 0;
+  /* and its colour says which one, because the drill and the dial happen in
+     exactly the same place at very different prices */
+  const workCol = drillT > 0 ? '#ff8a4c' : lanceT > 0 ? '#7fd4ff' : cloneT > 0 ? '#c8ff8a' : '#ffd166';
   if (workT > 0) {
     ctx.save(); ctx.rotate(-a);
     ctx.globalAlpha = 0.9;
     ctx.strokeStyle = 'rgba(255,209,102,.28)'; ctx.lineWidth = 2.6;
     ctx.beginPath(); ctx.arc(0, 0, 17, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2.6;
+    ctx.strokeStyle = workCol; ctx.lineWidth = 2.6;
     ctx.beginPath(); ctx.arc(0, 0, 17, -Math.PI / 2, -Math.PI / 2 + TAU * workT); ctx.stroke();
     ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /* The cloner's reach. It is the one ring in the game you want something
+     INSIDE, so it goes gold the moment a drone is close enough to copy. */
+  if (cloneArmed) {
+    const mark = cloneMark();
+    ctx.save(); ctx.rotate(-a);
+    ctx.globalAlpha = mark ? 0.30 + 0.16 * Math.sin(time * 7) : 0.16 + 0.10 * Math.sin(time * 4);
+    ctx.strokeStyle = mark ? '#ffd166' : '#9fd8ff'; ctx.lineWidth = mark ? 1.8 : 1.2;
+    ctx.setLineDash([5, 6]); ctx.lineDashOffset = -time * 26;
+    ctx.beginPath(); ctx.arc(0, 0, T.CLONE_R, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
     ctx.restore();
   }
 
@@ -5723,6 +5905,9 @@ function resetKit() {
   hushCharges = kv('hush');
   jamCharges = kv('jam');
   magCharges = kv('mag');
+  drillCharges = kv('drill');
+  lanceCharges = kv('lance');
+  clonerCharges = kv('cloner');
 }
 
 const coinValue = () => Math.round((MOD().coin || 1) * (MOD().pay || 1) * D().score * T.COIN_VALUE * (1 + loop * 0.5) * Math.pow(T.COIN_FLOOR_MULT, mapIdx));
@@ -5817,6 +6002,147 @@ function nearestShutDoor() {
     if (dist < bd) { bd = dist; best = d; }
   }
   return best;
+}
+
+/* ================= the heist tools =================
+   The seven gadgets before these all answer the same question - how do I avoid
+   being caught. These three go at the building instead: one opens what is
+   locked, one puts a door where there was none, and one takes the credential
+   off the thing carrying it. What they have in common is that each of them
+   makes a SECOND way to the same objective, so the floor stops having one
+   answer. */
+
+/* Both the dial and the drill end here, so the payout, the flash and the noise
+   cannot drift apart between the two ways in. */
+function crackSafe(f, how) {
+  if (!f || f.cracked) return false;
+  f.cracked = true; f.flash = 1; fSafes++; runSafes++;
+  score += T.SAFE_SCORE;
+  renderMapCanvas();
+  burst(f.x, f.y, glowGoldS, 26, 240);
+  addShake('crate', f.x, f.y);
+  makeNoise(f.x, f.y, T.SAFE_NOISE);
+  sfx.unlock();
+  toast(how + T.SAFE_SCORE, 2.4);
+  hud();
+  return true;
+}
+
+/* a cell a body could stand in: masonry and glass both say no */
+const openCell = (gx, gy) => gx >= 0 && gy >= 0 && gx < T.COLS && gy < T.ROWS
+  && grid[gy * T.COLS + gx] !== 1 && !glassAt[gy * T.COLS + gx];
+/* orthogonally next to it - the lance is held against a face, not a corner */
+const nextToCell = (gx, gy) => {
+  const c = cellOf(player.x, player.y);
+  return Math.abs(c.gx - gx) + Math.abs(c.gy - gy) === 1;
+};
+
+/* What the lance is allowed to open. Two rules do all the work here:
+
+   The outer ring of the map is never cuttable. A hole in the shell would not
+   be a new route through the building, it would be a way out of the level.
+
+   And a tile only cuts where both of its opposite faces are already standable,
+   which is what makes a hole a DOOR rather than an alcove. Checking one side
+   would happily burn three seconds into a cupboard. */
+function lanceCuttable(gx, gy) {
+  if (gx <= 0 || gy <= 0 || gx >= T.COLS - 1 || gy >= T.ROWS - 1) return false;
+  const i = gy * T.COLS + gx;
+  if (cutAt[i]) return false;
+  const pane = !!glassAt[i], wall = grid[i] === 1;
+  if (!pane && !wall) return false;
+  /* a safe, a door, a crate and a mirror all sit in the grid as walls, but each
+     is an object with its own state rather than masonry - cutting one would
+     leave the thing drawn over its own hole */
+  if (wall && (safes.some(f => f.gx === gx && f.gy === gy)
+    || doors.some(d => d.gx === gx && d.gy === gy)
+    || crates.some(c => c.gx === gx && c.gy === gy)
+    || mirrors.some(m => m.gx === gx && m.gy === gy))) return false;
+  return (openCell(gx - 1, gy) && openCell(gx + 1, gy))
+    || (openCell(gx, gy - 1) && openCell(gx, gy + 1));
+}
+
+/* of the four faces you are standing against, the one you are looking at */
+function lanceTarget() {
+  const c = cellOf(player.x, player.y);
+  let best = null, bd = 9;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const gx = c.gx + dx, gy = c.gy + dy;
+    if (!lanceCuttable(gx, gy)) continue;
+    const d = Math.abs(angDiff(Math.atan2(dy, dx), player.aim));
+    if (d < bd) { bd = d; best = { gx, gy }; }
+  }
+  return best;
+}
+
+/* The map is the thing this game is really about, and this is the one verb
+   that edits it. grid is read live by isWall, by both cones and by the drones'
+   own pathfinder, so clearing the cell hands the new route to everything at
+   once - including them. A door you burn is a door they can use. */
+function cutTile(gx, gy) {
+  const i = gy * T.COLS + gx;
+  if (cutAt[i]) return false;
+  if (glassAt[i]) {
+    glassAt[i] = 0;
+    const k = glassList.indexOf(i);
+    if (k >= 0) glassList.splice(k, 1);
+  }
+  grid[i] = 0;
+  cutAt[i] = 1; cutList.push(i);
+  renderMapCanvas();
+  const cx = (gx + .5) * T.TILE, cy = (gy + .5) * T.TILE;
+  /* the slug hitting the floor is the whole sound of it */
+  makeNoise(cx, cy, T.LANCE_NOISE);
+  burst(cx, cy, glowGoldS, 18, 200);
+  sfx.door();
+  toast('CUT THROUGH — THAT IS A DOOR NOW', 2.4);
+  hud();
+  return true;
+}
+
+/* the drone you could take a card off: close, and not currently coming for you */
+function cloneMark() {
+  let best = null, bd = T.CLONE_R;
+  for (const b of bots) {
+    if (b.kind !== 'drone' || b.state === 'chase') continue;
+    const d = Math.hypot(b.x - player.x, b.y - player.y);
+    if (d < bd) { bd = d; best = b; }
+  }
+  return best;
+}
+
+function runDrill() {
+  if (mode !== 'playing' || drillCharges <= 0) { sfx.ui(); return false; }
+  const f = safes.find(s => !s.cracked && Math.hypot(s.x - player.x, s.y - player.y) < T.SAFE_R);
+  if (!f) { sfx.ui(); toast('DRILL — STAND AT A SAFE FIRST', 1.8); return false; }
+  if (drillOn === f) { sfx.ui(); return false; }
+  drillOn = f; drillT = 0; drillTick = 0;
+  sfx.ui();
+  toast('DRILL BITING — FAST, AND EVERYONE HEARS IT', 2.2);
+  hud();
+  return true;
+}
+
+function runLance() {
+  if (mode !== 'playing' || lanceCharges <= 0) { sfx.ui(); return false; }
+  const c = lanceTarget();
+  if (!c) { sfx.ui(); toast('LANCE — NOTHING HERE CUTS THROUGH', 1.8); return false; }
+  lanceOn = c; lanceT = 0;
+  sfx.ui();
+  toast('LANCE LIT — HOLD IT AGAINST THE WALL', 2.2);
+  hud();
+  return true;
+}
+
+function runCloner() {
+  if (mode !== 'playing' || clonerCharges <= 0) { sfx.ui(); return false; }
+  if (hasKey) { sfx.ui(); toast('CLONER — YOU ARE ALREADY CARRYING A CARD', 1.8); return false; }
+  if (cloneArmed) { sfx.ui(); return false; }
+  cloneArmed = true; cloneT = 0;
+  sfx.ui();
+  toast('CLONER READY — WALK AT ONE THAT HAS NOT SEEN YOU', 2.4);
+  hud();
+  return true;
 }
 
 function runMagnet() {
@@ -6185,6 +6511,9 @@ const CONTROLS = [
   ['DECOY', ['V']], ['MAGNET', ['G']],
   ['MUFFLE', ['B']],
   ['JAMMER', ['J']],
+  ['DRILL', ['1']],
+  ['THERMAL LANCE', ['2']],
+  ['KEYCARD CLONER', ['3']],
   ['MUTE', ['M']],
   ['NEW RUN', ['R']],
 ];
@@ -6255,7 +6584,8 @@ function togglePause() {
   $('pausedOv').classList.toggle('hidden', !paused);
 }
 const __gadgetCharges = (id) => ({ flare: flares, smoke: smokePellets, emp: empCharges,
-  decoy: decoyCharges, mag: magCharges, hush: hushCharges, jam: jamCharges }[id] || 0);
+  decoy: decoyCharges, mag: magCharges, hush: hushCharges, jam: jamCharges,
+  drill: drillCharges, lance: lanceCharges, cloner: clonerCharges }[id] || 0);
 function hud() {
   coinsEl.textContent = coins + '/' + coinsTotal;
   /* amber the moment walking out becomes a choice, so you know without having
@@ -6304,6 +6634,10 @@ function hud() {
     set('itMag', magCharges > 0, magT > 0);
     set('itHush', hushCharges > 0 && !hushOn, hushOn);
     set('itJam', jamCharges > 0, jams.length > 0);
+    /* each of the three lights up while it is working on something */
+    set('itDrill', drillCharges > 0, !!drillOn);
+    set('itLance', lanceCharges > 0, !!lanceOn);
+    set('itCloner', clonerCharges > 0 && !hasKey, cloneArmed);
   }
 
   const dt2 = $('dailyTag');
@@ -6381,6 +6715,9 @@ window.addEventListener('keydown', e => {
   if ((e.key === 'b' || e.key === 'B') && mode === 'playing') { useHush(); }
   if ((e.key === 'j' || e.key === 'J') && mode === 'playing') { throwJam(); }
   if ((e.key === 'g' || e.key === 'G') && mode === 'playing') { runMagnet(); }
+  if (e.key === '1' && mode === 'playing') { runDrill(); }
+  if (e.key === '2' && mode === 'playing') { runLance(); }
+  if (e.key === '3' && mode === 'playing') { runCloner(); }
   if ((e.key === 'm' || e.key === 'M')) toggleMute();
   if (e.key === 'Escape' && settingsOpen()) { closeSettings(); return; }
   if ((e.key === 'p' || e.key === 'P')) togglePause();
@@ -6521,6 +6858,9 @@ bindBtn('itDecoy', dropDecoy);
 bindBtn('itMag', runMagnet);
 bindBtn('itHush', useHush);
 bindBtn('itJam', throwJam);
+bindBtn('itDrill', runDrill);
+bindBtn('itLance', runLance);
+bindBtn('itCloner', runCloner);
 ['nameInput', 'nameInput2', 'nameInput3'].forEach((id, i) => {
   const el = $(id);
   el.value = name;
@@ -6662,7 +7002,8 @@ window.__fp = {
   kitWhat(id) { describeKit(id); return $('kitWhat').textContent; },
   gadgetCopy() { return GADGETS.map(g => ({ id: g.id, what: g.what || null })); },
   charges() { return { flare: flares, smoke: smokePellets, emp: empCharges, decoy: decoyCharges,
-    mag: magCharges, hush: hushCharges, jam: jamCharges }; },
+    mag: magCharges, hush: hushCharges, jam: jamCharges,
+    drill: drillCharges, lance: lanceCharges, cloner: clonerCharges }; },
   botKinds() { return bots.map(b => b.kind); },
   listenerCount() { return bots.filter(b => b.kind === 'listen').length; },
   sentryCount() { return bots.filter(b => b.kind === 'sentry').length; },
@@ -7128,6 +7469,39 @@ window.__fp = {
   safeCount() { return safes.length; },
   safeState() { return safes.map(f => ({ cracked: f.cracked, x: Math.round(f.x), y: Math.round(f.y) })); },
   safeNeed() { return T.SAFE_T; },
+
+  /* ---- the heist tools ---- */
+  get drillCharges() { return drillCharges; },
+  setDrill(n) { drillCharges = n; hud(); },
+  get drillT() { return +drillT.toFixed(3); },
+  drillNeed() { return { t: T.DRILL_T, tick: T.DRILL_TICK, noise: T.DRILL_NOISE }; },
+  drillFitted() { return drillOn ? { x: Math.round(drillOn.x), y: Math.round(drillOn.y) } : null; },
+  armDrill() { return runDrill(); },
+
+  get lanceCharges() { return lanceCharges; },
+  setLance(n) { lanceCharges = n; hud(); },
+  get lanceT() { return +lanceT.toFixed(3); },
+  lanceNeed() { return { t: T.LANCE_T, noise: T.LANCE_NOISE }; },
+  lanceAimed() { return lanceOn ? { gx: lanceOn.gx, gy: lanceOn.gy } : null; },
+  lanceCanCut(gx, gy) { return lanceCuttable(gx, gy); },
+  /* aim the player at a cell and arm on it, which is what a hand does */
+  armLanceAt(gx, gy) {
+    player.x = (gx + .5) * T.TILE; player.y = (gy + .5) * T.TILE;
+    return runLance();
+  },
+  armLance() { return runLance(); },
+  cutsN() { return cutList.length; },
+  cutPoints() { return cutList.map(i => { const gx = i % T.COLS; return { gx, gy: (i - gx) / T.COLS }; }); },
+  cellOpen(gx, gy) { return openCell(gx, gy); },
+  cutNow(gx, gy) { return cutTile(gx, gy); },
+
+  get clonerCharges() { return clonerCharges; },
+  setCloner(n) { clonerCharges = n; hud(); },
+  get cloneT() { return +cloneT.toFixed(3); },
+  cloneNeed() { return { t: T.CLONE_T, r: T.CLONE_R }; },
+  cloneArmedNow() { return cloneArmed; },
+  cloneMarkNow() { const b = cloneMark(); return b ? { state: b.state, d: Math.round(Math.hypot(b.x - player.x, b.y - player.y)) } : null; },
+  armCloner() { return runCloner(); },
   doorPoints() { return doors.map(d => ({ x: d.x, y: d.y, open: d.open })); },
   keyPoints() { return keycards.filter(k => !k.got).map(k => ({ x: k.x, y: k.y })); },
   resetKit() { resetKit(); hud(); },

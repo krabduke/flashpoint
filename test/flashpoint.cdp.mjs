@@ -2026,8 +2026,12 @@ ok('you cannot carry more than the cap', JSON.parse(capped).flares === JSON.pars
 /* ---- item bar: every gadget reachable without a keyboard ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
-ok('the item bar has every gadget', (await evl("document.querySelectorAll('#itemBar .item').length")) === 9,
-  `n=${await evl("document.querySelectorAll('#itemBar .item').length")}`);
+/* the bar carries TORCH and COIN as well as every gadget, so it is the gadget
+   count plus two rather than a number of its own */
+ok('the item bar has every gadget', await evl(`(() => {
+  const n = document.querySelectorAll('#itemBar .item').length;
+  return n === __fp.gadgets().length + 2;
+})()`), `n=${await evl("document.querySelectorAll('#itemBar .item').length")} for ${await evl('__fp.gadgets().length')} gadgets`);
 ok('it is reachable by a finger', await evl(`(() => {
   const b = document.getElementById('itFlare');
   return getComputedStyle(b).pointerEvents === 'auto';
@@ -2707,6 +2711,10 @@ const pau = JSON.parse(await evl(`(() => {
   const refKeys = [...$('pKeys').querySelectorAll('.key')].map(e => e.textContent.trim());
   o.keysAgree = barKeys.every(k => refKeys.includes(k));
   o.barKeys = barKeys; o.rows = $('pKeys').children.length;
+  /* what the reference SHOULD have rendered, so a dropped row and a stale
+     expected count cannot look like the same failure. controlRows() is already
+     a count, not the rows themselves. */
+  o.want = __fp.controlRows();
   togglePause(); loop = 1; togglePause();
   o.looped = $('pWhere').textContent;
   togglePause(); loop = 0; togglePause();
@@ -2746,9 +2754,11 @@ ok('it names what this floor throws at you',
   pau.hazCore.includes('SIREN SWEEPS') && pau.hazCore.includes('BLACKOUTS'), JSON.stringify(pau.hazCore));
 ok('and claims nothing on a floor that is quiet', pau.hazHouse.length === 0, JSON.stringify(pau.hazHouse));
 /* the agreement is the point; the row count just has to keep up with the game
-   growing a gadget, which is what caught the tripwire missing from here */
+   growing a gadget, which is what caught the tripwire missing from here - and
+   again when the three heist tools took it from fourteen rows to seventeen */
 ok('the control list agrees with the item bar',
-  pau.keysAgree === true && pau.rows === 14, `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows}`);
+  pau.keysAgree === true && pau.rows === pau.want && pau.rows === 17,
+  `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows} of ${pau.want} wanted`);
 ok('pausing again re-reads the run instead of replaying the last look',
   pau.refreshed.score === '9999' && pau.refreshed.gold === '7/12', JSON.stringify(pau.refreshed));
 ok('resume puts you back in', pau.closed.paused === false && pau.closed.hidden === true, JSON.stringify(pau.closed));
@@ -2919,7 +2929,11 @@ const stg = {};
 for (const m of [0, 0.22, 0.5, 0.8, 0.95]) stg['m' + String(m).replace('.', '')] = await stingAt(m);
 /* while ducked, a theme change must move the bed and leave the duck alone */
 const duckedBefore = JSON.parse(await evl('JSON.stringify({ room: __fp.roomLive(), sting: __fp.stingLive() })'));
-await evl("setRoomTone('server')"); await sleep(950);
+/* The bed is moved by a 0.8s linearRamp, so it does arrive exactly - but it
+   arrives on AC.currentTime, which in headless does not track wall clock. 950ms
+   of sleep was 1.19 ramps of headroom and read 93.91 of 96 on one run and 96 on
+   the next, with the same game code both times. Twice the ramp instead. */
+await evl("setRoomTone('server')"); await sleep(1800);
 const duckedAfter = JSON.parse(await evl('JSON.stringify({ room: __fp.roomLive(), sting: __fp.stingLive() })'));
 /* and it has to come all the way back down */
 const rest = await stingAt(0);
@@ -2947,10 +2961,13 @@ ok('the room makes way for it',
   stg.m095.duck < 0.5 && stg.m05.duck < stg.m022.duck && stg.m022.duck > 0.99,
   `duck .22=${stg.m022.duck} .5=${stg.m05.duck} .95=${stg.m095.duck}`);
 /* setRoomTone owns the theme levels, the chase owns the multiplier */
+/* an arrived ramp, not an exact float: the claim is that the bed went to the
+   server room's numbers and the duck stayed where the chase put it */
 ok('changing theme mid-duck moves the bed without touching the duck',
-  duckedAfter.room.hum === 96 && duckedAfter.room.air === 2600
+  Math.abs(duckedAfter.room.hum - 96) < 1 && Math.abs(duckedAfter.room.air - 2600) < 20
   && Math.abs(duckedAfter.sting.duck - duckedBefore.sting.duck) < 0.02,
-  `bed ${duckedBefore.room.hum}->${duckedAfter.room.hum} duck ${duckedBefore.sting.duck}->${duckedAfter.sting.duck}`);
+  `bed ${duckedBefore.room.hum}->${duckedAfter.room.hum} air ${duckedAfter.room.air} ` +
+  `duck ${duckedBefore.sting.duck}->${duckedAfter.sting.duck}`);
 /* setTargetAtTime approaches its target exponentially and never actually
    arrives, so rest is an inaudible floor rather than a hard zero */
 ok('getting away is audible: it all comes back to rest',
@@ -4092,6 +4109,448 @@ ok('and it changes nothing about what the floor asks of you',
 ok('the block measured a running game', saf.mode === 'playing', saf.mode);
 
 
+/* ================= the heist tools =================
+   Three tools that go at the BUILDING rather than at the people in it, and the
+   point of all three is that the floor stops having one answer. Each block
+   navigates fresh and pins loop/mod/diff/alert itself, because every one of
+   those survives from the four hundred assertions above. */
+
+/* ---- the drill: the safe in a third of the time, at the top of its voice ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const drl = JSON.parse(await evl(`(() => {
+  const o = {};
+  const realNoise = makeNoise;
+  try {
+    endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0; loop = 0;
+    /* Most floors that have a safe have exactly one, so the two runs cannot
+       share a floor - the drill gets the same floor reloaded rather than a
+       second safe that may not exist. */
+    let sm = -1;
+    for (let m = 0; m < MAPS.length && sm < 0; m++) { mapIdx = m; loadMap(m); if (safes.length) sm = m; }
+    o.floor = sm;
+    const fresh = () => {
+      mapIdx = sm; loadMap(sm);
+      bots.length = 0; meter = 0; invuln = 9e9; clearToast();
+    };
+    fresh();
+    o.need = { drill: T.DRILL_T, dial: __fp.safeNeed() };
+
+    /* a ping tap rather than a reading of noise.length: entries expire on their
+       own clock, so a length is a snapshot and never a count */
+    let pings = [];
+    makeNoise = (x, y, r) => { pings.push(r); return realNoise(x, y, r); };
+    const parkAt = f => { player.x = f.x - 30; player.y = f.y; player.vx = player.vy = 0; };
+    const runUntil = (test, cap) => {
+      let n = 0;
+      while (n < cap && !test()) { meter = 0; invuln = 9e9; update(1 / 60); n++; }
+      return n / 60;
+    };
+
+    /* the dial, timed and counted */
+    let f = safes.find(s => !s.cracked);
+    parkAt(f); pings = [];
+    o.dialSecs = runUntil(() => f.cracked, 900);
+    o.dialPings = pings.length;
+    o.dialLoudest = Math.max(0, ...pings);
+
+    /* the same safe on a fresh floor, drilled, timed and counted the same way */
+    fresh();
+    f = safes.find(s => !s.cracked);
+    o.sameSafeAgain = !!f && f.cracked === false;
+    __fp.setDrill(1);
+    parkAt(f);
+    o.armedAway = (player.x = 20, player.y = 20, __fp.armDrill());
+    o.chargeAfterMiss = __fp.drillCharges;
+    parkAt(f);
+    o.armed = __fp.armDrill();
+    o.fitted = !!__fp.drillFitted();
+    pings = [];
+    /* the charge must still be in hand while it is only PART way through */
+    update(1 / 60); update(1 / 60);
+    o.midCharge = __fp.drillCharges;
+    o.midT = __fp.drillT;
+    o.drillSecs = 2 / 60 + runUntil(() => f.cracked, 900);
+    o.drillPings = pings.length;
+    o.drillLoudest = Math.max(0, ...pings);
+    o.doneCharge = __fp.drillCharges;
+    o.cracked = f.cracked;
+
+    /* and the dial must not keep turning on a door the drill took off */
+    for (let i = 0; i < 60; i++) { meter = 0; invuln = 9e9; update(1 / 60); }
+    o.dialAfter = __fp.safeT;
+    o.mode = mode;
+  } catch (e) { o.err = e.message + ' @ ' + (e.stack || '').split('\\n')[1]; }
+  finally { makeNoise = realNoise; }
+  return JSON.stringify(o);
+})()`));
+ok('the drill block ran clean', !drl.err, drl.err || 'no throw');
+ok('and it timed both ways into the same safe on the same floor',
+  drl.floor >= 0 && drl.sameSafeAgain === true, `floor ${drl.floor + 1}`);
+ok('the drill opens a safe faster than standing at the dial does',
+  drl.cracked === true && drl.drillSecs < drl.dialSecs * 0.5
+  && drl.need.drill < drl.need.dial,
+  `${drl.drillSecs.toFixed(2)}s drilled against ${drl.dialSecs.toFixed(2)}s by hand`);
+/* The trade is not total noise - a shorter job makes less of it. It is that the
+   noise arrives FASTER, so everything coming to look arrives while you are
+   still standing on the safe rather than long after you left. */
+ok('and it is louder while it runs, which is the whole trade',
+  drl.drillPings / drl.drillSecs > drl.dialPings / drl.dialSecs * 1.3
+  && drl.drillLoudest >= 600,
+  `${(drl.drillPings / drl.drillSecs).toFixed(2)} pings/s drilling against ` +
+  `${(drl.dialPings / drl.dialSecs).toFixed(2)} by hand`);
+ok('the charge goes when the safe opens, not when you press the button',
+  drl.armed === true && drl.midCharge === 1 && drl.midT > 0 && drl.doneCharge === 0,
+  `armed with ${drl.midCharge} at ${drl.midT}s in, ${drl.doneCharge} after`);
+ok('and it will not bite on thin air',
+  drl.armedAway === false && drl.chargeAfterMiss === 1,
+  `armed=${drl.armedAway}, charge=${drl.chargeAfterMiss}`);
+ok('a drilled safe stops the dial rather than screaming on without it',
+  drl.dialAfter === 0, `safeT=${drl.dialAfter} a second later`);
+ok('the block measured a running game', drl.mode === 'playing', drl.mode);
+
+
+/* ---- the lance: the one tool that edits the map ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const lnc = JSON.parse(await evl(`(() => {
+  const o = {};
+  const realNoise = makeNoise;
+  try {
+    endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0; loop = 0;
+
+    /* ---- the two refusals, swept across every floor in the game ---- */
+    o.borderOffered = 0; o.borderWalls = 0;
+    o.blindOffered = 0; o.blindTotal = 0; o.cuttable = 0;
+    for (let m = 0; m < MAPS.length; m++) {
+      mapIdx = m; loadMap(m);
+      for (let gy = 0; gy < T.ROWS; gy++) for (let gx = 0; gx < T.COLS; gx++) {
+        const border = gx === 0 || gy === 0 || gx === T.COLS - 1 || gy === T.ROWS - 1;
+        const blocking = isWallCell(gx, gy) || !!glassAt[gy * T.COLS + gx];
+        if (border) {
+          if (blocking) o.borderWalls++;
+          if (__fp.lanceCanCut(gx, gy)) o.borderOffered++;
+          continue;
+        }
+        if (!blocking) continue;
+        /* a tile with no OPPOSITE pair of open faces would only open into rock */
+        const pairs = (__fp.cellOpen(gx - 1, gy) && __fp.cellOpen(gx + 1, gy))
+          || (__fp.cellOpen(gx, gy - 1) && __fp.cellOpen(gx, gy + 1));
+        if (__fp.lanceCanCut(gx, gy)) o.cuttable++;
+        if (!pairs) {
+          o.blindTotal++;
+          if (__fp.lanceCanCut(gx, gy)) o.blindOffered++;
+        }
+      }
+    }
+
+    /* ---- a real cut, of each material, walked through on foot ---- */
+    const findOne = want => {
+      for (let m = 0; m < MAPS.length; m++) {
+        mapIdx = m; loadMap(m);
+        for (let gy = 1; gy < T.ROWS - 1; gy++) for (let gx = 1; gx < T.COLS - 1; gx++) {
+          if (!__fp.lanceCanCut(gx, gy)) continue;
+          const pane = !!glassAt[gy * T.COLS + gx];
+          if (want === 'glass' ? pane : !pane) return { m, gx, gy };
+        }
+      }
+      return null;
+    };
+    const S = T.TILE;
+    const tryWalk = (gx, gy) => {
+      /* start in the open cell on one side and drive the real movement code at
+         the open cell on the other; nothing here forces a position */
+      const horiz = __fp.cellOpen(gx - 1, gy) && __fp.cellOpen(gx + 1, gy);
+      const from = horiz ? { x: (gx - 1 + .5) * S, y: (gy + .5) * S }
+                         : { x: (gx + .5) * S, y: (gy - 1 + .5) * S };
+      player.x = from.x; player.y = from.y; player.vx = player.vy = 0;
+      keys.left = keys.right = keys.up = keys.down = false;
+      keys[horiz ? 'right' : 'down'] = true;
+      for (let i = 0; i < 110; i++) { meter = 0; invuln = 9e9; update(1 / 60); }
+      keys.right = keys.down = false;
+      /* past the FAR edge of the tile, so a nudge round a corner cannot count */
+      const got = horiz ? player.x > (gx + 1) * S : player.y > (gy + 1) * S;
+      player.vx = player.vy = 0;
+      return got;
+    };
+    const doCut = want => {
+      const at = findOne(want);
+      if (!at) return { found: false };
+      mapIdx = at.m; loadMap(at.m);
+      bots.length = 0; meter = 0; invuln = 9e9; clearToast();
+      const i = at.gy * T.COLS + at.gx;
+      const r = { found: true, floor: at.m, gx: at.gx, gy: at.gy,
+        wasGlass: !!glassAt[i], wasWall: grid[i] === 1 };
+      r.blockedBefore = bodyBlocked((at.gx + .5) * S, (at.gy + .5) * S);
+      r.walkedBefore = tryWalk(at.gx, at.gy);
+      __fp.setLance(1);
+      let pings = [];
+      makeNoise = (x, y, rr) => { pings.push(rr); return realNoise(x, y, rr); };
+      /* stand against the face and light it, then hold */
+      const horiz = __fp.cellOpen(at.gx - 1, at.gy) && __fp.cellOpen(at.gx + 1, at.gy);
+      player.x = horiz ? (at.gx - 1 + .5) * S : (at.gx + .5) * S;
+      player.y = horiz ? (at.gy + .5) * S : (at.gy - 1 + .5) * S;
+      player.vx = player.vy = 0;
+      player.aim = horiz ? 0 : Math.PI / 2;
+      r.armed = __fp.armLance();
+      r.aimed = __fp.lanceAimed();
+      let n = 0;
+      while (n < 60 && __fp.cutsN() === 0) { meter = 0; invuln = 9e9; update(1 / 60); n++; }
+      r.partway = { t: __fp.lanceT, charge: __fp.lanceCharges, cuts: __fp.cutsN() };
+      while (n < 900 && __fp.cutsN() === 0) { meter = 0; invuln = 9e9; update(1 / 60); n++; }
+      r.secs = n / 60;
+      r.quietWhileBurning = pings.length;
+      makeNoise = realNoise;
+      r.cuts = __fp.cutsN();
+      r.charge = __fp.lanceCharges;
+      r.blockedAfter = bodyBlocked((at.gx + .5) * S, (at.gy + .5) * S);
+      r.gridAfter = grid[i];
+      r.glassAfter = !!glassAt[i];
+      r.joinsBothSides = horiz
+        ? (__fp.cellOpen(at.gx - 1, at.gy) && __fp.cellOpen(at.gx, at.gy) && __fp.cellOpen(at.gx + 1, at.gy))
+        : (__fp.cellOpen(at.gx, at.gy - 1) && __fp.cellOpen(at.gx, at.gy) && __fp.cellOpen(at.gx, at.gy + 1));
+      r.walkedAfter = tryWalk(at.gx, at.gy);
+      /* A door you burn is a door they can use. The drones' own A* reads the
+         same grid, so the hole is a route for them too - and that is the price
+         of the tool, not a bug in it. Pathed side to side, through the cut. */
+      const side = horiz
+        ? [{ x: (at.gx - 1 + .5) * S, y: (at.gy + .5) * S }, { x: (at.gx + 1 + .5) * S, y: (at.gy + .5) * S }]
+        : [{ x: (at.gx + .5) * S, y: (at.gy - 1 + .5) * S }, { x: (at.gx + .5) * S, y: (at.gy + 1 + .5) * S }];
+      const through = p => p.some(q => Math.round(q.x) === Math.round((at.gx + .5) * S)
+        && Math.round(q.y) === Math.round((at.gy + .5) * S));
+      r.dronePath = { through: through(pathFind(side[0].x, side[0].y, side[1].x, side[1].y)) };
+      /* it does not heal: ten seconds of play later it is still a door */
+      for (let k = 0; k < 600; k++) { meter = 0; invuln = 9e9; update(1 / 60); }
+      r.stillOpenLater = !bodyBlocked((at.gx + .5) * S, (at.gy + .5) * S);
+      r.mode = mode;
+      return r;
+    };
+    o.glass = doCut('glass');
+    o.wall = doCut('wall');
+    /* the hole belongs to the floor that was cut, so the stairs take it back */
+    loadMap(mapIdx);
+    o.afterStairs = __fp.cutsN();
+    o.noiseVsDrill = { lance: T.LANCE_NOISE, drill: T.DRILL_NOISE };
+  } catch (e) { o.err = e.message + ' @ ' + (e.stack || '').split('\\n')[1]; }
+  finally { makeNoise = realNoise; }
+  return JSON.stringify(o);
+})()`));
+ok('the lance block ran clean', !lnc.err, lnc.err || 'no throw');
+for (const [what, r] of [['a pane', lnc.glass], ['a wall', lnc.wall]]) {
+  ok('the lance finds ' + what + ' worth cutting somewhere in the building',
+    r && r.found === true, JSON.stringify(r || null).slice(0, 120));
+  if (!r || !r.found) continue;
+  ok('cutting ' + what + ' turns a tile that stopped you into one you walk through',
+    r.blockedBefore === true && r.blockedAfter === false
+    && r.walkedBefore === false && r.walkedAfter === true,
+    `floor ${r.floor + 1} at ${r.gx},${r.gy}: blocked ${r.blockedBefore}->${r.blockedAfter}, ` +
+    `walked ${r.walkedBefore}->${r.walkedAfter}`);
+  ok('and the hole in ' + what + ' joins the two spaces either side of it',
+    r.joinsBothSides === true && r.cuts === 1,
+    `${r.cuts} cut, both sides open ${r.joinsBothSides}`);
+  ok('cutting ' + what + ' takes the time it says and spends one charge for it',
+    r.secs > 3 && r.secs < 4.2 && r.partway.charge === 1 && r.charge === 0,
+    `${r.secs.toFixed(2)}s, charge ${r.partway.charge} partway -> ${r.charge}`);
+  ok('and ' + what + ' cut stays cut',
+    r.stillOpenLater === true && r.mode === 'playing', `mode ${r.mode}`);
+  /* the half of it that costs you something: their pathfinder reads the same
+     grid, so a route you burn is a route they get as well */
+  ok('a hole in ' + what + ' is a route for them too, not only for you',
+    r.dronePath.through === true,
+    `their A* routes side to side through the cut: ${r.dronePath.through}`);
+}
+/* the pane has to actually leave glassAt, or bodies keep bouncing off nothing */
+ok('a cut pane stops being glass, and a cut wall stops being wall',
+  lnc.glass && lnc.wall && lnc.glass.wasGlass === true && lnc.glass.glassAfter === false
+  && lnc.wall.wasWall === true && lnc.wall.gridAfter === 0,
+  `glass ${lnc.glass && lnc.glass.glassAfter}, wall grid ${lnc.wall && lnc.wall.gridAfter}`);
+ok('it is near silent next to the drill — one sound, at the end',
+  lnc.glass && lnc.glass.quietWhileBurning === 1
+  && lnc.noiseVsDrill.lance < lnc.noiseVsDrill.drill / 4,
+  `${lnc.glass && lnc.glass.quietWhileBurning} sounds, ${lnc.noiseVsDrill.lance} against ${lnc.noiseVsDrill.drill}`);
+/* a hole in the shell is not a new route, it is a way out of the level */
+ok('the lance never offers the outer wall of the building',
+  lnc.borderOffered === 0 && lnc.borderWalls > 500,
+  `${lnc.borderOffered} offered of ${lnc.borderWalls} border tiles`);
+/* and a tile with only one open face would burn three seconds into a cupboard */
+ok('nor a tile that would only open into solid rock',
+  lnc.blindOffered === 0 && lnc.blindTotal > 100 && lnc.cuttable > 20,
+  `${lnc.blindOffered} offered of ${lnc.blindTotal} dead-end tiles, ${lnc.cuttable} real ones`);
+ok('and a hole belongs to the floor that was cut', lnc.afterStairs === 0,
+  `${lnc.afterStairs} cuts survived the stairs`);
+
+
+/* ---- the cloner: the one tool that asks you to walk at them ---- */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const kcl = JSON.parse(await evl(`(() => {
+  const o = {};
+  try {
+    endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0; loop = 0;
+    /* the first floor that actually has a locked door to answer */
+    let found = -1;
+    for (let m = 0; m < MAPS.length && found < 0; m++) { mapIdx = m; loadMap(m); if (doors.length) found = m; }
+    o.floor = found;
+    mapIdx = found; loadMap(found);
+    meter = 0; invuln = 9e9; clearToast();
+    o.need = __fp.cloneNeed();
+
+    /* one drone, parked where we put it. The AI overrules a bare state write on
+       the next update, so both the position and the state are re-pinned every
+       frame rather than set once. */
+    const b = bots.find(x => x.kind === 'drone');
+    o.hasDrone = !!b;
+    bots.length = 0; if (b) bots.push(b);
+    const hold = (n, dist, state) => {
+      for (let i = 0; i < n; i++) {
+        if (b) {
+          b.x = player.x + dist; b.y = player.y;
+          b.state = state; b.searchPts = []; b.path = [];
+          b.face = Math.atan2(player.y - b.y, player.x - b.x);
+        }
+        meter = 0; invuln = 9e9;
+        update(1 / 60);
+      }
+    };
+    const d = doors.find(z => !z.open);
+    const atDoor = () => {
+      const sp = [[0, -32], [0, 32], [-32, 0], [32, 0]].find(([ox, oy]) => !isWall(d.x + ox, d.y + oy));
+      player.x = d.x + sp[0]; player.y = d.y + sp[1]; player.vx = player.vy = 0;
+    };
+    /* Standing at the door is what PICKS it, so the cloning happens away from
+       it. Three seconds parked on a lock would have opened it by hand and the
+       block would have credited the card for it. */
+    const away = () => { player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0; };
+    o.startShut = !d.open;
+
+    /* the control: bare handed, half a second at the lock does nothing */
+    __fp.setCloner(0);
+    atDoor();
+    o.bareArmed = __fp.armCloner();
+    hold(30, 40, 'patrol');
+    o.shutBareHanded = !d.open;
+    o.pickNeeds = T.PICK_T;
+
+    away();
+    o.awayFromDoor = Math.hypot(player.x - d.x, player.y - d.y) > T.DOOR_R;
+    /* too far away is no handshake */
+    __fp.setCloner(1);
+    o.armed = __fp.armCloner();
+    hold(60, 120, 'patrol');
+    away();
+    o.farT = __fp.cloneT;
+    o.farMark = __fp.cloneMarkNow();
+
+    /* and neither is one that has already turned and come for you */
+    hold(90, 40, 'chase');
+    away();
+    o.chaseT = __fp.cloneT;
+    o.chaseMark = __fp.cloneMarkNow();
+
+    /* close, and it has not seen you: that is the one that works */
+    hold(20, 40, 'patrol');
+    o.partT = __fp.cloneT;
+    o.partCharge = __fp.clonerCharges;
+    hold(90, 40, 'patrol');
+    o.key = hasKey;
+    o.charge = __fp.clonerCharges;
+    o.armedAfter = __fp.cloneArmedNow();
+    o.doorStillShut = !d.open;
+
+    /* the point of the whole thing: it opens the door the pick was for, and it
+       does it on the frame you arrive rather than after a second and a half */
+    bots.length = 0;
+    atDoor();
+    update(1 / 60); update(1 / 60);
+    o.opened = d.open;
+    o.spentKey = hasKey;
+    o.mode = mode;
+  } catch (e) { o.err = e.message + ' @ ' + (e.stack || '').split('\\n')[1]; }
+  return JSON.stringify(o);
+})()`));
+ok('the cloner block ran clean', !kcl.err, kcl.err || 'no throw');
+ok('and it had a drone and a locked door to work with',
+  kcl.hasDrone === true && kcl.startShut === true && kcl.awayFromDoor === true,
+  `floor ${kcl.floor + 1}, cloned clear of the lock: ${kcl.awayFromDoor}`);
+/* The claim is about the DOOR. Bare handed the same two frames at the lock do
+   nothing - picking wants a second and a half of standing there - and the door
+   is still shut right up until the card arrives at it. */
+ok('the cloner opens a door a bare-handed player cannot',
+  kcl.bareArmed === false && kcl.shutBareHanded === true
+  && kcl.doorStillShut === true && kcl.opened === true
+  && kcl.need.t < kcl.pickNeeds,
+  `shut after 0.5s bare-handed=${kcl.shutBareHanded}, still shut when the card landed=` +
+  `${kcl.doorStillShut}, opened in two frames with it=${kcl.opened}`);
+ok('the card comes off a drone, and the drone has to be within reach',
+  kcl.key === true && kcl.farT === 0 && kcl.farMark === null,
+  `at 120px the clone sat at ${kcl.farT}s`);
+ok('and it has to be one that has not turned and come for you',
+  kcl.chaseT === 0 && kcl.chaseMark === null,
+  `1.5s at 40px of a chasing drone got ${kcl.chaseT}s`);
+ok('the charge goes with the card, not with the button',
+  kcl.partT > 0 && kcl.partCharge === 1 && kcl.charge === 0 && kcl.armedAfter === false,
+  `${kcl.partCharge} at ${kcl.partT}s in, ${kcl.charge} after`);
+ok('and the card is spent on the door, the same as one you found',
+  kcl.spentKey === false, `still holding a card: ${!kcl.spentKey}`);
+ok('the block measured a running game', kcl.mode === 'playing', kcl.mode);
+
+
+/* ---- and all three are registered in every place that describes a gadget ---- */
+await send('Page.navigate', { url: FILE + '?name=TESTY' });
+await sleep(2400);
+const heist = JSON.parse(await evl(`(() => {
+  const o = { ids: ['drill', 'lance', 'cloner'] };
+  const G = __fp.gadgets();
+  o.spec = o.ids.map(id => {
+    const g = G.find(x => x.id === id) || null;
+    return g && { id, key: g.key, cost: g.cost, what: !!g.what,
+      inKit: id in T.KIT, inCap: id in T.CAP,
+      button: !!document.getElementById(g.btn),
+      barKey: (document.querySelector('#' + g.btn + ' s') || {}).textContent,
+      inControls: CONTROLS.some(c => c[1][0] === g.key) };
+  });
+  /* the keyboard has to reach them too - five lists agreeing means nothing if
+     nothing is listening for the key */
+  __fp.setLoadout(['drill']);
+  startGame();
+  mapIdx = 0; loadMap(0); bots.length = 0; meter = 0; invuln = 9e9;
+  __fp.setDrill(1); __fp.setLance(1); __fp.setCloner(1);
+  /* Each key is proved by a line only that key's code path writes. A drill with
+     no safe under it and a lance with nothing to cut both say so out loud, and
+     the cloner arms - so all three keys are shown to reach a handler without
+     needing a safe, a wall and a drone in one place. */
+  const press = k => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+  const said = re => __fp.toastList().some(m => re.test(m));
+  clearToast(); press('1'); o.key1 = said(/^DRILL —/);
+  clearToast(); press('2'); o.key2 = said(/^LANCE —/) || __fp.lanceAimed() !== null;
+  clearToast(); press('3'); o.key3 = __fp.cloneArmedNow();
+  o.keyArmsCloner = o.key1 && o.key2 && o.key3;
+  /* eight points of tools against a five point budget */
+  o.allThree = __fp.setLoadout(['drill', 'lance', 'cloner']);
+  o.allThreeCost = __fp.loadoutCost();
+  o.wanted = __fp.gadgetCosts().filter(g => o.ids.includes(g.id)).reduce((s, g) => s + g.cost, 0);
+  toMenu(); __fp.setLoadout(['flare', 'smoke', 'hush']);
+  o.mode = mode;
+  return JSON.stringify(o);
+})()`));
+ok('the three tools are the ones that were specified',
+  JSON.stringify(heist.spec.map(s => s && [s.id, s.key, s.cost]))
+    === JSON.stringify([['drill', '1', 3], ['lance', '2', 3], ['cloner', '3', 2]]),
+  JSON.stringify(heist.spec.map(s => s && [s.id, s.key, s.cost])));
+/* GADGETS, T.KIT, T.CAP, the item bar markup and the pause reference */
+ok('and each of them is registered in all five places',
+  heist.spec.every(s => s && s.what && s.inKit && s.inCap && s.button
+    && s.barKey === s.key && s.inControls),
+  JSON.stringify(heist.spec));
+ok('and the key printed on each button is one something is listening for',
+  heist.keyArmsCloner === true,
+  `1=${heist.key1} 2=${heist.key2} 3=${heist.key3}`);
+/* 3 + 3 + 2 against a budget of 5: picking all three is meant to be impossible */
+ok('and no run can carry all three of them',
+  heist.wanted === 8 && heist.allThree.length < 3 && heist.allThreeCost <= 5,
+  `${heist.wanted} points of tools, kit came back as ${JSON.stringify(heist.allThree)}`);
+
+
 /* ---- keeping a floor clean, and being told while you still can ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
@@ -4348,7 +4807,7 @@ const kit = JSON.parse(await evl(`(() => {
 const only = (c, ids) => Object.entries(c).every(([k, v]) => ids.includes(k) ? v === 1 : v === 0);
 /* the headcount used to be the constraint; points are now, and LOADOUT_MAX is
    only a safety rail the budget reaches first - so assert the thing that binds */
-ok('every gadget is described in one place', kit.gadgets.length === 7 && kit.budget === 5,
+ok('every gadget is described in one place', kit.gadgets.length === 10 && kit.budget === 5,
   `${kit.gadgets.length} gadgets, ${kit.budget} points`);
 ok('and points, not a headcount, are what limit the pick',
   kit.maxAffordable <= kit.max && kit.maxAffordable === 3,
