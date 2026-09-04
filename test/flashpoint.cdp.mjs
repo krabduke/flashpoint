@@ -259,8 +259,19 @@ await evl(`(() => {
 await eq('campaign has 20 floors', 'MAPS.length', 20);
 const nMaps = await evl('MAPS.length');
 for (let i = 0; i < nMaps; i++) {
-  await evl('__fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);');
+  await evl(`(() => {
+    if (__fp.jobCardShown()) { __fp.pushOn(); return 'pushed'; }
+    __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+    return 'cleared';
+  })()`);
   await sleep(500);
+  /* a contract card stops the floor loop dead, so answer it and take the floor
+     again - otherwise the run ends at four and everything after measures a
+     game sitting on a menu */
+  await evl(`(() => {
+    if (__fp.jobCardShown()) { __fp.pushOn(); __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y); }
+  })()`);
+  await sleep(260);
 }
 await eq('campaign win', '__fp.mode', 'won');
 /* Q2: a seventeen floor run used to collapse into two totals */
@@ -5304,6 +5315,63 @@ ok('nothing starts on your doorstep on any floor of any loop',
   spw.under150 === 0, `${spw.under150} of ${spw.total}; closest ${spw.closest[0].nearest}px (${spw.closest[0].kind})`);
 ok('and nothing can see the tile you appear on',
   spw.seenAnywhere === 0, `${spw.seenAnywhere} of ${spw.total}`);
+
+/* ---- contracts ----
+   Twenty floors with one score at the end asks nothing of the player. Four
+   floors and a fence asks the only question a score has ever needed. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const job = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; endless = false;
+  __fp.setDiff('standard'); __fp.setMod(-1); __fp.resetRunLog();
+  o.shape = __fp.job();
+  o.ends = [];
+  for (let i = 0; i < MAPS.length; i++) if (__fp.jobEnd(i)) o.ends.push(i + 1);
+
+  /* clear four floors: the fourth must stop the run and ask */
+  mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+  for (let f = 0; f < 4; f++) {
+    if (__fp.jobCardShown()) break;
+    __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
+    for (let i = 0; i < 6; i++) update(1 / 60);
+  }
+  o.shownAfterFour = __fp.jobCardShown();
+  o.modeAtCard = mode;
+  o.atCard = __fp.job();
+  o.takeText = document.getElementById('jobTake').textContent;
+
+  /* going on puts it all back on the table */
+  __fp.pushOn();
+  o.afterPush = { job: __fp.job(), mode, floor: mapIdx + 1,
+                  card: __fp.jobCardShown() };
+
+  /* and being caught with it on the table loses it */
+  mode = 'playing'; invuln = 0;
+  __fp.setCause('contact'); caught();
+  o.afterCaught = __fp.job();
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the contract block ran at all', !job.threw, job.threw || 'ok');
+ok('twenty floors are five contracts of four',
+  job.shape.len === 4 && job.shape.jobs === 5, JSON.stringify(job.shape));
+ok('and a contract ends every fourth floor',
+  JSON.stringify(job.ends) === '[4,8,12,16,20]', JSON.stringify(job.ends));
+ok('finishing one stops the run and asks',
+  job.shownAfterFour === true && job.modeAtCard === 'job',
+  `shown=${job.shownAfterFour} mode=${job.modeAtCard}`);
+ok('with something actually on the table',
+  job.atCard.atRisk > 0 && Number(job.takeText) > 0,
+  `atRisk=${job.atCard.atRisk} shown="${job.takeText}"`);
+/* the decision only means anything if going on genuinely risks it */
+ok('going deeper leaves it on the table and moves you on',
+  job.afterPush.mode === 'playing' && job.afterPush.card === false
+  && job.afterPush.job.atRisk > 0 && job.afterPush.job.idx === 1,
+  JSON.stringify(job.afterPush));
+ok('and being taken loses everything that was still on it',
+  job.afterCaught.atRisk === 0, JSON.stringify(job.afterCaught));
 
 /* ---- the burst ----
    A chase you can only walk away from is not a chase. This is the one thing the

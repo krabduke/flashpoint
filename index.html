@@ -267,6 +267,7 @@
   .kitchip.on s{color:#c8a86a}
   .kitchip:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
   #kitCount{color:#ffd166}
+  #jobTake.gold{color:#ffd166;text-shadow:0 0 20px rgba(255,190,80,.45)}
   /* one shared line rather than seven cramped ones: the chips are 8px type and
      a description inside them would not survive a phone */
   #kitWhat{min-height:2.1em;margin:7px 2px 0;font-size:9.5px;line-height:1.5;
@@ -644,6 +645,21 @@
     </div>
   </div>
 
+  <div id="jobCard" class="overlay hidden">
+    <div class="card">
+      <p class="floor-eyebrow">The fence is waiting</p>
+      <h1 id="jobTitle" style="font-size:clamp(24px,5vw,42px)">CONTRACT CLEAR</h1>
+      <div class="stats">
+        <div class="stat"><b id="jobTake" class="gold">0</b><span>ON THE TABLE</span></div>
+        <div class="stat"><b id="jobBanked">0</b><span>ALREADY YOURS</span></div>
+        <div class="stat"><b id="jobBonus">&mdash;</b><span>DEPTH BONUS</span></div>
+      </div>
+      <p id="jobNote" class="hint" style="max-width:38ch;margin:14px auto 0"></p>
+      <button class="btn" id="jobBankBtn" style="margin-top:16px">TAKE IT AND GO</button>
+      <button class="btn ghost" id="jobOn"></button>
+    </div>
+  </div>
+
   <div id="settingsOv" class="overlay hidden">
     <div class="card setcard">
       <h2>SETTINGS</h2>
@@ -760,6 +776,10 @@ const T = {
   /* The burst is the only way to out-accelerate a chase, and it is loud enough
      that using it to explore is a bad idea. Spending it is the decision. */
   BURST_MULT: 1.6, BURST_T: 0.42, BURST_COOL: 3.4, BURST_NOISE: 600,
+  /* Five contracts of four floors. Walking away banks what you took; going on
+     is worth more and risks all of it, which is the only decision a score has
+     ever needed. */
+  JOB_LEN: 4, JOB_BONUS: 0.25,
   /* a torch in a blacked-out building is the most conspicuous thing in it.
      Time-based, so sweeping stays safe and staring does not. */
   BEAM_SEEN_T: 1.15, BEAM_SEEN_R: 540, BEAM_FADE: 0.8,
@@ -1329,6 +1349,8 @@ let made = false, madeT = 0;
 let phase = 'in', prize = null, heldPrize = false, prizeT = 0;
 let exfilT = 0, responseT = 0, takeT = 0;
 let burstT = 0, burstCool = 0;
+/* banked is yours whatever happens next; atRisk dies with you */
+let banked = 0, atRisk = 0, jobIdx = 0;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
 let shakes = [], shakeScale = 1, redPulse = 0, unlockFlash = 0, servoLog = [];
 let searchLit = false;
@@ -3535,9 +3557,50 @@ function takePrize() {
   hud();
 }
 
+/* Between contracts. Everything you are carrying is on the table until you
+   take it off, and the longer you stay the more it is worth. */
+function openJobCard() {
+  mode = 'job';
+  const pay = jobPayout();
+  $('jobTitle').textContent = 'CONTRACT ' + (jobIdx + 1) + ' CLEAR';
+  $('jobTake').textContent = pay;
+  $('jobBanked').textContent = banked;
+  $('jobBonus').textContent = jobIdx > 0 ? '+' + Math.round(T.JOB_BONUS * jobIdx * 100) + '%' : '—';
+  const more = mapIdx < MAPS.length - 1;
+  $('jobOn').style.display = more ? '' : 'none';
+  $('jobOn').textContent = more ? 'GO DEEPER — ' + jobName(jobIdx + 1) + ' →' : '';
+  $('jobNote').textContent = more
+    ? 'Walk away and ' + pay + ' is yours. Go on and it rides on the next four floors.'
+    : 'Nothing deeper than this. Take it.';
+  $('jobCard').classList.remove('hidden');
+}
+
+function jobBank() {
+  banked += jobPayout();
+  atRisk = 0;
+  $('jobCard').classList.add('hidden');
+  toast('BANKED — ' + banked, 2.6);
+  endRun(true, totalRunCoins);
+  mode = 'won';
+  $('escSub').textContent = 'WALKED AWAY WITH ' + banked;
+  win();
+}
+
+function jobPushOn() {
+  jobIdx++;
+  $('jobCard').classList.add('hidden');
+  mode = 'playing';
+  totalRunCoins += 0;
+  mapIdx = (mapIdx + 1) % MAPS.length;
+  wipeT = motionFull() ? T.WIPE_T : 0; wipeName = MAPS[mapIdx].name;
+  loadMap(mapIdx);
+  hud();
+}
+
 function caught() {
   if (mode !== 'playing') return;
   mode = 'caught'; freeze = 0.15;
+  atRisk = 0;   /* that is what "at risk" meant */
   sfx.caught(); noiseBurst(0.6, 0.4, 400); killSting();
   let hunter = null, hd = 1e9;
   for (const b of bots) { const d = Math.hypot(b.x - player.x, b.y - player.y); if (d < hd) { hd = d; hunter = b; } }
@@ -3568,6 +3631,13 @@ function caught() {
   caughtHold = T.CAUGHT_HOLD;
   endRun(false, totalRunCoins + coins);
 }
+
+const jobOf = (i) => Math.floor(i / T.JOB_LEN);
+const jobEnd = (i) => (i + 1) % T.JOB_LEN === 0 || i === MAPS.length - 1;
+const jobName = (j) => (MAPS[Math.min(MAPS.length - 1, j * T.JOB_LEN)] || {}).name || '';
+/* what walking away right now is worth: the take, plus a quarter for each
+   contract you have already finished */
+const jobPayout = () => Math.round(atRisk * (1 + T.JOB_BONUS * jobIdx));
 
 function nextMap() {
   const last = mapIdx >= MAPS.length - 1;
@@ -3611,8 +3681,11 @@ function nextMap() {
     renderFloors();
   }
   logFloor(ghost);
+  atRisk += coins * coinValue() + (heldPrize ? T.PRIZE_SCORE : 0);
   if (last && !endless) { win(); return; }
   totalRunCoins += coins;
+  /* the end of a contract is the only place the run offers you a way out */
+  if (!endless && jobEnd(mapIdx)) { openJobCard(); return; }
   mapIdx = (mapIdx + 1) % MAPS.length;
   if (mapIdx === 0) { loop++; pickMod(); }
   wipeT = motionFull() ? T.WIPE_T : 0; wipeName = MAPS[mapIdx].name;
@@ -6558,6 +6631,7 @@ function startGame() {
   endless = false; runT = 0; score = 0; totalRunCoins = 0;
   modIdx = dailyOn ? todaySeed() % MODS.length : condIdx;
   runLog = []; caughtBy = null; runSafes = 0; ghostStreak = 0; bestStreak = 0;
+  banked = 0; atRisk = 0; jobIdx = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
@@ -6586,6 +6660,7 @@ function startFromFloor(floorIdx) {
   loop = Math.floor(floorIdx / MAPS.length);
   endless = false; runT = 0; score = 0; totalRunCoins = 0;
   runLog = []; caughtBy = null; runSafes = 0; ghostStreak = 0; bestStreak = 0;
+  banked = 0; atRisk = 0; jobIdx = 0;
   mode = 'playing'; paused = false;
   $('start').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden'); $('pausedOv').classList.add('hidden');
   loadMap(mapIdx);
@@ -6923,6 +6998,8 @@ $('condGrid').addEventListener('click', e => {
 $('condGrid').addEventListener('pointerleave', e => {
   if (e.pointerType === 'mouse') describeCond(condIdx);
 });
+$('jobBankBtn').addEventListener('click', () => { sfx.ui(); jobBank(); });
+$('jobOn').addEventListener('click', () => { sfx.ui(); jobPushOn(); });
 $('kitGrid').addEventListener('click', e => {
   const b = e.target.closest('button[data-kit]');
   if (!b) return;
@@ -7178,7 +7255,8 @@ window.__fp = {
      is a duplicate key, and the later one silently wins. */
   holdCrack(on) { keys.crack = !!on; },
   controlRows() { return controlRows().length; },
-  resetRunLog() { runLog = []; runSafes = 0; caughtBy = null; ghostStreak = 0; bestStreak = 0; },
+  resetRunLog() { runLog = []; runSafes = 0; caughtBy = null; ghostStreak = 0; bestStreak = 0;
+    banked = 0; atRisk = 0; jobIdx = 0; },
   setSafeT(v) { safeT = v; },
   loadoutCost() { return loadoutCost(); }, budget() { return T.LOADOUT_BUDGET; },
   gadgetCosts() { return GADGETS.map(g => ({ id: g.id, cost: g.cost })); },
@@ -7429,6 +7507,11 @@ window.__fp = {
   get made() { return made; }, setMade(v) { made = !!v; madeT = 0; },
   get phase() { return phase; }, get heldPrize() { return heldPrize; },
   exfilT() { return +exfilT.toFixed(2); }, takeT() { return +takeT.toFixed(3); },
+  job() { return { idx: jobIdx, banked, atRisk, payout: jobPayout(),
+    len: T.JOB_LEN, jobs: Math.ceil(MAPS.length / T.JOB_LEN) }; },
+  jobEnd(i) { return jobEnd(i); }, jobOf(i) { return jobOf(i); },
+  bankNow() { jobBank(); }, pushOn() { jobPushOn(); },
+  jobCardShown() { return !$('jobCard').classList.contains('hidden'); },
   dash() { return dash(); },
   burstState() { return { t: +burstT.toFixed(3), cool: +burstCool.toFixed(3) }; },
   darkLevel() { return blackout > 0 ? 0.93 : (phase === 'out' ? T.EXFIL_LIGHT : T.DARK); },

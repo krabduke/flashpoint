@@ -234,7 +234,7 @@ written.
 
 - [x] N1 Loadout — pick three of the eight before a run, rather than being handed
       four. The kit tables and the item bar already exist; this is the choice.
-- [ ] N2 Loadout has a cost — better kit for a harder building, so picking is a
+- [x] N2 Loadout has a cost — better kit for a harder building, so picking is a
       trade rather than a wishlist
 - [x] N3 The menu says what each one is for, since half of them are now only
       meaningful against a specific hunter
@@ -509,3 +509,5 @@ Append one line per completed item: `date · id · commit · note`.
     `camNow` is lerped inside `render()` and stepping `update()` moves the camera
     not at all. One line checking that the setup did what you think turns each of
     these from a mystery into a message.
+- 2026-09-04 · redesign · being seen starts a hunt instead of ending the run; the prize opens the exit and gold became optional score; greed costs speed; the escape act climbs and takes the dark away; three screen beats; three heist tools; a dash. Removed EXIT_EARLY, CLEAR_BONUS's all-coins demand, fSeen being set by bumpAlert, and a duplicate exit chevron
+- 2026-09-04 · contracts · twenty floors are five contracts of four, each ending at a fence: bank it or leave it on the table, +25% per contract cleared, and being taken loses whatever was still on it, 7 assertions
