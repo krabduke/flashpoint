@@ -268,6 +268,34 @@
   .kitchip:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
   #kitCount{color:#ffd166}
   #jobTake.gold{color:#ffd166;text-shadow:0 0 20px rgba(255,190,80,.45)}
+  /* the briefing reads like a page from a file, not a menu */
+  #brPrize{font-family:'Orbitron',monospace;font-size:13px;letter-spacing:.14em;
+    color:#ffd166;margin:2px 0 4px}
+  #brLine{font-size:12.5px;color:#8a80b0;font-style:italic;margin:0 0 12px;
+    max-width:38ch;margin-left:auto;margin-right:auto}
+  .brief-rows{width:min(330px,84vw);margin:0 auto}
+  .brief-rows div{display:grid;grid-template-columns:64px 1fr;gap:10px;
+    padding:6px 0;border-top:1px solid rgba(120,100,180,.14);text-align:left}
+  .brief-rows span{font-family:'Orbitron',monospace;font-size:8.5px;
+    letter-spacing:.2em;color:#5e5679;padding-top:2px}
+  .brief-rows b{font-size:12px;color:#c9bfe8;font-weight:500}
+  #brWays{display:flex;flex-direction:column;gap:6px;width:min(330px,84vw);margin:6px auto 0}
+  .wayin{
+    pointer-events:auto;cursor:pointer;-webkit-appearance:none;appearance:none;
+    display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 12px;
+    border-radius:9px;background:rgba(18,13,38,.72);border:1px solid rgba(120,110,170,.28);
+    font-family:'Orbitron',monospace;color:#c9bfe8;text-align:left;
+    transition:border-color .16s ease,background .16s ease;
+  }
+  .wayin b{font-size:10px;letter-spacing:.12em}
+  /* the two numbers that make it a decision, not a list of doors */
+  .wayin s{text-decoration:none;grid-column:1;font-size:9px;color:#8a80b0;letter-spacing:.06em}
+  .wayin u{text-decoration:none;grid-column:2;grid-row:1 / span 2;align-self:center;
+    font-size:9px;color:#6a6190;letter-spacing:.06em}
+  .wayin:hover{border-color:rgba(160,150,220,.55)}
+  .wayin.on{border-color:rgba(255,209,102,.6);background:linear-gradient(180deg,rgba(58,42,16,.5),rgba(24,16,42,.7))}
+  .wayin.on b{color:#ffe9a8}
+  .wayin:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
   #shopGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));
     gap:6px;width:min(330px,84vw);margin:8px auto 0}
   .shopchip{
@@ -662,6 +690,23 @@
     </div>
   </div>
 
+  <div id="briefing" class="overlay hidden">
+    <div class="card">
+      <p class="floor-eyebrow" id="brContract">CONTRACT</p>
+      <h1 id="brFloor" style="font-size:clamp(24px,5vw,40px)">FLOOR</h1>
+      <p id="brPrize"></p>
+      <p id="brLine"></p>
+      <div class="brief-rows">
+        <div><span>INSIDE</span><b id="brInside"></b></div>
+        <div><span>HAZARD</span><b id="brHaz"></b></div>
+      </div>
+      <p class="floor-eyebrow" style="margin-top:14px">Way in</p>
+      <div id="brWays" role="group" aria-label="Way in"></div>
+      <button class="btn" id="brGo" style="margin-top:14px">GO</button>
+      <p class="hint" style="margin-top:8px">or press <span class="key">SPACE</span></p>
+    </div>
+  </div>
+
   <div id="jobCard" class="overlay hidden">
     <div class="card">
       <p class="floor-eyebrow">The fence is waiting</p>
@@ -802,6 +847,12 @@ const T = {
      is worth more and risks all of it, which is the only decision a score has
      ever needed. */
   JOB_LEN: 4, JOB_BONUS: 0.25,
+  /* three ways in, at least this far apart, so the choice is a different route
+     and not three doors onto the same corridor */
+  ENTRY_MIN_GAP: 260, ENTRY_N: 3,
+  /* free, and quieter than a sprint on purpose: a scalpel for moving one guard,
+     not a way to shout across a floor */
+  KNOCK_R: 300, KNOCK_COOL: 2.6,
   /* kit is bought out of the take, so buying is banking less - the fence asks
      three questions, not one */
   SHOP_PER_POINT: 260,
@@ -1407,6 +1458,12 @@ const MAPS = [
 ];
 
 /* ---------- state ---------- */
+const autostarting = location.search.includes('autostart');
+/* The briefing parks the game in mode 'brief', where update() returns early.
+   The harness drives hundreds of floor transitions and expects a playable game
+   at the end of each, so autostart turns the plan off and the briefing block
+   switches it back on for itself. */
+let briefingOn = !autostarting;
 let W = 0, H = 0, DPR = 1, Z = 1, TOUCH = false;
 let mode = 'menu', paused = false, time = 0;
 let mapIdx = 0, loop = 0, endless = false, runT = 0;
@@ -1428,10 +1485,11 @@ let made = false, madeT = 0;
 let phase = 'in', prize = null, heldPrize = false, prizeT = 0;
 let prizeTool = 'hands', prizeTick = 0;
 let exfilT = 0, responseT = 0, takeT = 0;
-let burstT = 0, burstCool = 0;
+let burstT = 0, burstCool = 0, knockCool = 0;
 /* banked is yours whatever happens next; atRisk dies with you */
 let banked = 0, atRisk = 0, jobIdx = 0;
 let shiftAt = 0, shifted = false;
+let entries = [], entryIdx = 0;
 let lockers = [], hidIn = null, hidT = 0, hidSeen = false;
 let jewels = [], plans = [], hasPlan = false;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
@@ -2119,7 +2177,7 @@ function loadMap(idx) {
   phase = 'in'; heldPrize = false; prizeT = 0; exfilT = 0; responseT = 0; takeT = 0;
   prizeTool = 'hands'; prizeTick = 0;
   shiftAt = T.SHIFT_AT + rand(-T.SHIFT_JITTER, T.SHIFT_JITTER); shifted = false;
-  burstT = 0; burstCool = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
+  burstT = 0; burstCool = 0; knockCool = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
   /* a wipe left over from the previous floor would darken the new one */
   if (mode !== 'playing') wipeT = 0;
@@ -3059,6 +3117,7 @@ function update(dt) {
   if (takeT > 0) takeT = Math.max(0, takeT - dt * 1.6);
   if (burstT > 0) burstT = Math.max(0, burstT - dt);
   if (burstCool > 0) burstCool = Math.max(0, burstCool - dt);
+  if (knockCool > 0) knockCool = Math.max(0, knockCool - dt);
   unlockFlash = Math.max(0, unlockFlash - dt);
 }
 
@@ -3757,6 +3816,85 @@ function renderJobCard() {
     : 'Nothing deeper than this. Take it.';
 }
 
+/* Three ways in, read off the floor itself: the door the map was drawn with,
+   plus the two furthest-apart reachable cells that no patrol starts on top of.
+   Each is described by the trade it actually is. */
+function findEntries() {
+  const walk = [];
+  for (let gy = 1; gy < T.ROWS - 1; gy++) for (let gx = 1; gx < T.COLS - 1; gx++) {
+    if (grid[gy * T.COLS + gx]) continue;
+    walk.push({ x: gx * T.TILE + T.TILE / 2, y: gy * T.TILE + T.TILE / 2 });
+  }
+  const patrolGap = (p) => {
+    let d = 1e9;
+    for (const b of bots) if (b.kind !== 'sentry') d = Math.min(d, Math.hypot(b.x - p.x, b.y - p.y));
+    return d === 1e9 ? 999 : Math.round(d);
+  };
+  const prizeGap = (p) => prize ? Math.round(Math.hypot(prize.x - p.x, prize.y - p.y)) : 0;
+  const home = { x: spawnPt.x, y: spawnPt.y };
+  const out = [{ ...home, name: 'THE WAY IN', gap: prizeGap(home), near: patrolGap(home) }];
+  /* the rest: furthest from what is already chosen, and never on a doorstep */
+  const names = ['THE SERVICE DOOR', 'THE LOADING BAY', 'THE ROOF HATCH'];
+  while (out.length < T.ENTRY_N) {
+    let best = null, bd = -1;
+    for (const c of walk) {
+      if (patrolGap(c) < T.SPAWN_CLEAR) continue;
+      let d = 1e9;
+      for (const o of out) d = Math.min(d, Math.hypot(o.x - c.x, o.y - c.y));
+      if (d < T.ENTRY_MIN_GAP) continue;
+      if (d > bd) { bd = d; best = c; }
+    }
+    if (!best) break;
+    out.push({ x: best.x, y: best.y, name: names[out.length - 1] || 'ANOTHER WAY',
+      gap: prizeGap(best), near: patrolGap(best) });
+  }
+  return out;
+}
+
+function renderBrief() {
+  const p = prizeOf(mapIdx);
+  $('brFloor').textContent = MAPS[mapIdx].name;
+  $('brContract').textContent = 'CONTRACT ' + (jobIdx + 1) + ' \u00b7 FLOOR ' + (mapIdx + 1) + ' OF ' + MAPS.length;
+  $('brPrize').textContent = p[0];
+  $('brLine').textContent = p[1];
+  const cams = emitters.filter(e => e.kind === 'search' && e.cam).length;
+  const haz = [];
+  if (MAPS[mapIdx].siren || MOD().siren) haz.push('SIREN SWEEPS');
+  if (MAPS[mapIdx].fog || MOD().fog) haz.push('FOG BANKS');
+  if (blackoutMap) haz.push('BLACKOUTS');
+  if (plates.length) haz.push('PRESSURE FLOOR');
+  $('brInside').textContent = [
+    bots.filter(b => b.kind === 'drone').length + ' patrols',
+    cams ? cams + ' cameras' : null,
+    sentryPts.length ? sentryPts.length + ' sentries' : null,
+    listenPts.length ? listenPts.length + ' listeners' : null
+  ].filter(Boolean).join(' \u00b7 ');
+  $('brHaz').textContent = haz.join(' \u00b7 ') || 'nothing it wants to warn you about';
+  $('brWays').innerHTML = entries.map((e, i) =>
+    '<button class="wayin' + (i === entryIdx ? ' on' : '') + '" type="button" data-way="' + i + '">'
+    + '<b>' + e.name + '</b>'
+    + '<s>' + Math.round(e.gap / T.TILE) + 'm to the prize</s>'
+    + '<u>' + (e.near > 900 ? 'no patrol near' : 'patrol ' + Math.round(e.near / T.TILE) + 'm off') + '</u>'
+    + '</button>').join('');
+}
+
+function openBrief() {
+  entries = findEntries();
+  entryIdx = 0;
+  mode = 'brief';
+  renderBrief();
+  $('briefing').classList.remove('hidden');
+}
+
+function goIn() {
+  const e = entries[entryIdx] || entries[0];
+  if (e) { spawnPt = { x: e.x, y: e.y }; player.x = e.x; player.y = e.y; player.vx = 0; player.vy = 0; }
+  $('briefing').classList.add('hidden');
+  mode = 'playing';
+  invuln = 2.5;
+  hud();
+}
+
 function openJobCard() {
   mode = 'job';
   const pay = jobPayout();
@@ -3887,6 +4025,11 @@ function nextMap() {
   wipeCond = MOD().name ? (MOD().name + (modSwapped() ? ' \u00b7 SWAPPED HERE' : '')) : '';
   loadMap(mapIdx);
   hud();
+  /* Deliberately here and in startGame rather than inside loadMap: the harness
+     calls loadMap directly several hundred times and expects a playable game,
+     and a briefing there would park every one of those in mode 'brief', where
+     update() returns early. */
+  if (briefingOn) openBrief();
 }
 
 /* A total that lands all at once reads as a receipt. One that arrives reads as a
@@ -6714,6 +6857,18 @@ function tossCoin() {
   return true;
 }
 
+/* Free, because a lure you have to pay for is a lure nobody uses. Everything
+   else in the kit answers "how do I avoid them"; this one asks "where do I want
+   them to be", which is the question a heist is actually made of. */
+function knock() {
+  if (mode !== 'playing' || knockCool > 0) { sfx.ui(); return false; }
+  knockCool = T.KNOCK_COOL;
+  makeNoise(player.x, player.y, T.KNOCK_R);
+  sfx.ui();
+  hud();
+  return true;
+}
+
 /* Loud on purpose: this is for the twenty metres between you and a corner, not
    for crossing a floor you have not scouted.
 
@@ -6970,6 +7125,11 @@ function startGame() {
   mouseWX = player.x; mouseWY = player.y - 100; mouseSX = null; mouseSY = null; aimMode = 'mouse';
   hud();
   
+  /* A run opens on the plan, not on a fade-in. Autostart skips it so the
+     harness lands in a playable game, as does the tutorial floor - the first
+     floor is teaching you to walk, not asking you to choose a door. */
+  if (briefingOn && completedLevels.length > 0) openBrief();
+
   /* one lesson at a time, each waiting on the moment it matters */
   tutorStep = tutorOn() ? 0 : -1;
   tutorShown = false; tutorT = 0;
@@ -7028,6 +7188,7 @@ const CONTROLS = [
   ['THERMAL LANCE', ['2']],
   ['KEYCARD CLONER', ['3']],
   ['MUTE', ['M']],
+  ['KNOCK', ['T']],
   ['HIDE', ['H']],
   ['BURST', ['SPACE']],
   ['NEW RUN', ['R']],
@@ -7237,11 +7398,13 @@ window.addEventListener('keydown', e => {
   if (e.key === 'z' || e.key === 'Z') keys.crack = true;
   if (e.code === 'Space') {
     e.preventDefault();
-    if (mode === 'playing') dash();
+    if (mode === 'brief') goIn();
+    else if (mode === 'playing') dash();
     else if (mode === 'menu' || mode === 'caught') startGame();
     /* endless is gone: the night has five contracts and an end */
   }
   if ((e.key === 'r' || e.key === 'R') && (mode === 'playing' || mode === 'caught')) startGame();
+  if ((e.key === 't' || e.key === 'T') && mode === 'playing') { knock(); }
   if ((e.key === 'h' || e.key === 'H') && mode === 'playing') { toggleHide(); }
   if ((e.key === 'f' || e.key === 'F') && mode === 'playing' && !battDead) { beamOn = !beamOn; sfx.ui(); hud(); }
   if ((e.key === 'q' || e.key === 'Q') && mode === 'playing') { throwFlare(); }
@@ -7356,6 +7519,11 @@ $('shopGrid').addEventListener('click', e => {
   const b = e.target.closest('button[data-buy]');
   if (b) buyCharge(b.dataset.buy);
 });
+$('brWays').addEventListener('click', e => {
+  const b = e.target.closest('button[data-way]');
+  if (b) { entryIdx = +b.dataset.way; sfx.ui(); renderBrief(); }
+});
+bindBtn('brGo', () => goIn());
 $('jobBankBtn').addEventListener('click', () => { sfx.ui(); jobBank(); });
 $('jobOn').addEventListener('click', () => { sfx.ui(); jobPushOn(); });
 $('kitGrid').addEventListener('click', e => {
@@ -7488,7 +7656,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-if (location.search.includes('autostart')) setTimeout(startGame, 700);
+if (autostarting) setTimeout(startGame, 700);
 
 /* test hooks */
 window.__fp = {
@@ -7868,6 +8036,7 @@ window.__fp = {
   planAt(i) { const p = plans[i || 0]; return p ? { x: p.x, y: p.y, got: p.got } : null; },
   lockerAt(i) { const l = lockers[i || 0]; return l ? { x: l.x, y: l.y } : null; },
   hiding() { return { inLocker: !!hidIn, seenGettingIn: hidSeen, t: +hidT.toFixed(2) }; },
+  knock() { return knock(); }, knockCool() { return +knockCool.toFixed(2); },
   hide() { return toggleHide(); },
   nearestLocker() { const l = nearLocker(); return l ? { x: l.x, y: l.y } : null; },
   shiftState() { return { at: +shiftAt.toFixed(1), done: shifted,
@@ -7882,6 +8051,11 @@ window.__fp = {
     return n ? { x: Math.round(x / n), y: Math.round(y / n), n } : null;
   },
   bankNow() { jobBank(); }, pushOn() { jobPushOn(); },
+  entries() { return entries.map(e => ({ name: e.name, gap: e.gap, near: e.near })); },
+  briefShown() { return !$('briefing').classList.contains('hidden'); },
+  pickEntry(i) { entryIdx = i; renderBrief(); return entryIdx; },
+  goIn() { goIn(); }, openBrief() { openBrief(); },
+  setBriefing(on) { briefingOn = !!on; return briefingOn; },
   prizeOf(i) { return prizeOf(i); }, contractOf(j) { return contractOf(j); },
   storyCheck() {
     /* every floor must have its own named thing, or the card lies */

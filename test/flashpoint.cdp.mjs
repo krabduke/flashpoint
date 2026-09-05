@@ -72,7 +72,13 @@ const eq = async (name, expr, want) => { const got = await evl(expr); ok(name, J
 const booted = async (ms = 6000) => {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
-    if (await evl('typeof __fp !== "undefined" && __fp.mode !== undefined')) return Date.now() - t0;
+    if (await evl('typeof __fp !== "undefined" && __fp.mode !== undefined')) {
+      /* Every page this harness drives starts with the plan off. It parks the
+         game in mode 'brief', where update() returns early and the HUD is
+         hidden - the briefing block turns it on for itself. */
+      await evl('__fp.setBriefing && __fp.setBriefing(false)');
+      return Date.now() - t0;
+    }
     await sleep(60);
   }
   return -1;
@@ -2366,6 +2372,7 @@ ok('searchlight wakes the drones', !/^\["patrol"(,"patrol")*\]$/.test(states), `
    must NOT pause the way the fog block does — it drives update() itself. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const glw = JSON.parse(await evl(`(() => {
   mapIdx = 0; loadMap(0); hud(); bots.length = 0; meter = 0;
   let best = null;
@@ -2433,6 +2440,7 @@ ok('a new floor is not remembered from the last one',
 /* ---- screen shake: one per event, not one for everything ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const shk = JSON.parse(await evl(`(() => {
   const o = {};
   const zc = tr => { let n = 0; for (let i = 1; i < tr.length; i++) if ((tr[i][1] >= 0) !== (tr[i-1][1] >= 0)) n++; return n; };
@@ -2506,6 +2514,7 @@ ok('several hits at once stay inside the cap',
 /* ---- pause screen: the run at a glance, and what the keys do ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const pau = JSON.parse(await evl(`(() => {
   const o = {};
   const vis = id => { const el = $(id); return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); };
@@ -2572,7 +2581,7 @@ ok('and claims nothing on a floor that is quiet', pau.hazHouse.length === 0, JSO
    growing a gadget, which is what caught the tripwire missing from here - and
    again when the three heist tools took it from fourteen rows to seventeen */
 ok('the control list agrees with the item bar',
-  pau.keysAgree === true && pau.rows === pau.want && pau.rows === 19,
+  pau.keysAgree === true && pau.rows === pau.want && pau.rows === 20,
   `bar=${JSON.stringify(pau.barKeys)} rows=${pau.rows} of ${pau.want} wanted`);
 ok('pausing again re-reads the run instead of replaying the last look',
   pau.refreshed.score === '9999' && pau.refreshed.gold === '7/12', JSON.stringify(pau.refreshed));
@@ -2590,6 +2599,7 @@ ok('and it stays shut outside a run',
    at all when it had not. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const srv = JSON.parse(await evl(`(() => {
   const o = {};
   /* 400 assertions have run before this one. Difficulty, endless modifiers and
@@ -2677,6 +2687,7 @@ ok('a flicker that lands back where it was announced adds nothing',
 /* ---- room tone: one bed per theme ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const rmA = JSON.parse(await evl(`(() => {
   const o = {};
   o.acLive = !!AC;
@@ -2737,6 +2748,7 @@ ok('mute silences the bed and unmute brings it back',
    the steady state it claims to. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 await evl('mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0; paused = true;');
 const stingAt = async m => { await evl(`__fp.stingStep(${m})`); await sleep(560);
   return JSON.parse(await evl('JSON.stringify({ t: __fp.tension, ...__fp.stingLive() })')); };
@@ -2796,6 +2808,7 @@ ok('being caught cuts the swell', cut.t === 0 && cut.mode === 'caught', JSON.str
 /* ---- footsteps take after the floor ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const ftm = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -2855,6 +2868,7 @@ ok('soft shoes quieten your own feet as well as theirs',
 /* ---- sounds sit where the thing making them is ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const pnl = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -2910,6 +2924,7 @@ ok('panning follows you, not the camera',
 /* ---- the coin ladder, and the door it exposed ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const ldr = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -2973,6 +2988,7 @@ ok('the chime comes from the coin, not from your head',
 /* ---- settings, in one place instead of scattered across the menu ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const stn = JSON.parse(await evl(`(() => {
   const o = {};
   initAudio();
@@ -3053,6 +3069,7 @@ ok('and this block puts the machine back as it found it',
 /* ---- minimap: the swept area and nothing else ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const mm = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -3109,6 +3126,7 @@ ok('and it is not on the menu', mm.inMenu === false);
 /* ---- exit compass: on all the time, and graded to what you know ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const exc = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -3156,6 +3174,7 @@ ok('and gets out of the way once you can see it', exc.whenVisible.hidden === tru
 /* ---- leaderboard ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const brd = JSON.parse(await evl(`(() => {
   const o = {};
   const el = $('recCaught');
@@ -3214,6 +3233,7 @@ ok('the escape screen gets the same board', brd.escapedToo === 6, `rows=${brd.es
    left alone it raises its own alerts and they land in the same stack. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 await evl(`mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9; meter = 0; clearToast();`);
 await evl("toast('PRESSURE PLATE', 6); toast('CRATE OPEN', 6); toast('FOG BANK', 6);");
 await sleep(420);
@@ -3253,6 +3273,7 @@ ok('and clearing takes them out of the page, not just the list',
 /* ---- the tutorial teaches one thing at a time ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const tut = JSON.parse(await evl(`(() => {
   const o = {};
   /* completedLevels lives in localStorage and every earlier block has been
@@ -3310,6 +3331,7 @@ ok('and never appears in endless or on a later floor',
 /* ---- colourblind mode ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const cbl = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -3368,6 +3390,7 @@ ok('and this block leaves it off again', cbl.restored === false, `restored=${cbl
 /* ---- thumbstick response ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const stk = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -3417,6 +3440,7 @@ ok('the sprint ring drawn on the stick is where sprint actually starts',
 /* ---- the listener: no eyes, sharper ears, and freezing beats hiding ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const lsn = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -3513,6 +3537,7 @@ ok('and the block never measured a frozen game',
 /* ---- making a thing with no cone readable ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const lg2 = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -3573,6 +3598,7 @@ ok('it turns to face what it heard, having no cone to point',
 /* ---- the sentry: bolted down, sees wide, asleep until something trips ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const snt = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -3645,6 +3671,7 @@ ok('and the block measured a running game', snt.mode === 'playing', snt.mode);
 /* ---- three kinds of hunter, spread across the campaign ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const mix = JSON.parse(await evl(`(() => {
   const o = { valid: __fp.mapCheck, floors: [] };
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -3671,13 +3698,19 @@ const mix = JSON.parse(await evl(`(() => {
   /* This measured red-minus-blue because it was looking for a red glint. The
      glint is gone - the drone is simply drawn now - and a drone body is not
      red, it is DARK. So measure brightness against the floor it stands on. */
-  const redPeak = () => { const h = 12;
-    for (let f = 0; f < 20; f++) { update(1 / 60); render(); }
-    const sx = (spot.x - camNow.cx) * Z, sy = (spot.y - camNow.cy) * Z;
-    const d = ctx.getImageData((sx - h) * DPR, (sy - h) * DPR, h * 2 * DPR, h * 2 * DPR).data;
-    let s = 0, n = 0;
-    for (let i = 0; i < d.length; i += 4) { s += d[i] + d[i + 1] + d[i + 2]; n++; }
-    return +(s / n).toFixed(2); };
+  /* A drone animates - rotors, lens, rim - so one frame lands anywhere in a
+     range and the drone-vs-listener gap swung between 2.7 and 18 across runs.
+     Peak over a second makes the comparison stable. */
+  const redPeak = () => { const h = 12; let best = -1;
+    for (let f = 0; f < 60; f++) {
+      update(1 / 60); render();
+      const sx = (spot.x - camNow.cx) * Z, sy = (spot.y - camNow.cy) * Z;
+      const d = ctx.getImageData((sx - h) * DPR, (sy - h) * DPR, h * 2 * DPR, h * 2 * DPR).data;
+      let s = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) { s += d[i] + d[i + 1] + d[i + 2]; n++; }
+      best = Math.max(best, s / n);
+    }
+    return +best.toFixed(2); };
   park(); o.glintNone = redPeak();
   park(); D.x = spot.x; D.y = spot.y; o.glintDrone = redPeak();
   park(); L.x = spot.x; L.y = spot.y; o.glintListen = redPeak();
@@ -3743,6 +3776,7 @@ ok('and the cone lesson waits for something that has a cone',
 /* ---- the blind one points, and the ones with eyes come ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const cal = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -3801,6 +3835,7 @@ ok('the block measured a running game', cal.mode === 'playing', cal.mode);
    decision: you collected until the door opened and then left. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const early = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -3864,6 +3899,7 @@ ok('the block measured a running game', early.mode === 'playing', early.mode);
 /* ---- the safe: a long loud crack for a big number ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const saf = JSON.parse(await evl(`(() => {
   const o = { valid: __fp.mapCheck, perFloor: [] };
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -3939,6 +3975,7 @@ ok('the block measured a running game', saf.mode === 'playing', saf.mode);
 /* ---- the drill: the safe in a third of the time, at the top of its voice ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const drl = JSON.parse(await evl(`(() => {
   const o = {};
   const realNoise = makeNoise;
@@ -4034,6 +4071,7 @@ ok('the block measured a running game', drl.mode === 'playing', drl.mode);
 /* ---- the lance: the one tool that edits the map ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const lnc = JSON.parse(await evl(`(() => {
   const o = {};
   const realNoise = makeNoise;
@@ -4204,6 +4242,7 @@ ok('and a hole belongs to the floor that was cut', lnc.afterStairs === 0,
 /* ---- the cloner: the one tool that asks you to walk at them ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const kcl = JSON.parse(await evl(`(() => {
   const o = {};
   try {
@@ -4319,6 +4358,7 @@ ok('the block measured a running game', kcl.mode === 'playing', kcl.mode);
 /* ---- and all three are registered in every place that describes a gadget ---- */
 await send('Page.navigate', { url: FILE + '?name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const heist = JSON.parse(await evl(`(() => {
   const o = { ids: ['drill', 'lance', 'cloner'] };
   const G = __fp.gadgets();
@@ -4375,6 +4415,7 @@ ok('and no run can carry all three of them',
 /* ---- keeping a floor clean, and being told while you still can ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const cln = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -4434,6 +4475,7 @@ ok('the block measured a running game', cln.mode === 'playing', cln.mode);
 /* ---- the muffle: buying back what a full haul costs you ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const hsh = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -4491,6 +4533,7 @@ ok('the block measured a running game', hsh.mode === 'playing', hsh.mode);
 /* ---- the jammer: the EMP's opposite number ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const jam = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard'); alertLvl = 0;
@@ -4580,6 +4623,7 @@ ok('the block measured a running game', jam.mode === 'playing', jam.mode);
 /* ---- the loadout: choosing what you carry ---- */
 await send('Page.navigate', { url: FILE + '?name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const kit = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -4662,6 +4706,7 @@ ok('and the choice is remembered', kit.stored.join(',') === 'emp,hush', JSON.str
 /* ---- cracking without having to hold still, and a HUD you can read ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 /* the control that only exists in the mode it works in */
 const crk = JSON.parse(await evl(`(() => {
   const rowsStill = (__fp.setCrack('still'), __fp.controlRows());
@@ -5095,6 +5140,7 @@ ok('tapping a gadget describes it as well as picking it',
 /* ---- you do not start the floor inside a patrol ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const spw = JSON.parse(await evl(`(() => {
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
   /* a siren left running by an earlier block stretches every cone by 30% */
@@ -5121,6 +5167,7 @@ ok('and nothing can see the tile you appear on',
    it instead. Reported either way so the number is on the record. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const chase = JSON.parse(await evl(`(() => {
  try {
   const out = [];
@@ -5204,6 +5251,7 @@ if (chase.threw) {
    the second door. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const twoE = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5255,6 +5303,7 @@ ok('and the far door gets you out just as well as the near one',
    Loot you may leave, and knowledge you must walk for. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const ltx = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5314,6 +5363,7 @@ ok('the loot block measured a running game', ltx.mode === 'playing', ltx.mode);
    decided a moment earlier, by whether anything was looking. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const lock = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5389,6 +5439,7 @@ ok('but something that watched you get in comes and opens it',
 /* ---- the shift change, and where they think you are ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const shft = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5439,6 +5490,7 @@ ok('the marker sits where they think you are, not where you are',
    floors and a fence asks the only question a score has ever needed. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const job = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5534,6 +5586,7 @@ ok('a gadget you cannot buy is not sold to you', shop.brokeBuy === false, `${sho
    to explore is a bad idea. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const brst = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5592,6 +5645,7 @@ ok('the burst block measured a running game', brst.mode === 'playing', brst.mode
    a whole-canvas average dilutes a local effect into noise. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const scrb = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5689,6 +5743,7 @@ ok('the beats block measured a running game', scrb.mode === 'playing', scrb.mode
    getting faster until you are out of it, and it stops hiding you. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const exf = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5725,11 +5780,114 @@ ok('standing still during the escape costs you',
   `alert ${exf.alertAtTake} -> ${exf.alertAfterWaiting} over ${exf.exfilT}s`);
 ok('the escape block measured a running game', exf.mode === 'playing', exf.mode);
 
+/* ---- the knock ----
+   Three things already made noise to bait a guard and none was load-bearing,
+   because avoiding attention is free and manipulating it cost a resource. This
+   one is free. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
+const knk = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; meter = 0; alertLvl = 0;
+  mapIdx = 0; loop = 0; loadMap(0); invuln = 9e9;
+  __fp.teleport(spawnPt.x, spawnPt.y);
+  noise.length = 0;
+  o.first = __fp.knock();
+  o.loud = noise.reduce((m, n) => Math.max(m, n.r), 0);
+  o.free = { flares: __fp.flares, coins: __fp.coins };
+  /* it cannot be held down */
+  o.again = __fp.knock();
+  o.cool = __fp.knockCool();
+  /* quieter than running, on purpose: a scalpel, not a shout */
+  o.sprint = T.NOISE_SPRINT || 0;
+  /* and it actually moves somebody */
+  mapIdx = 0; loadMap(0); invuln = 9e9; mode = 'playing';
+  const b = bots.find(x => x.kind === 'drone');
+  b.state = 'patrol';
+  __fp.teleport(b.x + 200, b.y);
+  const before = Math.round(Math.hypot(b.x - player.x, b.y - player.y));
+  noise.length = 0;
+  __fp.knock();
+  o.heard = { noises: noise.length, r: noise[0] ? noise[0].r : 0,
+              reach: __fp.hearReachFor(bots.indexOf(b)), d: before };
+  const states = [];
+  for (let i = 0; i < 150; i++) { update(1 / 60); if (i % 15 === 0) states.push(b.state); }
+  o.pull = { before, after: Math.round(Math.hypot(b.x - player.x, b.y - player.y)),
+             state: b.state, states };
+  o.mode = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the knock block ran at all', !knk.threw, knk.threw || 'ok');
+ok('a knock costs nothing', knk.first === true && knk.free.flares >= 0 && knk.free.coins === 0,
+  JSON.stringify(knk.free));
+ok('and carries a real distance', knk.loud >= 300, `${knk.loud}px`);
+ok('but it cannot be held down', knk.again === false && knk.cool > 0, `cool=${knk.cool}s`);
+/* the whole point: it moves somebody off their beat */
+ok('knocking pulls a patrol towards the sound',
+  knk.pull.after < knk.pull.before && knk.pull.states.some(s => s !== 'patrol'),
+  `${knk.pull.before}px -> ${knk.pull.after}px · heard ${JSON.stringify(knk.heard)} · ${JSON.stringify(knk.pull.states)}`);
+ok('the knock block measured a running game', knk.mode === 'playing', knk.mode);
+
+/* ---- the briefing ----
+   A burglary is improvised; a heist is rehearsed. The floor opens on a plan you
+   can read and a door you choose, so the first thirty seconds are a decision
+   rather than a discovery. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
+const brf = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; meter = 0;
+  __fp.setBriefing(true);   /* this block is the one thing that wants a plan */
+  mapIdx = 4; loop = 0; loadMap(4);
+  __fp.openBrief();
+  o.shown = __fp.briefShown();
+  o.mode = mode;
+  o.ways = __fp.entries();
+  o.text = {
+    floor: document.getElementById('brFloor').textContent,
+    prize: document.getElementById('brPrize').textContent,
+    inside: document.getElementById('brInside').textContent
+  };
+  /* the doors have to be genuinely different places, or it is a menu */
+  const es = __fp.entries();
+  o.spread = (() => { let worst = 1e9;
+    for (let i = 0; i < es.length; i++) for (let j = i + 1; j < es.length; j++)
+      worst = Math.min(worst, Math.abs(es[i].gap - es[j].gap));
+    return Math.round(worst); })();
+  /* picking one puts you there */
+  __fp.pickEntry(es.length - 1);
+  __fp.goIn();
+  o.afterGo = { mode, shown: __fp.briefShown(),
+    atLast: Math.round(Math.hypot(player.x - spawnPt.x, player.y - spawnPt.y)) };
+  __fp.setBriefing(false);   /* hand the harness back a game it can drive */
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the briefing block ran at all', !brf.threw, brf.threw || 'ok');
+ok('a floor opens on a plan', brf.shown === true && brf.mode === 'brief',
+  `shown=${brf.shown} mode=${brf.mode}`);
+ok('it names the place and what you came for',
+  brf.text.floor.length > 0 && brf.text.prize.length > 0 && /patrol/.test(brf.text.inside),
+  JSON.stringify(brf.text));
+ok('there is more than one way in', brf.ways.length >= 2, `${brf.ways.length} doors`);
+/* near and watched, or far and quiet - read off the floor, not invented */
+ok('and the doors are different distances from the prize', brf.spread > 40,
+  JSON.stringify(brf.ways.map(w => `${w.name} ${w.gap}px`)));
+ok('choosing one starts you at it and hands the floor back',
+  brf.afterGo.mode === 'playing' && brf.afterGo.shown === false && brf.afterGo.atLast < 2,
+  JSON.stringify(brf.afterGo));
+
 /* ---- the crack ----
    The take was a 2.2s hold, the same verb as a crate. It is the climax of a
    heist and it should be the minute the tool you bought decides. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const crkT = JSON.parse(await evl(`(() => {
  try {
   const o = {};
@@ -5788,6 +5946,7 @@ ok('the crack block measured a running game', crkT.mode === 'playing', crkT.mode
    threshold was not one: the exit simply opened at some point and you left. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 await eq('every floor has something worth stealing', '__fp.prizeCount()', 20);
 
 const przRaw = await evl(`(() => {
@@ -5851,6 +6010,7 @@ ok('but the take alone does not tell them where you are',
    ended the run in 1.09s and E1-E8's flanking and search never ran at all. */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const hunt = JSON.parse(await evl(`(() => {
   const o = {};
   mode = 'playing'; paused = false; invuln = 999; alertLvl = 0;
@@ -5913,6 +6073,7 @@ ok('and the card says it ran you down', /RAN YOU DOWN/.test(contact.cause), cont
 /* ---- the caught card names what got you ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const CAUSES = [
   ['drone', 'A DRONE HAD YOU'], ['listener', 'IT HEARD YOU FIRST'],
   ['camera', 'A CAMERA HAD YOU'], ['search', 'THE SWEEP FOUND YOU'],
@@ -5933,6 +6094,7 @@ await ok('and it says where it happened, and how close you were',
 /* ---- moving fast is the default; the key buys quiet ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2400);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const mvp = JSON.parse(await evl(`(() => {
   const o = {};
   endless = false; __fp.setMod(-1); __fp.setDiff('standard');
@@ -5973,6 +6135,7 @@ await send('Emulation.setDeviceMetricsOverride', {
 await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
 await send('Page.navigate', { url: FILE + '?name=TESTY' });
 await sleep(2500);
+await evl('__fp.setBriefing && __fp.setBriefing(false)');
 const mbl = JSON.parse(await evl(`(() => {
   const o = { menu: __fp.layout() };
   TOUCH = true; resize(); startGame(); hud();
