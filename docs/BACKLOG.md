@@ -67,6 +67,16 @@ behaviour is assertable. Visual work gets a screenshot check instead.
    rather than `=== 0`, and give any rate you measure a window long enough that
    rounding is not deciding the ratio.
 
+20. **validateMaps checks a more permissive world than the game runs.** It treats
+    only `#`, `G` and `$` as blocking, but mirrors and doors stop the player too,
+    and a drone cannot open a door at all. Eight hundred assertions were green
+    while THE HOUSE held a locker sealed behind a mirror and THE BANK VAULT had a
+    patrol waypoint behind a locked door - a drone assigned a beat it could never
+    walk. Check reachability against what actually blocks, per actor: the player
+    (mirrors and glass permanent, crates breakable, doors need a key) and the
+    drones (doors always shut). And verify the key is not behind the door it
+    opens, or the floor is unwinnable.
+
 ---
 
 ## A · Items and tools
@@ -527,3 +537,4 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-05 · assertion · 'safes stay scarce' rewritten a second time. Scarcity stopped being the rule when a drill became buyable - a tool costing 780 cannot meet four floors with nothing to open. What survives is that the first contract has none
 - 2026-09-05 · balance · MEASURED, after getting it wrong twice. A player fleeing straight away from the nearest hunter from 300px is caught on 17 of 19 floors, between 1.9s and 14.5s; two floors allow a clean escape. Contact-death did NOT delete the failure state - running blindly is not enough, which is what the flanking and cornering AI was always for. Fastest catches are the dead-end-heavy floors (THE STACKS 1.9s, THE COLD STORE 2.0s), which is the design working
 - 2026-09-05 · trap · three attempts at that measurement, all wrong in the SETUP. Drones at 70px against a 26px contact radius; then a 'fleeing' player that ran in the first open direction regardless of the threat. Both produced confident numbers. Both were caught by checking the result against arithmetic I could do independently: 0.7s to close 274px is impossible at 199px/s. A measurement you cannot sanity-check against something you already know is worth nothing
+- 2026-09-05 · verify · a pessimistic reachability pass found two things 842 assertions did not: a locker on THE HOUSE sealed behind a mirror, and a THE BANK VAULT patrol waypoint behind a locked door that no drone can open. Both fixed. The third flag was correct design - a coin IS locked away there, and the keycard is on the near side, which was checked rather than assumed
