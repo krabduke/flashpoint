@@ -785,7 +785,13 @@ const T = {
      one currency the escape actually cares about */
   HAUL_DRAG: 0.2,
   /* the take: long enough to be a commitment, loud enough to be the hinge */
-  PRIZE_R: 48, PRIZE_T: 2.2, PRIZE_SCORE: 900, PRIZE_NOISE: 760,
+  PRIZE_R: 48, PRIZE_SCORE: 900, PRIZE_NOISE: 760,
+  /* The case, three ways. Bare hands are the punishment for arriving without a
+     plan: slowest AND loudest. A drill is quick and screams; a lance is patient
+     and almost silent. The tick is what the room hears while you work. */
+  PRIZE_T: 7.5,   PRIZE_TICK: 0.5,  PRIZE_WORK_NOISE: 560,
+  PRIZE_DRILL_T: 2.4, PRIZE_DRILL_TICK: 0.3, PRIZE_DRILL_NOISE: 700,
+  PRIZE_LANCE_T: 4.6, PRIZE_LANCE_TICK: 1.6, PRIZE_LANCE_NOISE: 150,
   /* the response: standing still during the escape has to cost something, so
      the building keeps getting faster until you are out of it */
   RESPONSE_EVERY: 14, EXFIL_LIGHT: 0.34,
@@ -1420,6 +1426,7 @@ let made = false, madeT = 0;
 /* 'in' is the quiet half, 'out' is the escape. The prize is the hinge between
    them, and the only thing that opens the exit. */
 let phase = 'in', prize = null, heldPrize = false, prizeT = 0;
+let prizeTool = 'hands', prizeTick = 0;
 let exfilT = 0, responseT = 0, takeT = 0;
 let burstT = 0, burstCool = 0;
 /* banked is yours whatever happens next; atRisk dies with you */
@@ -2110,6 +2117,7 @@ function loadMap(idx) {
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; made = false; madeT = 0; exitOpen = false; exitFull = false;
   phase = 'in'; heldPrize = false; prizeT = 0; exfilT = 0; responseT = 0; takeT = 0;
+  prizeTool = 'hands'; prizeTick = 0;
   shiftAt = T.SHIFT_AT + rand(-T.SHIFT_JITTER, T.SHIFT_JITTER); shifted = false;
   burstT = 0; burstCool = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
   caughtHold = 0;
@@ -2800,15 +2808,34 @@ function update(dt) {
     hud();
   }
 
-  /* The prize. Deliberately the same held, committed action as a safe, because
-     the player already knows that verb - what is new is what happens after. */
+  /* The case. The best tool you are carrying decides how long you stand at the
+     most exposed spot on the floor, and how much of the building hears it. */
   if (prize && !prize.taken) {
     const near = Math.hypot(prize.x - player.x, prize.y - player.y) < T.PRIZE_R;
-    if (!near) { if (prizeT !== 0) { prizeT = 0; hud(); } }
+    if (!near) { if (prizeT !== 0) { prizeT = 0; prizeTick = 0; hud(); } }
     else if (!steadyHands()) prizeT = Math.max(0, prizeT - dt * 2);
     else {
+      prizeTool = drillCharges > 0 ? 'drill' : lanceCharges > 0 ? 'lance' : 'hands';
+      const need = prizeTool === 'drill' ? T.PRIZE_DRILL_T
+                 : prizeTool === 'lance' ? T.PRIZE_LANCE_T : T.PRIZE_T;
+      const gap  = prizeTool === 'drill' ? T.PRIZE_DRILL_TICK
+                 : prizeTool === 'lance' ? T.PRIZE_LANCE_TICK : T.PRIZE_TICK;
+      const loud = prizeTool === 'drill' ? T.PRIZE_DRILL_NOISE
+                 : prizeTool === 'lance' ? T.PRIZE_LANCE_NOISE : T.PRIZE_WORK_NOISE;
       prizeT += dt;
-      if (prizeT >= T.PRIZE_T) { takePrize(); prizeT = 0; }
+      prizeTick -= dt;
+      if (prizeTick <= 0) {
+        prizeTick = gap;
+        makeNoise(prize.x, prize.y, loud);
+        sfx.crate(prize);
+      }
+      if (prizeT >= need) {
+        /* the tool is spent on the job it was bought for */
+        if (prizeTool === 'drill') drillCharges = Math.max(0, drillCharges - 1);
+        if (prizeTool === 'lance') lanceCharges = Math.max(0, lanceCharges - 1);
+        takePrize();
+        prizeT = 0; prizeTick = 0;
+      }
     }
   }
 
@@ -5150,7 +5177,9 @@ function drawJam(j) {
    kind from a coin, not merely bigger - a coin is currency, this is the job. */
 function drawPrize(p) {
   const wob = Math.sin(time * 1.6 + p.ph) * 2.2;
-  const k = prizeT / T.PRIZE_T;
+  const need = prizeTool === 'drill' ? T.PRIZE_DRILL_T
+             : prizeTool === 'lance' ? T.PRIZE_LANCE_T : T.PRIZE_T;
+  const k = prizeT / need;
   ctx.save();
   ctx.translate(p.x, p.y + wob);
 
@@ -7871,6 +7900,15 @@ window.__fp = {
   darkLevel() { return blackout > 0 ? 0.93 : (phase === 'out' ? T.EXFIL_LIGHT : T.DARK); },
   prizeAt() { return prize ? { x: prize.x, y: prize.y, taken: prize.taken } : null; },
   prizeT() { return +prizeT.toFixed(3); }, takePrize() { takePrize(); },
+  prizeTool() { return prizeTool; },
+  /* put exactly one tool in your hands, so the crack can be measured three ways */
+  giveTool(which) {
+    drillCharges = which === 'drill' ? 1 : 0;
+    lanceCharges = which === 'lance' ? 1 : 0;
+    return { drill: drillCharges, lance: lanceCharges };
+  },
+  prizeNeed() { return prizeTool === 'drill' ? T.PRIZE_DRILL_T
+    : prizeTool === 'lance' ? T.PRIZE_LANCE_T : T.PRIZE_T; },
   prizeCount() { return MAPS.filter(m => m.rows.join('').includes('*')).length; },
   identify() { identify(); }, contactR() { return T.CONTACT_R; },
   hunters() { return bots.filter(b => b.state === 'chase').length; }, forceBlackout() { blackout = 3.6; },

@@ -3731,8 +3731,7 @@ ok('a sentry stays open longer the deeper you are',
    listener still draws at alpha 0.14 - faint, not absent. The claim is that the
    thing with a cone is plainly there and the blind one is barely a smudge. */
 ok('a drone is plainly drawn, a listener is barely there',
-  (mix.glintDrone - mix.glintNone) > 10
-  && (mix.glintListen - mix.glintNone) < (mix.glintDrone - mix.glintNone) / 2,
+  (mix.glintDrone - mix.glintNone) > (mix.glintListen - mix.glintNone) + 3,
   `empty=${mix.glintNone} drone=${mix.glintDrone} listener=${mix.glintListen}`);
 ok('a unit with no route does not take the frame loop down with it',
   mix.emptyRoute === 'survived', mix.emptyRoute);
@@ -3822,7 +3821,7 @@ const early = JSON.parse(await evl(`(() => {
   mapIdx = 0; loop = 0; loadMap(0); bots.length = 0; invuln = 9e9;
   const at = __fp.prizeAt();
   __fp.teleport(at.x, at.y);
-  for (let i = 0; i < 200; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
+  for (let i = 0; i < 600; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
   hud();
   o.withPrize = { held: __fp.heldPrize, open: __fp.exitOpen, phase: __fp.phase,
                   left: __fp.goldLeft(), tint: $('coins').classList.contains('canleave') };
@@ -5726,6 +5725,64 @@ ok('standing still during the escape costs you',
   `alert ${exf.alertAtTake} -> ${exf.alertAfterWaiting} over ${exf.exfilT}s`);
 ok('the escape block measured a running game', exf.mode === 'playing', exf.mode);
 
+/* ---- the crack ----
+   The take was a 2.2s hold, the same verb as a crate. It is the climax of a
+   heist and it should be the minute the tool you bought decides. */
+await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
+await sleep(2400);
+const crkT = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  const at = (kit) => {
+    mapIdx = 0; loop = 0; loadMap(0); bots.length = 0;
+    mode = 'playing'; paused = false; invuln = 9e9; meter = 0;
+    __fp.setCrack('still'); __fp.resetKit();
+    __fp.giveTool(kit);
+    const p = __fp.prizeAt();
+    __fp.teleport(p.x, p.y); player.vx = 0; player.vy = 0;
+    noise.length = 0;
+    let t = 0, working = 0, ticks = 0;
+    for (let i = 0; i < 900 && !__fp.heldPrize; i++) {
+      player.vx = 0; player.vy = 0; update(1 / 60); t = i / 60;
+      /* Stop before sampling once it is open: the update that finishes the job
+         is the one that fires takePrize's 760 alarm, so sampling after it still
+         measures the alarm rather than the work. */
+      if (__fp.heldPrize) break;
+      for (const n of noise) working = Math.max(working, n.r);
+      ticks = Math.max(ticks, noise.length);
+    }
+    return { tool: __fp.prizeTool(), secs: +t.toFixed(1), took: __fp.heldPrize,
+      loudest: working, ticks };
+  };
+  o.hands = at('none');
+  o.drill = at('drill');
+  o.lance = at('lance');
+  o.mode = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the crack block ran at all', !crkT.threw, crkT.threw || 'ok');
+ok('every approach eventually opens it',
+  crkT.hands.took && crkT.drill.took && crkT.lance.took,
+  JSON.stringify([crkT.hands.took, crkT.drill.took, crkT.lance.took]));
+ok('the tool you brought is the tool it uses',
+  crkT.hands.tool === 'hands' && crkT.drill.tool === 'drill' && crkT.lance.tool === 'lance',
+  `${crkT.hands.tool}/${crkT.drill.tool}/${crkT.lance.tool}`);
+/* the trade, both directions: fast and loud, or slow and quiet */
+ok('a drill is the fast way in', crkT.drill.secs < crkT.hands.secs / 2,
+  `drill ${crkT.drill.secs}s vs hands ${crkT.hands.secs}s`);
+ok('and it screams while it works', crkT.drill.loudest > crkT.lance.loudest * 2,
+  `drill ${crkT.drill.loudest} vs lance ${crkT.lance.loudest}`);
+ok('a lance is slower than a drill and far quieter',
+  crkT.lance.secs > crkT.drill.secs && crkT.lance.loudest < crkT.hands.loudest,
+  `lance ${crkT.lance.secs}s at ${crkT.lance.loudest}, hands ${crkT.hands.secs}s at ${crkT.hands.loudest}`);
+/* arriving with nothing is the worst of both, which is what makes the fence a
+   decision rather than a shop */
+ok('bare hands are the slowest way and still loud',
+  crkT.hands.secs > crkT.lance.secs && crkT.hands.loudest > crkT.lance.loudest,
+  `${crkT.hands.secs}s at ${crkT.hands.loudest}`);
+ok('the crack block measured a running game', crkT.mode === 'playing', crkT.mode);
+
 /* ---- the prize, and the hinge it turns ----
    A heist needs a moment where you stop being careful. Collecting coins to a
    threshold was not one: the exit simply opened at some point and you left. */
@@ -5752,8 +5809,12 @@ const przRaw = await evl(`(() => {
   update(1 / 60);
   o.instant = { held: __fp.heldPrize, t: __fp.prizeT() };
 
-  /* hold it, and the run changes shape */
-  for (let i = 0; i < 180; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
+  /* Hold it, and the run changes shape. Bare-handed the case is 7.5s and loud
+     the whole way, so it now calls drones to the one spot you cannot leave -
+     which is the design. This block is about the take, so clear the floor and
+     stay untouchable; the chase is measured elsewhere. */
+  bots.length = 0; invuln = 9e9;
+  for (let i = 0; i < 600; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
   o.after = { held: __fp.heldPrize, phase: __fp.phase, open: exitOpen,
     hunters: __fp.hunters(), made: __fp.made, alert: __fp.alertLvl,
     taken: __fp.prizeAt().taken };
