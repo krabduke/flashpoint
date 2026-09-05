@@ -272,23 +272,26 @@
   #brPrize{font-family:'Orbitron',monospace;font-size:13px;letter-spacing:.14em;
     color:#ffd166;margin:2px 0 4px}
   /* the plan reads as a drawing of the building, not a screenshot of it */
-  #brPlan{display:block;width:min(392px,84vw);height:auto;margin:10px auto 4px;
-    border:1px solid rgba(120,100,180,.28);border-radius:8px;
+  /* the game canvas is absolutely positioned by a global rule, and this one
+     inherited it - so the plan floated over the floor name instead of sitting
+     under it. It is a diagram in a card, not a viewport. */
+  #brPlan{position:static;display:block;width:min(284px,72vw);height:auto;
+    margin:8px auto 2px;border:1px solid rgba(120,100,180,.28);border-radius:8px;
     background:#0a0812;image-rendering:auto}
   #brIntel.known{color:#7dffc4;border-color:rgba(125,255,196,.45)}
   #brIntel[disabled]{opacity:.5;cursor:default}
-  #brLine{font-size:12.5px;color:#8a80b0;font-style:italic;margin:0 0 12px;
+  #brLine{font-size:12px;color:#8a80b0;font-style:italic;margin:0 0 4px;
     max-width:38ch;margin-left:auto;margin-right:auto}
   .brief-rows{width:min(330px,84vw);margin:0 auto}
   .brief-rows div{display:grid;grid-template-columns:64px 1fr;gap:10px;
-    padding:6px 0;border-top:1px solid rgba(120,100,180,.14);text-align:left}
+    padding:4px 0;border-top:1px solid rgba(120,100,180,.14);text-align:left}
   .brief-rows span{font-family:'Orbitron',monospace;font-size:8.5px;
     letter-spacing:.2em;color:#5e5679;padding-top:2px}
   .brief-rows b{font-size:12px;color:#c9bfe8;font-weight:500}
-  #brWays{display:flex;flex-direction:column;gap:6px;width:min(330px,84vw);margin:6px auto 0}
+  #brWays{display:flex;flex-direction:column;gap:4px;width:min(330px,84vw);margin:4px auto 0}
   .wayin{
     pointer-events:auto;cursor:pointer;-webkit-appearance:none;appearance:none;
-    display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 12px;
+    display:grid;grid-template-columns:1fr auto;gap:1px 10px;padding:7px 12px;
     border-radius:9px;background:rgba(18,13,38,.72);border:1px solid rgba(120,110,170,.28);
     font-family:'Orbitron',monospace;color:#c9bfe8;text-align:left;
     transition:border-color .16s ease,background .16s ease;
@@ -699,7 +702,7 @@
   <div id="briefing" class="overlay hidden">
     <div class="card">
       <p class="floor-eyebrow" id="brContract">CONTRACT</p>
-      <h1 id="brFloor" style="font-size:clamp(24px,5vw,40px)">FLOOR</h1>
+      <h1 id="brFloor" style="font-size:clamp(20px,4vw,31px);margin-bottom:4px">FLOOR</h1>
       <p id="brPrize"></p>
       <p id="brLine"></p>
       <canvas id="brPlan" width="392" height="252" aria-label="Floor plan"></canvas>
@@ -707,11 +710,11 @@
         <div><span>INSIDE</span><b id="brInside"></b></div>
         <div><span>HAZARD</span><b id="brHaz"></b></div>
       </div>
-      <button class="btn ghost" id="brIntel" type="button" style="margin-top:6px;padding:8px 14px;font-size:9.5px"></button>
-      <p class="floor-eyebrow" style="margin-top:14px">Way in</p>
+      <button class="btn ghost" id="brIntel" type="button" style="margin-top:4px;padding:6px 14px;font-size:9.5px"></button>
+      <p class="floor-eyebrow" style="margin-top:8px">Way in</p>
       <div id="brWays" role="group" aria-label="Way in"></div>
-      <button class="btn" id="brGo" style="margin-top:14px">GO</button>
-      <p class="hint" style="margin-top:8px">or press <span class="key">SPACE</span></p>
+      <button class="btn" id="brGo" style="margin-top:10px">GO</button>
+      <p class="hint" style="margin-top:6px">or press <span class="key">SPACE</span></p>
     </div>
   </div>
 
@@ -847,7 +850,7 @@ const T = {
   PRIZE_LANCE_T: 4.6, PRIZE_LANCE_TICK: 1.6, PRIZE_LANCE_NOISE: 150,
   /* the response: standing still during the escape has to cost something, so
      the building keeps getting faster until you are out of it */
-  RESPONSE_EVERY: 14, EXFIL_LIGHT: 0.34,
+  RESPONSE_EVERY: 14, EXFIL_LIGHT: 0.19,
   /* The burst is the only way to out-accelerate a chase, and it is loud enough
      that using it to explore is a bad idea. Spending it is the decision. */
   BURST_MULT: 1.6, BURST_T: 0.42, BURST_COOL: 3.4, BURST_NOISE: 600,
@@ -5478,10 +5481,23 @@ function drawPrize(p) {
       if (b.state === 'chase' || b.state === 'invest') coming++;
     }
     if (coming > 0) {
-      ctx.fillStyle = 'rgba(255,90,74,' + (0.7 + 0.3 * Math.sin(time * 9)).toFixed(3) + ')';
+      /* Below the case when it sits near the top of the screen, or the label
+         lands on the HUD with nothing behind it and reads as chrome. */
+      const sy = (p.y - camNow.cy) * Z;
+      const below = sy < 90;
+      const oy = below ? 34 : -32;
+      const label = coming + ' COMING';
       ctx.font = '700 10px Orbitron, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(coming + (coming > 1 ? ' COMING' : ' COMING'), 0, -30);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const w = ctx.measureText(label).width + 14;
+      const pulse = 0.7 + 0.3 * Math.sin(time * 9);
+      ctx.fillStyle = 'rgba(12,8,18,.82)';
+      rr(ctx, -w / 2, oy - 8, w, 16, 8); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,90,74,' + (0.5 * pulse).toFixed(3) + ')';
+      ctx.lineWidth = 1;
+      rr(ctx, -w / 2, oy - 8, w, 16, 8); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,120,100,' + pulse.toFixed(3) + ')';
+      ctx.fillText(label, 0, oy);
     }
     ctx.restore();
   }
@@ -6486,9 +6502,20 @@ function drawVignette() {
      while you are still a guest; amber once the building knows it has been
      robbed - no HUD element required. */
   if (phase === 'out' && mode === 'playing') {
-    const warm = 0.06 + 0.03 * Math.sin(time * 2.2);
-    ctx.fillStyle = 'rgba(255,150,60,' + warm.toFixed(3) + ')';
+    const warm = 0.11 + 0.045 * Math.sin(time * 2.2);
+    ctx.fillStyle = 'rgba(255,140,50,' + warm.toFixed(3) + ')';
     ctx.fillRect(0, 0, W, H);
+    /* an alarm strip along the top and bottom, sweeping - the room is telling
+       everyone about you now, and the screen should be saying it too */
+    const beat = 0.5 + 0.5 * Math.sin(time * 4.4);
+    const bar = ctx.createLinearGradient(0, 0, 0, H * 0.16);
+    bar.addColorStop(0, 'rgba(255,70,58,' + (0.30 + 0.22 * beat).toFixed(3) + ')');
+    bar.addColorStop(1, 'rgba(255,70,58,0)');
+    ctx.fillStyle = bar; ctx.fillRect(0, 0, W, H * 0.16);
+    const bar2 = ctx.createLinearGradient(0, H, 0, H * 0.84);
+    bar2.addColorStop(0, 'rgba(255,70,58,' + (0.30 + 0.22 * beat).toFixed(3) + ')');
+    bar2.addColorStop(1, 'rgba(255,70,58,0)');
+    ctx.fillStyle = bar2; ctx.fillRect(0, H * 0.84, W, H * 0.16);
   }
   const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34, W / 2, H / 2, Math.max(W, H) * 0.75);
   vg.addColorStop(0, 'rgba(0,0,0,0)');
@@ -8157,6 +8184,12 @@ window.__fp = {
   get phase() { return phase; }, get heldPrize() { return heldPrize; },
   botAlpha(i) { const b = bots[i || 0]; return b ? (b.kind === 'listen' ? 'hidden' : 'always') : null; },
   exfilT() { return +exfilT.toFixed(2); }, takeT() { return +takeT.toFixed(3); },
+  screenWarmth() {
+    const d = ctx.getImageData(0, 0, Math.min(W, 400) * DPR, Math.min(H, 300) * DPR).data;
+    let r = 0, b = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; b += d[i + 2]; n++; }
+    return { warm: +((r - b) / n).toFixed(2), lit: +((r + b) / (2 * n)).toFixed(2) };
+  },
   job() { return { idx: jobIdx, banked, atRisk, payout: jobPayout(),
     len: T.JOB_LEN, jobs: Math.ceil(MAPS.length / T.JOB_LEN) }; },
   jobEnd(i) { return jobEnd(i); }, jobOf(i) { return jobOf(i); },

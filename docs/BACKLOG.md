@@ -85,6 +85,13 @@ behaviour is assertable. Visual work gets a screenshot check instead.
     that output pointing at the truth. bindBtn now returns early on a missing
     element - removing UI should cost one dead button, not the game.
 
+22. **Assertions cannot see a layout.** 835 of them passed while the briefing's
+    plan canvas floated over the floor name - you could read "TH..._T" of "THE
+    BANK VAULT" - and while the GO button sat at y=792 in a 720px viewport. The
+    cause was a global `canvas{position:absolute;inset:0}` written for the game
+    viewport and inherited by a diagram. Drive the game and LOOK at it:
+    test/playthrough.mjs photographs the five moments that carry a floor.
+
 ---
 
 ## A · Items and tools
@@ -553,3 +560,5 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-05 · knock · noise became a verb. Free, 300px, 2.6s cooldown, deliberately quieter than a sprint. Found a real bug doing it: knockCool was in the decay and not in loadMap's reset, so a cooldown survived the stairs
 - 2026-09-05 · intel · the building is free and the people in it cost 320 out of the take, so the money answers three questions instead of two: bank it, arm yourself, or know what you are walking into
 - 2026-09-05 · trap · drawPlan was the third name collision of the session after burst() and safeT. Naming a function for what it does without grepping whether something already does it is now the single most expensive habit in this project
+- 2026-09-05 · looked at it · a playthrough script that drives one floor and photographs the briefing, the infiltration, the crack and the escape. Found three things the suite could not: the plan canvas positioned absolute by a global rule and covering the title, the GO button below the fold, and an escape act visually identical to the quiet half
+- 2026-09-05 · escape · the lights now genuinely come up (0.34 -> 0.19 ambient), the room warms, and alarm bars sweep top and bottom. Measured against the quiet half: 11x warmer, 73% brighter
