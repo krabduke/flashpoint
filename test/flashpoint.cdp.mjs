@@ -5971,6 +5971,44 @@ ok('bare hands are the slowest way and still loud',
   `${crkT.hands.secs}s at ${crkT.hands.loudest}`);
 ok('the crack block measured a running game', crkT.mode === 'playing', crkT.mode);
 
+/* the crack is the most dangerous thing in the game and it looked like a
+   progress ring. It has to show the tool and, more importantly, who heard it. */
+const crkV = JSON.parse(await evl(`(() => {
+ try {
+  const o = {};
+  mode = 'playing'; paused = false; invuln = 9e9; meter = 0; alertLvl = 0;
+  mapIdx = 0; loop = 0; loadMap(0); invuln = 9e9;
+  __fp.setCrack('still'); __fp.resetKit(); __fp.giveTool('drill');
+  const p = __fp.prizeAt();
+  /* nobody near it: the count must be honest about an empty room */
+  for (const b of bots) { b.x = p.x + 3000; b.y = p.y + 3000; b.state = 'patrol'; }
+  __fp.teleport(p.x, p.y);
+  for (let i = 0; i < 20; i++) { player.vx = 0; player.vy = 0; update(1 / 60); }
+  o.quiet = __fp.comingForYou();
+  const box = () => {
+    render();
+    const sx = (p.x - camNow.cx) * Z, sy = (p.y - camNow.cy) * Z, h = 40;
+    const d = ctx.getImageData((sx - h) * DPR, (sy - h) * DPR, h * 2 * DPR, h * 2 * DPR).data;
+    let s = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { s += d[i] + d[i + 1] + d[i + 2]; n++; }
+    return Math.round(s / n);
+  };
+  o.mid = box();
+  /* now put somebody on their way */
+  const b = bots.find(x => x.kind === 'drone');
+  b.x = p.x + 300; b.y = p.y; b.state = 'invest'; b.lastX = p.x; b.lastY = p.y;
+  o.hunted = __fp.comingForYou();
+  o.mode = mode;
+  return JSON.stringify(o);
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the crack visual block ran at all', !crkV.threw, crkV.threw || 'ok');
+ok('an empty room reports nobody coming', crkV.quiet === 0, `${crkV.quiet}`);
+ok('and the case is lit while you work on it', crkV.mid > 40, `${crkV.mid} brightness`);
+/* the number that matters during a crack is not the timer */
+ok('a drone on its way is counted', crkV.hunted === 1, `${crkV.hunted} coming`);
+ok('the crack visual block measured a running game', crkV.mode === 'playing', crkV.mode);
+
 /* ---- the prize, and the hinge it turns ----
    A heist needs a moment where you stop being careful. Collecting coins to a
    threshold was not one: the exit simply opened at some point and you left. */

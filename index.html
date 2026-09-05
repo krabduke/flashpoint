@@ -5446,9 +5446,43 @@ function drawPrize(p) {
   if (k > 0) {
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.strokeStyle = 'rgba(255,209,102,.9)';
-    ctx.lineWidth = 2.4;
+    /* the ring tightens as it closes, so the last second reads as the last second */
+    const urgency = 0.6 + 0.4 * Math.sin(time * lerp(6, 26, k));
+    ctx.strokeStyle = 'rgba(255,209,102,' + (0.55 + 0.45 * urgency).toFixed(3) + ')';
+    ctx.lineWidth = 2.4 + k * 1.6;
     ctx.beginPath(); ctx.arc(0, 0, 21, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
+
+    /* the tool, shown as what it is doing to the case */
+    if (prizeTool === 'drill') {
+      for (let i = 0; i < 3; i++) {
+        const a = rand(0, TAU), d = 12 + rand(0, 9);
+        ctx.strokeStyle = 'rgba(255,190,110,' + rand(0.25, 0.7).toFixed(2) + ')';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 9, Math.sin(a) * 9);
+        ctx.lineTo(Math.cos(a) * d, Math.sin(a) * d);
+        ctx.stroke();
+      }
+    } else if (prizeTool === 'lance') {
+      /* a cutting line walking round the case rather than a shower of sparks */
+      const a = -Math.PI / 2 + TAU * k;
+      ctx.fillStyle = 'rgba(180,240,255,.9)';
+      ctx.beginPath(); ctx.arc(Math.cos(a) * 21, Math.sin(a) * 21, 2.4, 0, TAU); ctx.fill();
+    }
+
+    /* Who heard it. The fear during a crack is not the clock, it is not knowing
+       whether anyone is on their way - and the answer already exists in state. */
+    let coming = 0;
+    for (const b of bots) {
+      if (b.kind === 'sentry') continue;
+      if (b.state === 'chase' || b.state === 'invest') coming++;
+    }
+    if (coming > 0) {
+      ctx.fillStyle = 'rgba(255,90,74,' + (0.7 + 0.3 * Math.sin(time * 9)).toFixed(3) + ')';
+      ctx.font = '700 10px Orbitron, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(coming + (coming > 1 ? ' COMING' : ' COMING'), 0, -30);
+    }
     ctx.restore();
   }
 }
@@ -8198,6 +8232,14 @@ window.__fp = {
   prizeAt() { return prize ? { x: prize.x, y: prize.y, taken: prize.taken } : null; },
   prizeT() { return +prizeT.toFixed(3); }, takePrize() { takePrize(); },
   prizeTool() { return prizeTool; },
+  comingForYou() {
+    let n = 0;
+    for (const b of bots) {
+      if (b.kind === 'sentry') continue;
+      if (b.state === 'chase' || b.state === 'invest') n++;
+    }
+    return n;
+  },
   /* put exactly one tool in your hands, so the crack can be measured three ways */
   giveTool(which) {
     drillCharges = which === 'drill' ? 1 : 0;
