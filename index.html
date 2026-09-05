@@ -855,8 +855,16 @@ const T = {
   PRIZE_DRILL_T: 2.4, PRIZE_DRILL_TICK: 0.3, PRIZE_DRILL_NOISE: 700,
   PRIZE_LANCE_T: 3.8, PRIZE_LANCE_TICK: 1.9, PRIZE_LANCE_NOISE: 60,
   /* the response: standing still during the escape has to cost something, so
-     the building keeps getting faster until you are out of it */
-  RESPONSE_EVERY: 14, EXFIL_LIGHT: 0.19,
+     the building keeps getting faster until you are out of it.
+
+     14 was a guess and the guess was dead. Measured across all twenty floors,
+     the way out is 21 tiles, which is about four seconds at a sprint - so a
+     clock ticking every fourteen never fired once, not on a clean run and not
+     on a fumbled one. It should be inaudible when you play well and brutal when
+     you do not, so it is tuned to exactly that: at 5s a clean escape hears it on
+     3 floors of 20 (the three longest, which have earned the pressure) and an
+     escape that loses four seconds hears it on 19 of 20. */
+  RESPONSE_EVERY: 5, EXFIL_LIGHT: 0.19,
   /* The burst is the only way to out-accelerate a chase, and it is loud enough
      that using it to explore is a bad idea. Spending it is the decision. */
   BURST_MULT: 1.6, BURST_T: 0.42, BURST_COOL: 3.4, BURST_NOISE: 600,

@@ -5779,6 +5779,62 @@ ok('standing still during the escape costs you',
   exf.alertAfterWaiting > exf.alertAtTake,
   `alert ${exf.alertAtTake} -> ${exf.alertAfterWaiting} over ${exf.exfilT}s`);
 ok('the escape block measured a running game', exf.mode === 'playing', exf.mode);
+/* The assertion above waits RESPONSE_EVERY*2 seconds, so it passes at any value
+   of RESPONSE_EVERY at all - including the 14 it was set to, which measurement
+   showed never fired once in twenty floors, on a clean run or a fumbled one. A
+   test scaled to the constant cannot see the constant being wrong. This one is
+   anchored to the floors instead: walk the real prize-to-exit route on every
+   map, take the time that crossing costs at a sprint, and require the response
+   window to be short enough to land inside one. If the levels grow or the
+   player slows, this moves with them; if the window drifts back up, it fails. */
+const resp = JSON.parse(await evl(`(() => {
+ try {
+  const route = (sx, sy, tx, ty) => {
+    const s0 = cellOf(sx, sy), e0 = cellOf(tx, ty);
+    const N = T.COLS * T.ROWS;
+    const si = s0.gy*T.COLS+s0.gx, ei = e0.gy*T.COLS+e0.gx;
+    const seen = new Uint8Array(N), from = new Int32Array(N).fill(-1);
+    seen[si] = 1; const q = [si];
+    for (let h = 0; h < q.length; h++) {
+      const cur = q[h]; if (cur === ei) break;
+      const x = cur % T.COLS, y = (cur - x) / T.COLS;
+      for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+        const nx=x+dx, ny=y+dy;
+        if (nx<0||ny<0||nx>=T.COLS||ny>=T.ROWS) continue;
+        const j=ny*T.COLS+nx;
+        /* the PLAYER's rule: glass stops you, a vent does not */
+        if (seen[j] || isWallCell(nx,ny) || glassAt[j]) continue;
+        seen[j]=1; from[j]=cur; q.push(j);
+      }
+    }
+    if (!seen[ei]) return 0;
+    let n = 0, c = ei;
+    while (c >= 0 && c !== si) { n++; c = from[c]; }
+    return n;
+  };
+  const secs = [];
+  for (let f = 0; f < MAPS.length; f++) {
+    mapIdx = f; loop = 0; loadMap(f);
+    const p = prize; if (!p || !exits.length) continue;
+    let best = 0;
+    for (const e of exits) { const n = route(p.x, p.y, e.x, e.y);
+      if (n && (!best || n < best)) best = n; }
+    if (best) secs.push(best * T.TILE / T.SPRINT);
+  }
+  secs.sort((a,b) => a-b);
+  return JSON.stringify({ n: secs.length, median: +secs[secs.length>>1].toFixed(1),
+                          longest: +secs[secs.length-1].toFixed(1),
+                          every: T.RESPONSE_EVERY });
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the escape-length block ran', !resp.threw, resp.threw || `n=${resp.n}`);
+ok('every floor has a way out the player can actually walk', resp.n === 20, `${resp.n}/20 routed`);
+ok('the response clock is short enough to fire during a real escape',
+  resp.every < resp.longest,
+  `window ${resp.every}s vs longest escape ${resp.longest}s (median ${resp.median}s)`);
+/* and not so short it nags someone doing it right */
+ok('but not so short it fires on a clean median escape', resp.every > resp.median * 0.9,
+  `window ${resp.every}s vs median escape ${resp.median}s`);
 
 /* ---- the knock ----
    Three things already made noise to bait a guard and none was load-bearing,
