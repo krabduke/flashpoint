@@ -845,9 +845,15 @@ const T = {
   /* The case, three ways. Bare hands are the punishment for arriving without a
      plan: slowest AND loudest. A drill is quick and screams; a lance is patient
      and almost silent. The tick is what the room hears while you work. */
-  PRIZE_T: 7.5,   PRIZE_TICK: 0.5,  PRIZE_WORK_NOISE: 560,
+  /* Tuned against a measurement, not a hunch. At 4.6s and 150 noise the lance
+     opened 5 of 20 floors against the drill's 12: the quiet bought nothing,
+     because standing at the case is what kills you and it stood there twice as
+     long. It is near silent now - under a drone's hearing rather than inside it
+     - so patience actually pays. Bare hands come down from 7.5s, which opened
+     one floor in twenty and was a death sentence rather than an option. */
+  PRIZE_T: 4.2,   PRIZE_TICK: 0.6,  PRIZE_WORK_NOISE: 480,
   PRIZE_DRILL_T: 2.4, PRIZE_DRILL_TICK: 0.3, PRIZE_DRILL_NOISE: 700,
-  PRIZE_LANCE_T: 4.6, PRIZE_LANCE_TICK: 1.6, PRIZE_LANCE_NOISE: 150,
+  PRIZE_LANCE_T: 3.8, PRIZE_LANCE_TICK: 1.9, PRIZE_LANCE_NOISE: 60,
   /* the response: standing still during the escape has to cost something, so
      the building keeps getting faster until you are out of it */
   RESPONSE_EVERY: 14, EXFIL_LIGHT: 0.19,

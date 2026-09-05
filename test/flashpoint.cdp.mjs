@@ -5957,7 +5957,10 @@ ok('the tool you brought is the tool it uses',
   crkT.hands.tool === 'hands' && crkT.drill.tool === 'drill' && crkT.lance.tool === 'lance',
   `${crkT.hands.tool}/${crkT.drill.tool}/${crkT.lance.tool}`);
 /* the trade, both directions: fast and loud, or slow and quiet */
-ok('a drill is the fast way in', crkT.drill.secs < crkT.hands.secs / 2,
+/* 'under half' held when bare hands took 7.5s, and 7.5s opened one floor in
+   twenty - it was a death sentence rather than an option. Hands are viable now,
+   so the drill's lead is real but narrower, and the claim says so. */
+ok('a drill is meaningfully the fast way in', crkT.drill.secs < crkT.hands.secs * 0.7,
   `drill ${crkT.drill.secs}s vs hands ${crkT.hands.secs}s`);
 ok('and it screams while it works', crkT.drill.loudest > crkT.lance.loudest * 2,
   `drill ${crkT.drill.loudest} vs lance ${crkT.lance.loudest}`);
