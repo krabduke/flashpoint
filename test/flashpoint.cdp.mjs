@@ -447,6 +447,71 @@ const battFlat = await evl(`(() => { __fp.setBatt(3); let low = 1e9; for (let i 
 const bf = JSON.parse(battFlat);
 ok('an empty torch cuts out', bf.low === 0 && bf.on === false && bf.dead === true, battFlat);
 ok('a dead torch will not switch back on', (await evl('__fp.toggleBeam()')) === false);
+/* Going dark has to LOOK like going dark. The bubble round the player was drawn
+   whenever flHits had entries - a stale ray count, not a fact about the light -
+   so dousing the torch changed the picture by one luminance level out of 255
+   while detection (flRange) correctly dropped to zero. The mechanic worked and
+   the screen denied it. Sampling needs the aim pinned after each update, or the
+   beam drifts off the corridor being measured and every reading comes back
+   identical for the wrong reason. */
+const bub = JSON.parse(await evl(`(() => {
+ try {
+  mapIdx = 0; loop = 0; loadMap(0); mode='playing'; paused=false; bots.length = 0;
+  /* stand in the longest clear run so nothing but light changes the pixels */
+  let best = null;
+  for (let gy = 1; gy < T.ROWS-1; gy++) {
+    let run = 0;
+    for (let gx = 1; gx < T.COLS-1; gx++) {
+      if (!isWallCell(gx, gy)) { run++; if (!best || run > best.run) best = { run: run, gx: gx, gy: gy }; }
+      else run = 0;
+    }
+  }
+  const sx = (best.gx - best.run + 1.5) * T.TILE, sy = (best.gy + .5) * T.TILE;
+  __fp.teleport(sx, sy);
+  const cv = document.getElementById('c');
+  const c2 = cv.getContext('2d', { willReadFrequently: true });
+  for (let i = 0; i < 90; i++) { update(1/60); player.aim = 0; render(); }
+  const read = (wx, wy) => {
+    const px = Math.round(((wx - camNow.cx) * Z) * DPR);
+    const py = Math.round(((wy - camNow.cy) * Z) * DPR);
+    if (px < 0 || py < 0 || px >= cv.width || py >= cv.height) return null;
+    const d = c2.getImageData(px, py, 1, 1).data;
+    return Math.round((d[0] + d[1] + d[2]) / 3);
+  };
+  const settle = () => { for (let i = 0; i < 8; i++) { update(1/60); player.aim = 0; render(); } };
+  beamOn = true;  settle();
+  const on = read(sx, sy - 30), onRange = Math.round(flRange());
+  /* a control: the beam must actually be doing something down the corridor */
+  const onAhead = read(sx + 90, sy);
+  beamOn = false; settle();
+  const off = read(sx, sy - 30), offRange = Math.round(flRange());
+  const offAhead = read(sx + 90, sy);
+  /* and ambient: far outside either bubble and outside the cone */
+  return JSON.stringify({ on: on, off: off, onAhead: onAhead, offAhead: offAhead,
+                          onRange: onRange, offRange: offRange,
+                          dbub: T.FL_DARK_BUBBLE, dv: T.FL_DARK_V, bub: T.FL_BUBBLE });
+ } catch (e) { return JSON.stringify({ threw: String(e && e.message) }); }
+})()`));
+ok('the bubble block ran', !bub.threw, bub.threw || 'ok');
+/* the control first: if the beam did not change, nothing below means anything */
+ok('the torch toggle actually changed the light',
+  bub.onRange > 300 && bub.offRange === 0 && bub.onAhead - bub.offAhead > 8,
+  `range ${bub.onRange}->${bub.offRange}, down the corridor ${bub.onAhead} vs ${bub.offAhead}`);
+ok('dousing the torch visibly darkens the ground you stand on',
+  bub.on - bub.off >= 4, `beside you: lit ${bub.on} vs dark ${bub.off}`);
+/* 'you can still find yourself' started life as a pixel two tiles up, which was
+   wrong twice over: at 30px it sampled the rim of a 30px bubble, and the far
+   reference point turned out BRIGHTER than the ground beside the player because
+   it landed on a wall. Readings that close to the player carry the sprite's own
+   shadow too. The claim is real but it is about the light that remains, so it is
+   asserted where it actually lives - a pool that still exists, and a change that
+   is a dimming rather than a blackout. */
+ok('going dark still leaves a pool to stand in',
+  bub.dbub > 0 && bub.dv > 0 && bub.dbub < bub.bub,
+  `dark ${bub.dbub}px at ${bub.dv} vs lit ${bub.bub}px`);
+ok('and going dark is not going blind',
+  bub.on - bub.off < 30, `beside you: lit ${bub.on} vs dark ${bub.off}`);
+
 const woke = await evl(`(() => { for (let i = 0; i < 120; i++) update(0.05); return JSON.stringify({ batt: __fp.batt, dead: __fp.battDead }); })()`);
 ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');

@@ -828,6 +828,14 @@ const T = {
      inside you. A route's first waypoint is very often the corner you start in. */
   SPAWN_CLEAR: 300,
   FL_HALF: 15.5 * Math.PI / 180, FL_RANGE: 345, FL_RAYS: 49, FL_BUBBLE: 74,
+  /* What you keep when the torch is off. The bubble used to be drawn whenever
+     flHits had anything in it, which is a stale ray count, not a statement about
+     the light - so dousing the torch left you sitting in exactly the same halo.
+     Detection already went dark correctly (flRange() drops to 0), so the picture
+     was contradicting the mechanic: the one stealth verb whose whole point is
+     being visibly darker did not look like anything. It collapses now, to a
+     shroud that still lets you find yourself on a dark floor. */
+  FL_DARK_BUBBLE: 30, FL_DARK_V: 0.34,
   BOT_HALF: 15.5 * Math.PI / 180, BOT_RANGE: 300, BOT_RAYS: 41,
   BOT_PATROL: 56, BOT_INVEST: 92, BOT_CHASE: 132, BOT_TURN: 2.2, BOT_SWEEP: 0.35,
   /* chase scaling: per floor, per loop, and adrenaline the longer a chase runs.
@@ -4767,10 +4775,15 @@ function render() {
     fanPath(darkCtx, player.x, player.y, flHits, T.FL_RAYS, T.FL_HALF, flRange(), player.aim);
     if (mirrorBeam) fanPath(darkCtx, mirrorBeam.x, mirrorBeam.y, mirrorBeam.hits, T.FL_RAYS, T.FL_HALF, mirrorBeam.range, mirrorBeam.ang);
     darkCtx.fillStyle = gr; darkCtx.fill();
-    /* bubble */
-    const gb = darkCtx.createRadialGradient(player.x, player.y, 2, player.x, player.y, T.FL_BUBBLE);
-    rampBlack(gb, 0.7);
-    darkCtx.fillStyle = gb; darkCtx.beginPath(); darkCtx.arc(player.x, player.y, T.FL_BUBBLE, 0, TAU); darkCtx.fill();
+  }
+  /* The bubble is about the torch, not about the cone's ray count, so it is
+     decided here rather than inside the cone's block. */
+  {
+    const lit = beamOn && flRange() > 0;
+    const rad = lit ? T.FL_BUBBLE : T.FL_DARK_BUBBLE;
+    const gb = darkCtx.createRadialGradient(player.x, player.y, 2, player.x, player.y, rad);
+    rampBlack(gb, lit ? 0.7 : T.FL_DARK_V);
+    darkCtx.fillStyle = gb; darkCtx.beginPath(); darkCtx.arc(player.x, player.y, rad, 0, TAU); darkCtx.fill();
   }
   /* lamp holes */
   for (const e of emitters) {
