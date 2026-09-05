@@ -275,6 +275,8 @@
   #brPlan{display:block;width:min(392px,84vw);height:auto;margin:10px auto 4px;
     border:1px solid rgba(120,100,180,.28);border-radius:8px;
     background:#0a0812;image-rendering:auto}
+  #brIntel.known{color:#7dffc4;border-color:rgba(125,255,196,.45)}
+  #brIntel[disabled]{opacity:.5;cursor:default}
   #brLine{font-size:12.5px;color:#8a80b0;font-style:italic;margin:0 0 12px;
     max-width:38ch;margin-left:auto;margin-right:auto}
   .brief-rows{width:min(330px,84vw);margin:0 auto}
@@ -705,6 +707,7 @@
         <div><span>INSIDE</span><b id="brInside"></b></div>
         <div><span>HAZARD</span><b id="brHaz"></b></div>
       </div>
+      <button class="btn ghost" id="brIntel" type="button" style="margin-top:6px;padding:8px 14px;font-size:9.5px"></button>
       <p class="floor-eyebrow" style="margin-top:14px">Way in</p>
       <div id="brWays" role="group" aria-label="Way in"></div>
       <button class="btn" id="brGo" style="margin-top:14px">GO</button>
@@ -854,7 +857,7 @@ const T = {
   JOB_LEN: 4, JOB_BONUS: 0.25,
   /* three ways in, at least this far apart, so the choice is a different route
      and not three doors onto the same corridor */
-  ENTRY_MIN_GAP: 260, ENTRY_N: 3,
+  ENTRY_MIN_GAP: 260, ENTRY_N: 3, INTEL_PATROLS: 320,
   /* free, and quieter than a sprint on purpose: a scalpel for moving one guard,
      not a way to shout across a floor */
   KNOCK_R: 300, KNOCK_COOL: 2.6,
@@ -1494,7 +1497,7 @@ let burstT = 0, burstCool = 0, knockCool = 0;
 /* banked is yours whatever happens next; atRisk dies with you */
 let banked = 0, atRisk = 0, jobIdx = 0;
 let shiftAt = 0, shifted = false;
-let entries = [], entryIdx = 0;
+let entries = [], entryIdx = 0, knowPatrols = false;
 let lockers = [], hidIn = null, hidT = 0, hidSeen = false;
 let jewels = [], plans = [], hasPlan = false;
 let exitOpen = false, exitFull = false, blackout = 0, nextBlackout = 999;
@@ -2180,6 +2183,7 @@ function loadMap(idx) {
   player.x = spawnPt.x; player.y = spawnPt.y; player.vx = player.vy = 0;
   meter = 0; seenTimer = 0; made = false; madeT = 0; exitOpen = false; exitFull = false;
   phase = 'in'; heldPrize = false; prizeT = 0; exfilT = 0; responseT = 0; takeT = 0;
+  knowPatrols = false;   /* what you know is bought per floor, not carried */
   prizeTool = 'hands'; prizeTick = 0;
   shiftAt = T.SHIFT_AT + rand(-T.SHIFT_JITTER, T.SHIFT_JITTER); shifted = false;
   burstT = 0; burstCool = 0; knockCool = 0; noise = []; invuln = 2.5; searchLit = false; stepLog = [];
@@ -3886,8 +3890,9 @@ function drawBriefPlan() {
     g.fillRect(gx * cw, gy * ch, Math.ceil(cw), Math.ceil(ch));
   }
 
-  /* where they start. Not where they will be - that is the point of a plan */
-  for (const b of bots) {
+  /* Where they start - and only if you paid for it. The building is free
+     because you cased it; the people in it are the thing worth knowing. */
+  if (knowPatrols) for (const b of bots) {
     if (b.kind === 'sentry') { g.fillStyle = 'rgba(255,120,90,.75)'; }
     else if (b.kind === 'listen') { g.fillStyle = 'rgba(200,150,255,.7)'; }
     else { g.fillStyle = 'rgba(255,90,74,.8)'; }
@@ -3942,6 +3947,15 @@ function renderBrief() {
     listenPts.length ? listenPts.length + ' listeners' : null
   ].filter(Boolean).join(' \u00b7 ');
   $('brHaz').textContent = haz.join(' \u00b7 ') || 'nothing it wants to warn you about';
+  const ib = $('brIntel');
+  if (ib) {
+    const can = atRisk >= T.INTEL_PATROLS;
+    ib.textContent = knowPatrols ? 'PATROL POSITIONS \u2014 KNOWN'
+      : can ? 'BUY PATROL POSITIONS \u2014 ' + T.INTEL_PATROLS
+      : 'PATROL POSITIONS \u2014 ' + T.INTEL_PATROLS + ' (you have ' + atRisk + ')';
+    ib.disabled = knowPatrols || !can;
+    ib.classList.toggle('known', knowPatrols);
+  }
   drawBriefPlan();
   $('brWays').innerHTML = entries.map((e, i) =>
     '<button class="wayin' + (i === entryIdx ? ' on' : '') + '" type="button" data-way="' + i + '">'
@@ -7347,6 +7361,15 @@ const shopPrice = (id) => gadgetCost(id) * T.SHOP_PER_POINT;
 /* full is full: a button that takes your money for nothing is a bug wearing a
    feature's clothes */
 const canBuy = (id) => atRisk >= shopPrice(id) && __gadgetCharges(id) < (T.CAP[id] || 0);
+function buyIntel() {
+  if (mode !== 'brief' || knowPatrols || atRisk < T.INTEL_PATROLS) { sfx.ui(); return false; }
+  atRisk -= T.INTEL_PATROLS;
+  knowPatrols = true;
+  sfx.unlock();
+  renderBrief();
+  return true;
+}
+
 function buyCharge(id) {
   if (mode !== 'job' || !canBuy(id)) { sfx.ui(); return false; }
   atRisk -= shopPrice(id);
@@ -7596,6 +7619,7 @@ $('brWays').addEventListener('click', e => {
   const b = e.target.closest('button[data-way]');
   if (b) { entryIdx = +b.dataset.way; sfx.ui(); renderBrief(); }
 });
+bindBtn('brIntel', () => buyIntel());
 bindBtn('brGo', () => goIn());
 $('jobBankBtn').addEventListener('click', () => { sfx.ui(); jobBank(); });
 $('jobOn').addEventListener('click', () => { sfx.ui(); jobPushOn(); });
@@ -8126,6 +8150,9 @@ window.__fp = {
   bankNow() { jobBank(); }, pushOn() { jobPushOn(); },
   entries() { return entries.map(e => ({ name: e.name, gap: e.gap, near: e.near })); },
   briefShown() { return !$('briefing').classList.contains('hidden'); },
+  intel() { return { known: knowPatrols, price: T.INTEL_PATROLS, purse: atRisk }; },
+  buyIntel() { return buyIntel(); },
+  setPurse(v) { atRisk = v; renderBrief(); return atRisk; },
   planInk() {
     const cv = $('brPlan'); if (!cv) return 0;
     const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;

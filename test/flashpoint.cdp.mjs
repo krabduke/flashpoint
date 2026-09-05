@@ -5855,6 +5855,14 @@ const brf = JSON.parse(await evl(`(() => {
   };
   /* the plan has to actually be drawn, and it has to change when you pick a
      different door - otherwise it is a decorative picture of a building */
+  /* the building is free; the people in it are what you pay for */
+  __fp.setPurse(0);
+  o.brokeIntel = { state: __fp.intel(), bought: __fp.buyIntel() };
+  o.inkBefore = __fp.planInk();
+  __fp.setPurse(1000);
+  o.rich = __fp.buyIntel();
+  o.afterIntel = __fp.intel();
+  o.inkAfter = __fp.planInk();
   o.inkA = __fp.planInk();
   __fp.pickEntry(0); o.goldAt0 = __fp.planDoorGold();
   __fp.pickEntry(1); o.goldAt1 = __fp.planDoorGold();
@@ -5882,6 +5890,16 @@ ok('it names the place and what you came for',
   && /patrol/.test(brf.text.inside), JSON.stringify(brf.text || null));
 ok('there is more than one way in', (brf.ways || []).length >= 2, `${(brf.ways || []).length} doors`);
 ok('the briefing draws the building', brf.inkA > 400, `${brf.inkA} lit pixels`);
+/* the plan is free, what is walking around inside it is not */
+ok('with no money the patrols are not on the plan',
+  brf.brokeIntel.bought === false && brf.brokeIntel.state.known === false,
+  JSON.stringify(brf.brokeIntel));
+ok('buying intel costs what it says and puts them on it',
+  brf.rich === true && brf.afterIntel.known === true
+  && brf.afterIntel.purse === 1000 - brf.afterIntel.price,
+  JSON.stringify(brf.afterIntel));
+ok('and the plan visibly gains them', brf.inkAfter > brf.inkBefore,
+  `${brf.inkBefore} -> ${brf.inkAfter} lit pixels`);
 /* the chosen door is drawn gold and the others are not, so the plan says what
    you picked rather than merely being a picture of a building */
 ok('and the plan lights the door you picked',
