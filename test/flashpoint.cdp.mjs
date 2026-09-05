@@ -512,6 +512,68 @@ ok('going dark still leaves a pool to stand in',
 ok('and going dark is not going blind',
   bub.on - bub.off < 30, `beside you: lit ${bub.on} vs dark ${bub.off}`);
 
+/* ---- is there a choice of where to walk? ----
+   A stealth floor with one viable line through it is a corridor with scenery:
+   the drones are a timing puzzle and nothing you decide matters. Measure the
+   width of the useful ground - every tile whose round trip (spawn -> tile ->
+   prize) costs no more than a fifth over the best possible route, divided by
+   the length of that route. 1.0 is single file. 3 means roughly three tiles
+   abreast of ground you can take without paying for it.
+
+   An earlier attempt counted tile-disjoint routes and reported 17 of 20 floors
+   as having exactly one, which was nonsense - it blocked the tile next to the
+   prize, and a prize in a vault alcove has exactly one neighbour, so it was
+   measuring alcoves. This measures the journey, not its last step. */
+const wide = JSON.parse(await evl(`(() => {
+ try {
+  const rows = [];
+  for (let f = 0; f < MAPS.length; f++) {
+    mapIdx = f; loop = 0; loadMap(f);
+    const p = prize; if (!p) continue;
+    const N = T.COLS * T.ROWS;
+    const walk = (gx, gy) => !isWallCell(gx, gy) && !glassAt[gy*T.COLS+gx];
+    const field = (wx, wy) => {
+      const c = cellOf(wx, wy), d = new Int32Array(N).fill(-1);
+      const si = c.gy*T.COLS+c.gx; d[si] = 0; const q = [si];
+      for (let h = 0; h < q.length; h++) {
+        const cur = q[h], x = cur % T.COLS, y = (cur - x) / T.COLS;
+        for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          const nx=x+dx, ny=y+dy;
+          if (nx<0||ny<0||nx>=T.COLS||ny>=T.ROWS) continue;
+          const j2 = ny*T.COLS+nx;
+          if (d[j2] >= 0 || !walk(nx,ny)) continue;
+          d[j2] = d[cur] + 1; q.push(j2);
+        }
+      }
+      return d;
+    };
+    const dS = field(player.x, player.y), dP = field(p.x, p.y);
+    const pc = cellOf(p.x, p.y), best = dS[pc.gy*T.COLS+pc.gx];
+    if (best < 0) continue;
+    let useful = 0;
+    for (let k = 0; k < N; k++) {
+      if (dS[k] < 0 || dP[k] < 0) continue;
+      if (dS[k] + dP[k] <= best * 1.2) useful++;
+    }
+    rows.push({ floor: f+1, width: +(useful / Math.max(1, best)).toFixed(2), best: best });
+  }
+  const w = rows.map(r => r.width).sort((a,b) => a-b);
+  return JSON.stringify({ n: rows.length, median: w[w.length>>1],
+    narrow: rows.filter(r => r.width < 1.5).map(r => r.floor),
+    broad: rows.filter(r => r.width >= 3).length,
+    unreachable: rows.filter(r => r.best <= 0).length });
+ } catch (e) { return JSON.stringify({ threw: String(e && e.message) }); }
+})()`));
+ok('the route-width block ran', !wide.threw, wide.threw || `${wide.n} floors`);
+ok('every floor is measurable end to end', wide.n === 20 && wide.unreachable === 0,
+  `${wide.n} floors, ${wide.unreachable} with no route`);
+ok('a typical floor offers a choice of line, not a corridor',
+  wide.median >= 2, `median route width ${wide.median} tiles abreast`);
+/* one tight floor early is a teaching floor; several is a level design problem */
+ok('and almost none of them are single file',
+  wide.narrow.length <= 2, `single-file floors: ${wide.narrow.join(', ') || 'none'}`);
+ok('several floors open right out', wide.broad >= 6, `${wide.broad}/20 at three tiles or wider`);
+
 const woke = await evl(`(() => { for (let i = 0; i < 120; i++) update(0.05); return JSON.stringify({ batt: __fp.batt, dead: __fp.battDead }); })()`);
 ok('it comes back once rested', JSON.parse(woke).dead === false, woke);
 await evl('mapIdx = 0; loadMap(0); hud();');

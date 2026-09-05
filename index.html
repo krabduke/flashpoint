@@ -1650,9 +1650,12 @@ const ACHS = [
 let achs = (() => { try { return JSON.parse(localStorage.getItem('flashpoint.achs') || '{}') || {}; } catch (e) { return {}; } })();
 let fSeen = false, fSprint = false, fNoticed = false, fEmp = false;
 /* what happened, floor by floor, so a long run can be read back rather than
-   summed. caughtBy names the thing that actually filled the meter - the two
-   call sites of caught() both fire on meter >= 1, so the cause has to be
-   recorded where the meter rises, not where the run ends. */
+   summed. caughtBy names the thing that reached you. This comment used to say
+   both call sites of caught() fire on meter >= 1, which was true of the game
+   this one replaced: a full meter ended the run. It now calls identify(), and
+   the only things that call caught() are a drone touching you and a drone
+   opening the locker you are hiding in - so the cause is recorded where the
+   contact happens, not where the meter fills. */
 let runLog = [], caughtBy = null, floorT0 = 0, fSafes = 0, runSafes = 0;
 /* Ghosting one floor is luck; ghosting four in a row is a way of playing, and
    the payout should be able to say so. Breaking it costs you the multiplier,
