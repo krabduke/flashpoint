@@ -271,6 +271,10 @@
   /* the briefing reads like a page from a file, not a menu */
   #brPrize{font-family:'Orbitron',monospace;font-size:13px;letter-spacing:.14em;
     color:#ffd166;margin:2px 0 4px}
+  /* the plan reads as a drawing of the building, not a screenshot of it */
+  #brPlan{display:block;width:min(392px,84vw);height:auto;margin:10px auto 4px;
+    border:1px solid rgba(120,100,180,.28);border-radius:8px;
+    background:#0a0812;image-rendering:auto}
   #brLine{font-size:12.5px;color:#8a80b0;font-style:italic;margin:0 0 12px;
     max-width:38ch;margin-left:auto;margin-right:auto}
   .brief-rows{width:min(330px,84vw);margin:0 auto}
@@ -696,6 +700,7 @@
       <h1 id="brFloor" style="font-size:clamp(24px,5vw,40px)">FLOOR</h1>
       <p id="brPrize"></p>
       <p id="brLine"></p>
+      <canvas id="brPlan" width="392" height="252" aria-label="Floor plan"></canvas>
       <div class="brief-rows">
         <div><span>INSIDE</span><b id="brInside"></b></div>
         <div><span>HAZARD</span><b id="brHaz"></b></div>
@@ -3851,6 +3856,73 @@ function findEntries() {
   return out;
 }
 
+/* Drawn from the same grid the game walks on, so the plan cannot disagree with
+   the floor. Walls, the case, the doors, and where the patrols begin - which is
+   what you would know after standing outside a building for an evening.
+
+   Named drawBriefPlan because drawPlan already draws the blueprint pickup and
+   reads p.ph - the third name collision of this shape tonight. */
+function drawBriefPlan() {
+  const cv = $('brPlan');
+  if (!cv) return;
+  const g = cv.getContext('2d');
+  const sx = cv.width / (T.COLS * T.TILE), sy = cv.height / (T.ROWS * T.TILE);
+  const cw = cv.width / T.COLS, ch = cv.height / T.ROWS;
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.fillStyle = '#0a0812';
+  g.fillRect(0, 0, cv.width, cv.height);
+
+  /* the shell, drawn as fill rather than outline: a plan, not a wireframe */
+  for (let gy = 0; gy < T.ROWS; gy++) for (let gx = 0; gx < T.COLS; gx++) {
+    if (!grid[gy * T.COLS + gx]) continue;
+    g.fillStyle = '#1b1730';
+    g.fillRect(gx * cw, gy * ch, Math.ceil(cw), Math.ceil(ch));
+  }
+  /* glass reads differently from wall, because it is a route the lance opens */
+  for (let i = 0; i < glassAt.length; i++) {
+    if (!glassAt[i]) continue;
+    const gx = i % T.COLS, gy = (i - gx) / T.COLS;
+    g.fillStyle = 'rgba(120,200,230,.28)';
+    g.fillRect(gx * cw, gy * ch, Math.ceil(cw), Math.ceil(ch));
+  }
+
+  /* where they start. Not where they will be - that is the point of a plan */
+  for (const b of bots) {
+    if (b.kind === 'sentry') { g.fillStyle = 'rgba(255,120,90,.75)'; }
+    else if (b.kind === 'listen') { g.fillStyle = 'rgba(200,150,255,.7)'; }
+    else { g.fillStyle = 'rgba(255,90,74,.8)'; }
+    g.beginPath(); g.arc(b.x * sx, b.y * sy, 3.2, 0, TAU); g.fill();
+  }
+
+  /* the case */
+  if (prize) {
+    const px = prize.x * sx, py = prize.y * sy;
+    g.strokeStyle = '#ffd166'; g.lineWidth = 1.6;
+    g.beginPath();
+    g.moveTo(px, py - 6); g.lineTo(px + 5, py); g.lineTo(px, py + 6); g.lineTo(px - 5, py);
+    g.closePath(); g.stroke();
+  }
+  /* and the way out */
+  for (const e of exits) {
+    g.strokeStyle = 'rgba(77,255,184,.8)'; g.lineWidth = 1.4;
+    g.strokeRect(e.x * sx - 4, e.y * sy - 4, 8, 8);
+  }
+
+  /* the doors, with the chosen one lit */
+  entries.forEach((e, i) => {
+    const on = i === entryIdx;
+    g.strokeStyle = on ? '#ffd166' : 'rgba(180,170,220,.55)';
+    g.fillStyle = on ? 'rgba(255,209,102,.22)' : 'rgba(180,170,220,.10)';
+    g.lineWidth = on ? 2 : 1.2;
+    g.beginPath(); g.arc(e.x * sx, e.y * sy, on ? 8 : 6, 0, TAU);
+    g.fill(); g.stroke();
+    g.fillStyle = on ? '#ffd166' : 'rgba(180,170,220,.7)';
+    g.font = '700 9px Orbitron, monospace';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(String(i + 1), e.x * sx, e.y * sy + 0.5);
+  });
+}
+
 function renderBrief() {
   const p = prizeOf(mapIdx);
   $('brFloor').textContent = MAPS[mapIdx].name;
@@ -3870,9 +3942,10 @@ function renderBrief() {
     listenPts.length ? listenPts.length + ' listeners' : null
   ].filter(Boolean).join(' \u00b7 ');
   $('brHaz').textContent = haz.join(' \u00b7 ') || 'nothing it wants to warn you about';
+  drawBriefPlan();
   $('brWays').innerHTML = entries.map((e, i) =>
     '<button class="wayin' + (i === entryIdx ? ' on' : '') + '" type="button" data-way="' + i + '">'
-    + '<b>' + e.name + '</b>'
+    + '<b>' + (i + 1) + ' \u00b7 ' + e.name + '</b>'
     + '<s>' + Math.round(e.gap / T.TILE) + 'm to the prize</s>'
     + '<u>' + (e.near > 900 ? 'no patrol near' : 'patrol ' + Math.round(e.near / T.TILE) + 'm off') + '</u>'
     + '</button>').join('');
@@ -8053,6 +8126,29 @@ window.__fp = {
   bankNow() { jobBank(); }, pushOn() { jobPushOn(); },
   entries() { return entries.map(e => ({ name: e.name, gap: e.gap, near: e.near })); },
   briefShown() { return !$('briefing').classList.contains('hidden'); },
+  planInk() {
+    const cv = $('brPlan'); if (!cv) return 0;
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    let lit = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 90) lit++;
+    return lit;
+  },
+  /* How gold each door is drawn. Counting lit pixels could not tell the doors
+     apart - lighting one changes its COLOUR, not the number of pixels above a
+     brightness threshold - so measure the thing that actually changes. */
+  planDoorGold() {
+    const cv = $('brPlan'); if (!cv || !entries.length) return [];
+    const g = cv.getContext('2d');
+    const sx = cv.width / (T.COLS * T.TILE), sy = cv.height / (T.ROWS * T.TILE);
+    return entries.map(e => {
+      const x = Math.max(0, Math.min(cv.width - 20, e.x * sx - 10));
+      const y = Math.max(0, Math.min(cv.height - 20, e.y * sy - 10));
+      const d = g.getImageData(x, y, 20, 20).data;
+      let gold = 0;
+      for (let i = 0; i < d.length; i += 4) gold += d[i] - d[i + 2];
+      return Math.round(gold / (d.length / 4));
+    });
+  },
   pickEntry(i) { entryIdx = i; renderBrief(); return entryIdx; },
   goIn() { goIn(); }, openBrief() { openBrief(); },
   setBriefing(on) { briefingOn = !!on; return briefingOn; },

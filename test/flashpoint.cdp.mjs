@@ -5853,6 +5853,12 @@ const brf = JSON.parse(await evl(`(() => {
     prize: document.getElementById('brPrize').textContent,
     inside: document.getElementById('brInside').textContent
   };
+  /* the plan has to actually be drawn, and it has to change when you pick a
+     different door - otherwise it is a decorative picture of a building */
+  o.inkA = __fp.planInk();
+  __fp.pickEntry(0); o.goldAt0 = __fp.planDoorGold();
+  __fp.pickEntry(1); o.goldAt1 = __fp.planDoorGold();
+  __fp.pickEntry(0);
   /* the doors have to be genuinely different places, or it is a menu */
   const es = __fp.entries();
   o.spread = (() => { let worst = 1e9;
@@ -5872,15 +5878,21 @@ ok('the briefing block ran at all', !brf.threw, brf.threw || 'ok');
 ok('a floor opens on a plan', brf.shown === true && brf.mode === 'brief',
   `shown=${brf.shown} mode=${brf.mode}`);
 ok('it names the place and what you came for',
-  brf.text.floor.length > 0 && brf.text.prize.length > 0 && /patrol/.test(brf.text.inside),
-  JSON.stringify(brf.text));
-ok('there is more than one way in', brf.ways.length >= 2, `${brf.ways.length} doors`);
+  !!brf.text && brf.text.floor.length > 0 && brf.text.prize.length > 0
+  && /patrol/.test(brf.text.inside), JSON.stringify(brf.text || null));
+ok('there is more than one way in', (brf.ways || []).length >= 2, `${(brf.ways || []).length} doors`);
+ok('the briefing draws the building', brf.inkA > 400, `${brf.inkA} lit pixels`);
+/* the chosen door is drawn gold and the others are not, so the plan says what
+   you picked rather than merely being a picture of a building */
+ok('and the plan lights the door you picked',
+  brf.goldAt0[0] > brf.goldAt0[1] && brf.goldAt1[1] > brf.goldAt1[0],
+  `picking 1 -> ${JSON.stringify(brf.goldAt0)}, picking 2 -> ${JSON.stringify(brf.goldAt1)}`);
 /* near and watched, or far and quiet - read off the floor, not invented */
 ok('and the doors are different distances from the prize', brf.spread > 40,
-  JSON.stringify(brf.ways.map(w => `${w.name} ${w.gap}px`)));
+  JSON.stringify((brf.ways || []).map(w => `${w.name} ${w.gap}px`)));
 ok('choosing one starts you at it and hands the floor back',
-  brf.afterGo.mode === 'playing' && brf.afterGo.shown === false && brf.afterGo.atLast < 2,
-  JSON.stringify(brf.afterGo));
+  !!brf.afterGo && brf.afterGo.mode === 'playing' && brf.afterGo.shown === false && brf.afterGo.atLast < 2,
+  JSON.stringify(brf.afterGo || null));
 
 /* ---- the crack ----
    The take was a 2.2s hold, the same verb as a crate. It is the climax of a
