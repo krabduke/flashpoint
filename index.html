@@ -615,7 +615,6 @@
     </div>
     <button class="btn" id="startBtn">BREAK IN</button>
     <button class="btn ghost" id="settingsBtn" type="button">SETTINGS</button>
-    <button class="btn ghost" id="dailyBtn" type="button">DAILY RUN — OFF</button>
     <p id="achCount"></p>
     <p id="dailySeed"></p>
     <p class="hint"><span class="key">WASD</span> move · <span class="key">MOUSE</span> aim beam · <span class="key">SHIFT</span> move quietly</p>
@@ -659,7 +658,6 @@
       <div class="namerow" style="margin-top:6px">
         <input class="namefield" id="nameInput3" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false" style="width:150px;padding:11px 12px;font-size:12px">
       </div>
-      <button class="btn" id="endlessBtn" style="margin-top:8px">THE NIGHT GOES DEEPER →</button>
       <button class="btn ghost" id="escAgainBtn">NEW RUN</button>
     </div>
   </div>
@@ -689,10 +687,6 @@
         <span class="set-label"><b>VOLUME</b><span>Everything except a muted run</span></span>
         <input type="range" class="vol" id="volSlider" min="0" max="100" step="5" aria-label="Volume">
         <span id="volRead">55%</span>
-      </div>
-      <div class="set-row">
-        <span class="set-label"><b>DIFFICULTY</b><span id="diffNote">Drone speed, meter fill, torch drain</span></span>
-        <button class="btn ghost" id="diffBtn" type="button" style="padding:9px 16px;font-size:10px">STANDARD</button>
       </div>
       <div class="set-row">
         <span class="set-label"><b>COLOURBLIND</b><span>Drone cones go blue and hatched</span></span>
@@ -944,6 +938,9 @@ const lerp = (a, b, k) => a + (b - a) * k;
 /* Gameplay randomness runs through here so a Daily Run can be made identical for
    everyone: same lamp sizes, same drone facings, same searchlight directions.
    Cosmetic noise (audio buffers, particle scatter) deliberately stays unseeded. */
+/* The daily run is gone: it existed to make scores comparable, and the
+   leaderboard it fed is blocked. The binding stays because the seeded RNG path
+   reads it, but nothing turns it on any more - no button, no URL flag. */
 let dailyOn = false, dRng = 0;
 const mulberry = () => {
   dRng |= 0; dRng = dRng + 0x6D2B79F5 | 0;
@@ -1457,18 +1454,15 @@ let cutAt = new Uint8Array(T.COLS * T.ROWS), cutList = [];
 let ventAt = new Uint8Array(T.COLS * T.ROWS);
 let glassAt = new Uint8Array(T.COLS * T.ROWS);
 let waterAt = new Uint8Array(T.COLS * T.ROWS);
-/* Standard is all ones, so it is exactly the game as tuned. The other two lean
-   on the same handful of numbers rather than special-casing anything. */
-const DIFFS = [
-  { id: 'casual',   name: 'CASUAL',   bot: 0.86, fill: 0.78, batt: 0.72, kit:  1, alert: 0.5, score: 0.7 },
-  { id: 'standard', name: 'STANDARD', bot: 1,    fill: 1,    batt: 1,    kit:  0, alert: 1,   score: 1 },
-  { id: 'blackout', name: 'BLACKOUT', bot: 1.12, fill: 1.28, batt: 1.35, kit: -1, alert: 1.5, score: 1.5 }
-];
-let diffIdx = (() => {
-  try { const v = DIFFS.findIndex(d => d.id === localStorage.getItem('flashpoint.diff')); return v < 0 ? 1 : v; }
-  catch (e) { return 1; }
-})();
-const D = () => DIFFS[diffIdx];
+/* Difficulty modes are gone. Three of them against five contracts was two
+   curves fighting, and the floors are the curve: one drone and no hazards on
+   THE HOUSE, four drones and three hazards on THE SPIRE. The early floors were
+   already what CASUAL was for.
+
+   D() survives as all-ones because roughly forty assertions read it. It
+   multiplies nothing. */
+const DIFF_ONE = { id: 'standard', name: 'STANDARD', bot: 1, fill: 1, batt: 1, kit: 0, alert: 1, score: 1 };
+const D = () => DIFF_ONE;
 
 /* One rule per endless loop, each one leaning on a system the game already has
    rather than a knob invented for the occasion. Chosen from the loop number so a
@@ -1525,20 +1519,11 @@ function pickMod() {
 
 /* Your own best route through each floor, kept as quantised pairs so a whole
    campaign of them is a few kilobytes rather than a problem. */
-let trail = [], trailT = 0, floorT = 0, ghostPath = null;
-let ghosts = (() => { try { return JSON.parse(localStorage.getItem('flashpoint.ghosts') || '{}') || {}; } catch (e) { return {}; } })();
+/* floorT survives on its own: the shift change reads it. The trail, the stored
+   ghosts and the replay that drew them are gone. */
+let floorT = 0;
 
-function loadGhost() {
-  const g = ghosts[mapIdx];
-  ghostPath = (g && g.p && g.p.length >= 4) ? g.p : null;
-}
-function saveGhost() {
-  if (endless || trail.length < 4) return;
-  const prev = ghosts[mapIdx];
-  if (prev && prev.t <= floorT) return;      /* only a faster route replaces one */
-  ghosts[mapIdx] = { t: +floorT.toFixed(2), p: trail.slice(0, T.GHOST_MAX * 2) };
-  try { localStorage.setItem('flashpoint.ghosts', JSON.stringify(ghosts)); } catch (e) {}
-}
+/* loadGhost / saveGhost removed with the replay */
 
 let exitVertical = true;
 let listenPts = [], sentryPts = [];
@@ -2134,7 +2119,7 @@ function loadMap(idx) {
   batt = T.BATT_MAX; beamOn = true; battDead = false;
   fSeen = false; fSprint = false; fNoticed = false; fEmp = false;
   floorT0 = runT; fSafes = 0;
-  trail = []; trailT = 0; floorT = 0; loadGhost();
+  floorT = 0;
   /* live objects clear with the floor; what you are carrying does not */
   smokes = []; emps = []; decoys = []; jams = []; magT = 0;
   hushOn = false;   /* one floor, so it lapses on the stairs */
@@ -2714,11 +2699,7 @@ function update(dt) {
 
   /* record where you went, for the ghost of this floor */
   floorT += dt;
-  trailT -= dt;
-  if (trailT <= 0 && trail.length < T.GHOST_MAX * 2) {
-    trailT = T.GHOST_STEP;
-    trail.push(Math.round(player.x), Math.round(player.y));
-  }
+  /* the route recorder went with the replay that read it */
 
   /* pressure plates */
   for (const pl of plates) {
@@ -3852,7 +3833,7 @@ function nextMap() {
     toast(tag + ' — ' + cleanPay, 2.6);
   }
   sfx.door();
-  saveGhost();
+
   unlock('first');
   if (!fSeen) unlock('clean');
   if (!fSprint) unlock('quiet');
@@ -4376,6 +4357,17 @@ function drawMinimap() {
     g.moveTo(mx, my - 4.5); g.lineTo(mx, my + 4.5);
     g.stroke();
   }
+  /* What you came for, marked from the first second. You cased the place - not
+     knowing where the prize is was never tension, it was just walking. */
+  if (prize && !prize.taken) {
+    const px = prize.x * sx, py = prize.y * sy;
+    const p = 0.5 + 0.5 * Math.sin(time * 2.6);
+    g.strokeStyle = 'rgba(255,209,102,' + (0.55 + 0.4 * p).toFixed(3) + ')';
+    g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(px, py - 4.5); g.lineTo(px + 4, py); g.lineTo(px, py + 4.5); g.lineTo(px - 4, py);
+    g.closePath(); g.stroke();
+  }
   g.fillStyle = '#fff6da';
   g.beginPath(); g.arc(player.x * sx, player.y * sy, 2.1, 0, TAU); g.fill();
 }
@@ -4523,7 +4515,7 @@ function render() {
   for (const m of emps) drawEmp(m);
   for (const d of decoys) drawDecoy(d);
   for (const i of ventList) drawVent(i);
-  if (ghostPath && mode === 'playing') drawGhost();
+  /* the ghost replay is gone - a time-attack feature in a planning game */
   for (const i of waterList) drawWater(i);
   drawWakes();
   for (const pl of plates) drawPlate(pl);
@@ -4591,11 +4583,8 @@ function render() {
        wink at you either. */
     if (b.kind === 'listen') continue;
     if (b.kind === 'sentry' && b.open <= 0.02) continue;
-    const d = Math.hypot(b.x - player.x, b.y - player.y);
-    if (d < 270 && !revealed(b)) {
-      ctx.globalAlpha = 0.16 + 0.1 * Math.sin(time * 5 + b.sweepP);
-      ctx.drawImage(botGlow(), b.x - 12, b.y - 12, 24, 24);
-    }
+    /* The glint used to hint at a drone you could not see. You can see it now,
+       so the hint is a feature propping up a feature that is gone. */
     /* a drone building up on your light shows it, so being noticed is readable
        rather than mysterious - and it is your cue to look somewhere else */
     if (b.glow > 0.15 && b.state === 'patrol') {
@@ -4875,8 +4864,8 @@ function drawListener(b) {
    cameras are, because you are meant to learn where they are and route around
    them. Shut and dark until an alarm, then the shutter opens on a live lens. */
 function drawSentry(b) {
-  const lit = revealed(b), open = b.open;
-  const a = lit ? 1 : 0.42 + open * 0.35;
+  const open = b.open;
+  const a = 1;                      /* it has a cone too; see drawBot */
   const C = colourblind() ? '110,190,255' : '255,80,66';
   ctx.save(); ctx.translate(b.x, b.y);
   ctx.globalAlpha = a * 0.55;
@@ -4915,8 +4904,11 @@ function drawSentry(b) {
 function drawBotBody(b) {
   if (b.kind === 'listen') return drawListener(b);
   if (b.kind === 'sentry') return drawSentry(b);
-  const a = revealed(b) ? 1 : (b.state === 'chase' ? 0.75 : 0);
-  if (a <= 0) return;
+  /* Always drawn. The cone is drawn whatever the light is doing, so hiding the
+     body behind it was never hiding anything - it only made the most important
+     object on the floor unreadable. What you cannot see is a listener, which
+     has no cone at all; that is a real mechanic and it stays. */
+  const a = 1;
   /* what the drone is doing, in one number, so every part of it can agree */
   const heat = botHeat(b);
   const alerted = heat > 0;
@@ -5371,24 +5363,7 @@ function drawPlate(pl) {
   ctx.restore();
 }
 
-function drawGhost() {
-  ctx.save();
-  ctx.globalAlpha = 0.16 + 0.05 * Math.sin(time * 1.6);
-  ctx.strokeStyle = '#9fd0ff';
-  ctx.lineWidth = 1.6;
-  ctx.setLineDash([3, 8]);
-  ctx.lineDashOffset = -time * 14;
-  ctx.beginPath();
-  ctx.moveTo(ghostPath[0], ghostPath[1]);
-  for (let i = 2; i < ghostPath.length; i += 2) ctx.lineTo(ghostPath[i], ghostPath[i + 1]);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  /* where the run you are chasing started */
-  ctx.globalAlpha = 0.3;
-  ctx.fillStyle = '#9fd0ff';
-  ctx.beginPath(); ctx.arc(ghostPath[0], ghostPath[1], 2.4, 0, TAU); ctx.fill();
-  ctx.restore();
-}
+/* drawGhost removed with the replay */
 
 /* The pool had ripples of its own but none of them were yours, so wading through
    it looked exactly like standing beside it. */
@@ -6897,17 +6872,11 @@ function toggleKit(id) {
   return true;
 }
 
-function renderDiff() {
-  const b = $('diffBtn');
-  if (!b) return;
-  b.textContent = D().name;
-  b.classList.toggle('on', diffIdx !== 1);
-  const note = $('diffNote');
-  if (note) note.textContent = DIFF_NOTE[D().id] || '';
-}
+/* renderDiff removed with the difficulty modes it drew */
 
 function renderDaily() {
   const b = $('dailyBtn'), sd = $('dailySeed');
+  if (!b) { if (sd) sd.textContent = ''; return; }
   if (b) { b.textContent = dailyOn ? 'DAILY RUN — ON' : 'DAILY RUN — OFF'; b.classList.toggle('on', dailyOn); }
   if (sd) sd.textContent = dailyOn ? 'SEED ' + todaySeed() + ' · SAME BUILDING FOR EVERYONE TODAY' : '';
 }
@@ -7001,13 +6970,9 @@ function startFromFloor(floorIdx) {
   mouseWX = player.x; mouseWY = player.y - 100; mouseSX = null; mouseSY = null; aimMode = 'mouse';
   hud();
 }
-function continueEndless() {
-  sfx.ui();
-  endless = true; loop = 1; pickMod(); mapIdx = 0; loadMap(0);
-  $('escaped').classList.add('hidden');
-  mode = 'playing';
-  hud();
-}
+/* continueEndless is gone with the button that called it. The night is five
+   contracts and it ends; re-stealing the same prize forever contradicted the
+   fence, the story and the whole idea of a job. */
 function toMenu() {
   mode = 'menu'; paused = false;
   $('pausedOv').classList.add('hidden'); $('caught').classList.add('hidden'); $('escaped').classList.add('hidden');
@@ -7019,7 +6984,6 @@ function toMenu() {
   renderStats();
   renderDaily();
   renderAchs();
-  renderDiff();
   renderKit();
 }
 /* R starts a whole new run, not the floor again - label it for what it does */
@@ -7077,8 +7041,7 @@ function renderPause() {
 function renderSettings() {
   $('volSlider').value = Math.round(settings.vol * 100);
   $('volRead').textContent = Math.round(settings.vol * 100) + '%';
-  $('diffBtn').textContent = D().name;
-  $('diffNote').textContent = DIFF_NOTE[D().id] || 'Drone speed, meter fill, torch drain';
+
   for (const b of $('motionSeg').children) b.classList.toggle('on', b.dataset.motion === settings.motion);
   for (const b of $('miniSeg').children) b.classList.toggle('on', (b.dataset.mini === 'on') === (settings.minimap !== false));
   for (const b of $('cbSeg').children) b.classList.toggle('on', (b.dataset.cb === 'on') === colourblind());
@@ -7090,11 +7053,6 @@ function renderSettings() {
     ? 'Hold Z instead — moving no longer costs you progress'
     : 'Stand still to work a safe or a crate';
 }
-const DIFF_NOTE = {
-  casual: 'Slower drones, a kinder meter, a longer torch',
-  standard: 'The game as it is tuned',
-  blackout: 'Faster drones, a hungrier meter, and the lights go out',
-};
 function openSettings() { renderSettings(); $('settingsOv').classList.remove('hidden'); sfx.ui(); }
 function closeSettings() { $('settingsOv').classList.add('hidden'); sfx.ui(); }
 const settingsOpen = () => !$('settingsOv').classList.contains('hidden');
@@ -7252,7 +7210,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     if (mode === 'playing') dash();
     else if (mode === 'menu' || mode === 'caught') startGame();
-    else if (mode === 'won') continueEndless();
+    /* endless is gone: the night has five contracts and an end */
   }
   if ((e.key === 'r' || e.key === 'R') && (mode === 'playing' || mode === 'caught')) startGame();
   if ((e.key === 'h' || e.key === 'H') && mode === 'playing') { toggleHide(); }
@@ -7320,10 +7278,16 @@ window.addEventListener('touchstart', () => { TOUCH = true; $('touchHint').style
 document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'playing' && !paused) togglePause(); });
 
 /* buttons */
-function bindBtn(id, fn) { $(id).addEventListener('click', e => { e.stopPropagation(); e.target.blur && e.target.blur(); fn(); }); }
+function bindBtn(id, fn) {
+  /* A missing element used to throw here and take the whole script down before
+     __fp existed, which reads as "nothing works" rather than "one button is
+     gone". Removing a button should not be able to do that. */
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener('click', e => { e.stopPropagation(); e.target.blur && e.target.blur(); fn(); });
+}
 bindBtn('startBtn', startGame);
 bindBtn('againBtn', () => { setName($('nameInput2').value || name); startGame(); });
-bindBtn('endlessBtn', () => { if ($('nameInput3').value) setName($('nameInput3').value); continueEndless(); });
 bindBtn('escAgainBtn', () => { if ($('nameInput3').value) setName($('nameInput3').value); startGame(); });
 bindBtn('resumeBtn', togglePause);
 bindBtn('settingsBtn', openSettings);
@@ -7398,12 +7362,6 @@ $('motionSeg').addEventListener('click', e => {
 bindBtn('quitBtn', toMenu);
 bindBtn('pauseBtn', togglePause);
 bindBtn('muteBtn', toggleMute);
-bindBtn('diffBtn', () => {
-  diffIdx = (diffIdx + 1) % DIFFS.length;
-  try { localStorage.setItem('flashpoint.diff', D().id); } catch (e) {}
-  renderDiff();
-});
-bindBtn('dailyBtn', () => { dailyOn = !dailyOn; if (dailyOn) seedDaily(); renderDaily(); renderCond(); hud(); });
 /* the same actions the keys fire, so touch reaches every gadget */
 bindBtn('itTorch', () => { if (!battDead) { beamOn = !beamOn; sfx.ui(); hud(); } });
 bindBtn('itFlare', throwFlare);
@@ -7456,7 +7414,7 @@ renderFloors();
 renderStats();
 renderDaily();
 renderAchs();
-renderDiff();
+
 renderKit();
 renderCond();
 if (document.fonts && document.fonts.load) document.fonts.load('900 26px Orbitron');
@@ -7501,7 +7459,6 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-if (location.search.includes('daily')) { dailyOn = true; seedDaily(); renderStats(); }
 if (location.search.includes('autostart')) setTimeout(startGame, 700);
 
 /* test hooks */
@@ -7834,12 +7791,8 @@ window.__fp = {
   cleanHeld() { return CLEAN.filter(c => c.held()).map(c => c.id); },
   cleanShown() { return [...$('cleanRow').querySelectorAll('i')].map(e => ({ label: e.textContent, on: e.classList.contains('on') })); },
   cleanPay() { return { each: T.CLEAN_EACH, all: T.CLEAN_ALL }; },
-  get trailLen() { return trail.length / 2; },
   get floorT() { return +floorT.toFixed(2); },
-  get ghostLen() { return ghostPath ? ghostPath.length / 2 : 0; },
-  get ghostBest() { const g = ghosts[mapIdx]; return g ? g.t : null; },
-  resetGhosts() { ghosts = {}; ghostPath = null; try { localStorage.setItem('flashpoint.ghosts', '{}'); } catch (e) {} },
-  saveGhost() { saveGhost(); return __fp.ghostBest; },
+
   setFloorT(v) { floorT = v; },
   get loopMod() { return modIdx >= 0 ? MODS[modIdx].id : null; },
   get loopModName() { return modIdx >= 0 ? MODS[modIdx].name : null; },
@@ -7855,10 +7808,10 @@ window.__fp = {
   pickMod() { pickMod(); return __fp.loopMod; },
   get diff() { return D().id; },
   get diffMods() { return Object.assign({}, D()); },
-  setDiff(id) { const i = DIFFS.findIndex(d => d.id === id); if (i >= 0) diffIdx = i; renderDiff(); return D().id; },
+  setDiff() { return 'standard'; },   /* modes are gone; the floors are the curve */
   get dailyOn() { return dailyOn; },
   get dailySeed() { return todaySeed(); },
-  setDaily(v) { dailyOn = !!v; if (dailyOn) seedDaily(); renderStats(); renderCond(); hud(); return dailyOn; },
+  setDaily() { return false; },   /* the daily run is gone; kept so the harness parses */
   rngProbe(n) { const out = []; for (let i = 0; i < n; i++) out.push(+rng().toFixed(6)); return out; },
   bumpAlert() { alertCool = 0; bumpAlert(); return alertLvl; },
   get botSpeedMult() { return speedMult(); },
@@ -7874,6 +7827,7 @@ window.__fp = {
   setMeter(v) { meter = v; },
   get made() { return made; }, setMade(v) { made = !!v; madeT = 0; },
   get phase() { return phase; }, get heldPrize() { return heldPrize; },
+  botAlpha(i) { const b = bots[i || 0]; return b ? (b.kind === 'listen' ? 'hidden' : 'always') : null; },
   exfilT() { return +exfilT.toFixed(2); }, takeT() { return +takeT.toFixed(3); },
   job() { return { idx: jobIdx, banked, atRisk, payout: jobPayout(),
     len: T.JOB_LEN, jobs: Math.ceil(MAPS.length / T.JOB_LEN) }; },

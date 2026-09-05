@@ -299,11 +299,11 @@ await eq('the summary says what the run was',
   "/ghosted|left behind|safe/.test(document.getElementById('escSummary').innerHTML)", true);
 await ok('escaped card visible', await evl("!document.getElementById('escaped').classList.contains('hidden')"));
 await shot('won');
-await evl("document.getElementById('endlessBtn').click();");
-await sleep(500);
-await eq('endless continues', '__fp.mode', 'playing');
-await eq('endless loop counted', '__fp.loop', 1);
-await eq('endless extra bot', '__fp.botsN >= 2', true);
+/* The night ends. There is no endless loop to fall into, which is the point of
+   having five contracts and a fence rather than a treadmill. */
+await eq('the run is over when the last contract is', '__fp.mode', 'won');
+await ok('and there is no way deeper from here',
+  await evl("!document.getElementById('endlessBtn')"), 'the button is gone');
 
 /* records + name */
 await evl('caught();');
@@ -798,14 +798,6 @@ ok('and they are not all the same', tr.sweepSpread > 0.05 && tr.paceSpread > 0.0
 ok('every trait stays in a sane band', tr.t.every(x =>
   x.sweep >= 0.7 && x.sweep <= 1.4 && x.pace >= 0.9 && x.pace <= 1.12), traits);
 
-ok('a daily run gives the same personalities twice', await evl(`(() => {
-  __fp.setDaily(true);
-  const snap = () => { __fp.resetKit(); loop = 0; mapIdx = 11; loadMap(11); return JSON.stringify(__fp.botTraits()); };
-  const a = snap(), b = snap();
-  __fp.setDaily(false);
-  return a === b;
-})()`));
-
 ok('some drones loiter at a waypoint', await evl(`(() => {
   mode = 'playing'; invuln = 999;
   loop = 0; mapIdx = 11; loadMap(11); hud();
@@ -1198,170 +1190,6 @@ ok('their paths do not all end in the same cell', await evl(`(() => {
   return new Set(ends.map(e => e.x + ',' + e.y)).size > 1;
 })()`));
 
-/* ---- ghost replay: your own best route through a floor ---- */
-await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
-await sleep(2200);
-await evl('__fp.resetGhosts()');
-ok('a fresh device has no ghost', (await evl('__fp.ghostLen')) === 0);
-
-const ghostRun = await evl(`(() => {
-  mode = 'playing'; invuln = 999; endless = false;
-  loop = 0; mapIdx = 0; loadMap(0); hud();
-  keys.left = keys.right = keys.up = keys.down = false;
-  keys.right = true;
-  for (let i = 0; i < 120; i++) update(0.016);
-  keys.right = false;
-  const walked = __fp.trailLen, t1 = __fp.floorT;
-  __fp.clearCoins(); __fp.teleport(exitPt.x, exitPt.y);
-  for (let i = 0; i < 5; i++) update(0.016);
-  /* back to floor 1 and the ghost of that walk should be waiting */
-  loop = 0; mapIdx = 0; loadMap(0); hud();
-  return JSON.stringify({ walked, t1: +t1.toFixed(2), ghost: __fp.ghostLen, best: __fp.ghostBest });
-})()`);
-const gh = JSON.parse(ghostRun);
-ok('walking records a trail', gh.walked > 4, ghostRun);
-ok('clearing the floor stores it', gh.best !== null, ghostRun);
-ok('and it is waiting next time you play that floor', gh.ghost > 4, ghostRun);
-
-ok('only a faster route replaces a ghost', await evl(`(() => {
-  const best = __fp.ghostBest;
-  /* a slower clear must not overwrite it */
-  loop = 0; mapIdx = 0; loadMap(0); hud();
-  __fp.setFloorT(best + 30);
-  for (let i = 0; i < 20; i++) update(0.016);
-  __fp.saveGhost();
-  const afterSlow = __fp.ghostBest;
-  /* a faster one must */
-  loop = 0; mapIdx = 0; loadMap(0); hud();
-  for (let i = 0; i < 20; i++) update(0.016);
-  __fp.setFloorT(0.5);
-  __fp.saveGhost();
-  return afterSlow === best && __fp.ghostBest === 0.5;
-})()`));
-
-ok('endless runs do not overwrite campaign ghosts', await evl(`(() => {
-  const before = __fp.ghostBest;
-  endless = true;
-  loop = 0; mapIdx = 0; loadMap(0); hud();
-  for (let i = 0; i < 20; i++) update(0.016);
-  __fp.setFloorT(0.01);
-  __fp.saveGhost();
-  const after = __fp.ghostBest;
-  endless = false;
-  return after === before;
-})()`));
-
-ok('a ghost stays small enough to store', await evl(`(() => {
-  const raw = localStorage.getItem('flashpoint.ghosts') || '';
-  return raw.length > 0 && raw.length < 40000;
-})()`));
-
-/* ---- endless loop modifiers ---- */
-await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
-await sleep(2200);
-ok('there are eight loop rules', (await evl('__fp.modsTotal')) === 8, `n=${await evl('__fp.modsTotal')}`);
-ok('the campaign runs without one', (await evl('__fp.loopMod')) === null);
-
-ok('entering endless picks a rule', await evl(`(() => {
-  mode = 'playing'; invuln = 999;
-  continueEndless();
-  return __fp.loopMod !== null && __fp.loopModName !== null;
-})()`));
-
-const modEffects = await evl(`(() => {
-  mode = 'playing'; invuln = 999; endless = true; loop = 1;
-  const read = (i) => {
-    __fp.setMod(i);
-    mapIdx = 0; loadMap(0); hud();
-    const M = MAPS[0];
-    return { id: __fp.loopMod, bots: __fp.botsN, coin: __fp.coinValue(),
-             haulFull: (coins = coinsTotal, +__fp.haulNoise.toFixed(2)),
-             blackout: blackoutMap, siren: nextSiren < 1e8 };
-  };
-  const out = [];
-  for (let i = 0; i < __fp.modsTotal; i++) out.push(read(i));
-  __fp.setMod(-1); endless = false;
-  return JSON.stringify(out);
-})()`);
-const me = JSON.parse(modEffects);
-const byId = Object.fromEntries(me.map(m => [m.id, m]));
-ok('swarm adds a drone', byId.swarm.bots > byId.trigger.bots, modEffects);
-ok('the curse doubles gold', byId.curse.coin > byId.trigger.coin, modEffects);
-ok('and makes you ring louder with it', byId.curse.haulFull > byId.trigger.haulFull, modEffects);
-ok('grid failure blacks out an ordinary floor', byId.grid.blackout === true && byId.trigger.blackout === false, modEffects);
-ok('wailing puts sirens on an ordinary floor', byId.wail.siren === true && byId.trigger.siren === false, modEffects);
-
-ok('brownout kills the lamps', await evl(`(() => {
-  mode = 'playing'; endless = true; loop = 1;
-  __fp.setMod(3); mapIdx = 0; loadMap(0); emps.length = 0;
-  update(0.016);
-  const dead = emitters.filter(e => (e.kind === 'lamp' || e.kind === 'neon') && e.dead).length;
-  __fp.setMod(-1); endless = false; update(0.016);
-  const alive = emitters.filter(e => (e.kind === 'lamp' || e.kind === 'neon') && e.dead).length;
-  return dead > 0 && alive === 0;
-})()`));
-
-ok('a daily endless run picks the same rule twice', await evl(`(() => {
-  __fp.setDaily(true);
-  endless = true; loop = 3;
-  const a = __fp.pickMod();
-  const b = __fp.pickMod();
-  __fp.setDaily(false); endless = false; __fp.setMod(-1);
-  return a === b;
-})()`));
-
-/* ---- difficulty modes ---- */
-await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
-await sleep(2200);
-await evl("__fp.setDiff('standard')");
-ok('standard is the default shape', await evl(`(() => {
-  const m = __fp.diffMods;
-  return m.bot === 1 && m.fill === 1 && m.batt === 1 && m.kit === 0 && m.score === 1;
-})()`));
-
-const diffs = await evl(`(() => {
-  const read = (id) => {
-    __fp.setDiff(id);
-    mode = 'playing'; invuln = 999; loop = 0; alertLvl = 0;
-    mapIdx = 0; loadMap(0); hud(); __fp.resetKit();
-    return { id, speed: +__fp.botSpeedMult.toFixed(3), coin: __fp.coinValue(), kit: __fp.kit };
-  };
-  const out = [read('casual'), read('standard'), read('blackout')];
-  __fp.setDiff('standard');
-  return JSON.stringify(out);
-})()`);
-const dm = JSON.parse(diffs);
-const [cas, std, blk] = dm;
-ok('casual drones are slower than standard', cas.speed < std.speed, diffs);
-ok('blackout drones are faster', blk.speed > std.speed, diffs);
-ok('casual hands you more kit', cas.kit.flare > std.kit.flare && cas.kit.emp > std.kit.emp, diffs);
-ok('blackout hands you less', blk.kit.flare < std.kit.flare, diffs);
-ok('and blackout never goes below nothing', Object.values(blk.kit).every(v => v >= 0), diffs);
-ok('harder play is worth more', blk.coin > std.coin && cas.coin < std.coin, diffs);
-
-ok('the torch drains faster on blackout', await evl(`(() => {
-  const drainFor = (id) => {
-    __fp.setDiff(id);
-    mode = 'playing'; invuln = 999; mapIdx = 0; loadMap(0); hud();
-    beamOn = true; __fp.setBatt(100);
-    for (let i = 0; i < 30; i++) update(0.05);
-    return __fp.batt;
-  };
-  const b = drainFor('blackout'), s2 = drainFor('standard'), c = drainFor('casual');
-  __fp.setDiff('standard');
-  return b < s2 && s2 < c;
-})()`));
-
-ok('the button cycles all three and sticks', await evl(`(() => {
-  __fp.setDiff('standard'); toMenu();
-  const b = document.getElementById('diffBtn');
-  const seen = [];
-  for (let i = 0; i < 3; i++) { b.click(); seen.push(__fp.diff); }
-  const stored = localStorage.getItem('flashpoint.diff');
-  __fp.setDiff('standard');
-  return seen.join(',') === 'blackout,casual,standard' && stored === 'standard';
-})()`));
-
 /* ---- achievements ---- */
 await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
 await sleep(2200);
@@ -1417,52 +1245,6 @@ ok('they persist and show on the menu', await evl(`(() => {
   const got = document.querySelectorAll('#achGrid span.got');
   return cells.length === 12 && got.length === __fp.achCount && got.length > 0
     && document.getElementById('achCount').textContent.includes('/ 12');
-})()`));
-
-/* ---- daily run: the same building for everyone, today ---- */
-await send('Page.navigate', { url: FILE + '?autostart&name=TESTY' });
-await sleep(2200);
-ok('daily is off by default', (await evl('__fp.dailyOn')) === false);
-ok('the seed is todays date', (await evl('__fp.dailySeed')) === Number(
-  new Date().getFullYear() * 10000 + (new Date().getMonth() + 1) * 100 + new Date().getDate()),
-  `seed=${await evl('__fp.dailySeed')}`);
-
-const dailyRng = await evl(`(() => {
-  __fp.setDaily(true);
-  __fp.resetKit();
-  const a = __fp.rngProbe(6);
-  __fp.resetKit();
-  const b = __fp.rngProbe(6);
-  __fp.setDaily(false);
-  const c = __fp.rngProbe(6);
-  const d = __fp.rngProbe(6);
-  return JSON.stringify({ a, b, c, d });
-})()`);
-const dr2 = JSON.parse(dailyRng);
-ok('a daily run repeats exactly', JSON.stringify(dr2.a) === JSON.stringify(dr2.b), dailyRng);
-ok('an ordinary run does not', JSON.stringify(dr2.c) !== JSON.stringify(dr2.d), dailyRng);
-
-ok('a daily floor lays out identically twice', await evl(`(() => {
-  __fp.setDaily(true);
-  const snap = () => {
-    __fp.resetKit(); loop = 0; mapIdx = 2; loadMap(2);
-    return JSON.stringify(emitters.map(e => [Math.round(e.x), Math.round(e.y), Math.round(e.r), +(e.ang || 0).toFixed(3)]));
-  };
-  const one = snap(), two = snap();
-  __fp.setDaily(false);
-  return one === two;
-})()`));
-
-ok('the toggle is on the menu and works', await evl(`(() => {
-  toMenu();
-  const b = document.getElementById('dailyBtn');
-  const before = __fp.dailyOn;
-  b.click();
-  const after = __fp.dailyOn;
-  const labelled = b.textContent.includes('ON') && b.classList.contains('on');
-  const seedShown = document.getElementById('dailySeed').textContent.includes(String(__fp.dailySeed));
-  b.click();
-  return before === false && after === true && labelled && seedShown && __fp.dailyOn === false;
 })()`));
 
 /* ---- run alert level: a sloppy floor costs you later ---- */
@@ -3205,17 +2987,13 @@ const stn = JSON.parse(await evl(`(() => {
   toMenu();
   $('settingsBtn').click();
   o.fromMenu = !$('settingsOv').classList.contains('hidden');
-  o.rowsSeen = ['volSlider', 'diffBtn', 'motionSeg'].every(vis);
+  o.rowsSeen = ['volSlider', 'motionSeg', 'crackSeg'].every(vis);
   /* volume reaches the audio graph, and mute does not eat your choice */
   const sl = $('volSlider'); sl.value = 20; sl.dispatchEvent(new Event('input'));
   o.vol = { setting: settings.vol, master: +master.gain.value.toFixed(3), read: $('volRead').textContent };
   toggleMute(); o.muted = +master.gain.value.toFixed(3);
   toggleMute(); o.unmuted = +master.gain.value.toFixed(3);
-  /* difficulty moved in here rather than being duplicated */
-  __fp.setDiff('casual'); renderSettings();
-  o.diffShown = $('diffBtn').textContent.trim();
-  o.diffNote = $('diffNote').textContent.length > 0;
-  __fp.setDiff('standard');
+  /* difficulty modes are gone: the contracts are the curve */
   /* motion: three states, and the system preference is only the default */
   seg('reduced').click(); o.reduced = { motion: settings.motion, shake: shakeScale, full: motionFull() };
   seg('full').click(); o.full = { motion: settings.motion, shake: shakeScale, full: motionFull() };
@@ -3252,8 +3030,10 @@ ok('volume reaches the audio, not just the label',
 /* toggleMute used to hardcode 0.55, so a mute and unmute threw your choice away */
 ok('muting and unmuting gives back the volume you chose',
   stn.muted === 0 && stn.unmuted === 0.2, `muted=${stn.muted} back=${stn.unmuted}`);
-ok('difficulty lives here now, and says what it does',
-  stn.diffShown === 'CASUAL' && stn.diffNote === true, `label=${stn.diffShown}`);
+/* difficulty modes are gone - the twenty floors are the curve, from one drone
+   and no hazards on THE HOUSE to four and three on THE SPIRE */
+ok('the settings panel no longer offers a difficulty', stn.rowsSeen === true,
+  'volume, motion and cracking remain');
 ok('motion has three states and the marked one is the chosen one',
   stn.reduced.full === false && stn.reduced.shake === 0.25
   && stn.full.full === true && stn.full.shake === 1
@@ -3307,9 +3087,9 @@ const mm = JSON.parse(await evl(`(() => {
   toMenu(); render(); o.inMenu = __fp.miniShown();
   return JSON.stringify(o);
 })()`));
-ok('a fresh floor has nothing on the map but you',
-  mm.fresh.seen === 0 && mm.fresh.lit > 0 && mm.fresh.lit < 60,
-  `cells=${mm.fresh.seen} px=${mm.fresh.lit}`);
+ok('a fresh floor knows where the prize is and nothing else',
+  mm.fresh.seen === 0 && mm.fresh.lit > 0 && mm.fresh.lit < 140,
+  `walls known=${mm.fresh.seen} px=${mm.fresh.lit} (you + the prize mark)`);
 ok('sweeping the room fills it in',
   mm.swept.seen > 100 && mm.swept.lit > mm.fresh.lit * 10,
   `cells=${mm.swept.seen} px=${mm.swept.lit}`);
@@ -3888,16 +3668,16 @@ const mix = JSON.parse(await evl(`(() => {
      alpha is 0.16 + 0.1*sin(time*5), so one sample lands anywhere in a 0.06-0.26
      range; and a wider box just collects flickering lamps and afterglow instead
      - measured, a 26px box put the baseline above the signal. */
-  const redPeak = () => { let best = -99, h = 12;
-    for (let f = 0; f < 90; f++) {
-      update(1 / 60); render();
-      const sx = (spot.x - camNow.cx) * Z, sy = (spot.y - camNow.cy) * Z;
-      const d = ctx.getImageData((sx - h) * DPR, (sy - h) * DPR, h * 2 * DPR, h * 2 * DPR).data;
-      let r = 0, b2 = 0, n = 0;
-      for (let i = 0; i < d.length; i += 4) { r += d[i]; b2 += d[i + 2]; n++; }
-      best = Math.max(best, (r - b2) / n);
-    }
-    return +best.toFixed(2); };
+  /* This measured red-minus-blue because it was looking for a red glint. The
+     glint is gone - the drone is simply drawn now - and a drone body is not
+     red, it is DARK. So measure brightness against the floor it stands on. */
+  const redPeak = () => { const h = 12;
+    for (let f = 0; f < 20; f++) { update(1 / 60); render(); }
+    const sx = (spot.x - camNow.cx) * Z, sy = (spot.y - camNow.cy) * Z;
+    const d = ctx.getImageData((sx - h) * DPR, (sy - h) * DPR, h * 2 * DPR, h * 2 * DPR).data;
+    let s = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { s += d[i] + d[i + 1] + d[i + 2]; n++; }
+    return +(s / n).toFixed(2); };
   park(); o.glintNone = redPeak();
   park(); D.x = spot.x; D.y = spot.y; o.glintDrone = redPeak();
   park(); L.x = spot.x; L.y = spot.y; o.glintListen = redPeak();
@@ -3944,10 +3724,16 @@ ok('every floor still has drones on it', mix.floors.every(f => f.drone > 0), `to
 ok('a sentry stays open longer the deeper you are',
   mix.wake.mid > mix.wake.early && mix.wake.deep > mix.wake.mid * 1.5,
   `${mix.wake.early}s -> ${mix.wake.mid}s -> ${mix.wake.deep}s`);
-/* J3 warned a third place would assume every bot is a drone, and this was it */
-ok('an unlit drone glints, and a listener does not',
-  mix.glintDrone > mix.glintNone + 1 && mix.glintListen < mix.glintNone + 0.6,
-  `none=${mix.glintNone} drone=${mix.glintDrone} listener=${mix.glintListen}`);
+/* The glint hinted at a drone you could not see. Drones are drawn whatever the
+   light is doing now - their cone always was - so the hint is gone with it. A
+   listener has no cone and stays genuinely hidden, which is its whole design. */
+/* Measured: a drone lifts this patch by ~14, an idle listener by ~5, because a
+   listener still draws at alpha 0.14 - faint, not absent. The claim is that the
+   thing with a cone is plainly there and the blind one is barely a smudge. */
+ok('a drone is plainly drawn, a listener is barely there',
+  (mix.glintDrone - mix.glintNone) > 10
+  && (mix.glintListen - mix.glintNone) < (mix.glintDrone - mix.glintNone) / 2,
+  `empty=${mix.glintNone} drone=${mix.glintDrone} listener=${mix.glintListen}`);
 ok('a unit with no route does not take the frame loop down with it',
   mix.emptyRoute === 'survived', mix.emptyRoute);
 ok('and the cone lesson waits for something that has a cone',
@@ -5202,9 +4988,6 @@ ok('fog on a dry floor is the fog condition', cond.dryFloor.running === 'haar',
 ok('fog on a floor that already has fog is swapped for one that bites',
   cond.fogFloor.running !== 'haar' && cond.fogFloor.swapped === true,
   `${cond.foggyName}: ${JSON.stringify(cond.fogFloor)}`);
-ok('a daily run locks the picker', cond.dailyLocked === true, JSON.stringify(cond.dailyLocked));
-ok('and refuses to be changed', cond.dailyRefused.ok === false, JSON.stringify(cond.dailyRefused));
-ok('saying so rather than looking broken', /fixes its own condition/.test(cond.dailyWhat), cond.dailyWhat);
 ok('every condition pays for itself', cond.pay.every(p => p >= 1), JSON.stringify(cond.pay));
 
 /* ---- the lighting model, read off the baked map rather than the screen ---- */

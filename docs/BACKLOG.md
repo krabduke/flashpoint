@@ -77,6 +77,14 @@ behaviour is assertable. Visual work gets a screenshot check instead.
     drones (doors always shut). And verify the key is not behind the door it
     opens, or the floor is unwinnable.
 
+21. **Deleting a button could blank the whole page.** `bindBtn` called
+    `$(id).addEventListener` with no null check, so removing the difficulty
+    button threw at load, killed the script before `__fp` existed, and turned
+    every one of 800 assertions into `undefined`. It reads as "nothing works"
+    rather than "one button is gone". The boot assertion was the only line in
+    that output pointing at the truth. bindBtn now returns early on a missing
+    element - removing UI should cost one dead button, not the game.
+
 ---
 
 ## A · Items and tools
@@ -538,3 +546,6 @@ Append one line per completed item: `date · id · commit · note`.
 - 2026-09-05 · balance · MEASURED, after getting it wrong twice. A player fleeing straight away from the nearest hunter from 300px is caught on 17 of 19 floors, between 1.9s and 14.5s; two floors allow a clean escape. Contact-death did NOT delete the failure state - running blindly is not enough, which is what the flanking and cornering AI was always for. Fastest catches are the dead-end-heavy floors (THE STACKS 1.9s, THE COLD STORE 2.0s), which is the design working
 - 2026-09-05 · trap · three attempts at that measurement, all wrong in the SETUP. Drones at 70px against a 26px contact radius; then a 'fleeing' player that ran in the first open direction regardless of the threat. Both produced confident numbers. Both were caught by checking the result against arithmetic I could do independently: 0.7s to close 274px is impossible at 199px/s. A measurement you cannot sanity-check against something you already know is worth nothing
 - 2026-09-05 · verify · a pessimistic reachability pass found two things 842 assertions did not: a locker on THE HOUSE sealed behind a mirror, and a THE BANK VAULT patrol waypoint behind a locked door that no drone can open. Both fixed. The third flag was correct design - a coin IS locked away there, and the keycard is on the near side, which was checked rather than assumed
+- 2026-09-05 · cut · six features out: difficulty modes, endless, ghost replay, the daily run, the fake drone hiding, and the glint that only existed to hint at the drone you could not see. ~250 lines of test removed with them - a suite that keeps testing an unreachable feature passes against dead code and makes a removal look finished when it is not
+- 2026-09-05 · change · drones and sentries are always drawn. Their cone was drawn unconditionally and AFTER the darkness composite, so hiding the body advertised the position and hid only the thing you needed to read. Listeners have no cone and stay hidden, which is a real mechanic
+- 2026-09-05 · change · the prize is marked on the minimap from the first second. Wandering was search, not skill, and the dullest part of the loop; a floor is a routing problem now
