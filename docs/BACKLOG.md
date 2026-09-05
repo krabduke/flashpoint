@@ -92,6 +92,38 @@ behaviour is assertable. Visual work gets a screenshot check instead.
     viewport and inherited by a diagram. Drive the game and LOOK at it:
     test/playthrough.mjs photographs the five moments that carry a floor.
 
+23. **An assertion scaled to the constant it guards cannot see that constant be
+    wrong.** 'standing still during the escape costs you' waited
+    `RESPONSE_EVERY * 2 + 1` seconds, so it passed at 14 - a value measurement
+    later showed never fired once in twenty floors - and would have passed at
+    900. A guard on a tuning number has to be anchored to something outside the
+    number: here, the sprint time across the real prize-to-exit routes.
+
+24. **pathFind is the DRONE's pathfinder, not the player's.** It refuses vents
+    ("a drone does not fit") and glass. Steering a simulated player with it
+    returns [] on floors 17, 19 and 20, and the fallback walks at the door
+    through the walls - which is how an entire escape-length measurement came
+    back meaningless. The player's rule is `bodyBlocked`: glass stops you, a
+    vent does not. Simulate the player with the player's rule.
+
+25. **A `> 0` filter swallows "impossible" and leaves the sentinel behind.**
+    `if (d > 0 && d < bd)` skipped empty paths, so `bd` stayed at its 1e9
+    initialiser and the report printed a 25,000,000-tile corridor. An
+    unreachable target is a fact worth printing, not a zero worth skipping.
+    Distinguish "no answer" from "an answer of zero" at the point of measuring.
+
+26. **Three plausible causes, all wrong, before the right one.** The floor-20
+    empty path was blamed on exits-on-wall-tiles, then exits-on-vent-tiles, then
+    a broken level - each checked and refuted - before the real answer: the only
+    way out is a duct, and no drone fits. Ask the question the code actually
+    asks (reachability under the drone's own rule) instead of testing
+    hypotheses about it one at a time.
+
+27. **A harness-derived script run from /tmp loads nothing.** The header
+    resolves `FILE` as `new URL('../index.html', import.meta.url)`, so a copy in
+    /tmp points at /index.html and every eval fails with a bare "loadMap is not
+    defined". Scratch copies of the harness belong in test/.
+
 ---
 
 ## A · Items and tools

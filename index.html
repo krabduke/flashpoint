@@ -4295,6 +4295,34 @@ const grainS = (() => {
   return c;
 })();
 
+/* A floor is a surface, not a spreadsheet.
+
+   Every walkable tile used to pick its colour with a 12% coin flip, independently
+   of its neighbours, which is precisely what made a room read as a checkerboard
+   of 40px squares instead of a floor. Value noise on a lattice five tiles across
+   fixes the cause rather than the symptom: neighbouring tiles now land on nearly
+   the same value, so the variation shows up as broad patches of wear and the
+   grid stops announcing itself. Sub-tile grit is still added per tile below -
+   that reads as texture because it is smaller than a cell, not the same size. */
+const tileHash = (ix, iy) => {
+  let h = (ix * 374761393 + iy * 668265263 + mapIdx * 144665) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+};
+function floorWear(x, y) {
+  const oct = (L) => {
+    const fx = x / L, fy = y / L;
+    const ix = Math.floor(fx), iy = Math.floor(fy);
+    let tx = fx - ix, ty = fy - iy;
+    tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+    const a = tileHash(ix, iy),     b = tileHash(ix + 1, iy);
+    const c = tileHash(ix, iy + 1), d = tileHash(ix + 1, iy + 1);
+    return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+  };
+  /* one broad pass for rooms-worth of variation, one tighter for patchiness */
+  return oct(5) * 0.68 + oct(2.5) * 0.32;
+}
+
 function renderMapCanvas() {
   const mw = T.COLS * T.TILE, mh = T.ROWS * T.TILE;
   if (!mapCv || mapCv.width !== mw) { mapCv = document.createElement('canvas'); mapCv.width = mw; mapCv.height = mh; mapCtx = mapCv.getContext('2d'); }
@@ -4305,9 +4333,23 @@ function renderMapCanvas() {
   for (let y = 0; y < T.ROWS; y++) for (let x = 0; x < T.COLS; x++) {
     const w = grid[y * T.COLS + x], px = x * T.TILE, py = y * T.TILE;
     if (!w) {
-      g.fillStyle = (srand() < 0.12) ? TH.floor2 : TH.floor;
+      g.fillStyle = TH.floor;
       g.fillRect(px, py, T.TILE, T.TILE);
-      g.strokeStyle = 'rgba(0,0,0,.16)'; g.lineWidth = 1; g.strokeRect(px + .5, py + .5, 39, 39);
+      const wear = floorWear(x, y);
+      if (wear > 0.46) {
+        g.globalAlpha = Math.min(0.85, (wear - 0.46) * 2.1);
+        g.fillStyle = TH.floor2; g.fillRect(px, py, T.TILE, T.TILE);
+        g.globalAlpha = 1;
+      }
+      /* Seam, not outline. Stroking all four sides drew every shared edge twice
+         - so the doubled line was darker than the single one, and every cell was
+         a box. Two sides at a little over half the weight leaves the join and
+         takes the box away. */
+      g.strokeStyle = 'rgba(0,0,0,.09)'; g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(px + 39.5, py); g.lineTo(px + 39.5, py + 40);
+      g.moveTo(px, py + 39.5); g.lineTo(px + 40, py + 39.5);
+      g.stroke();
       if (theme === 'house') {
         g.strokeStyle = 'rgba(0,0,0,.16)'; g.lineWidth = 1;
         g.beginPath(); g.moveTo(px, py + 13.5); g.lineTo(px + 40, py + 13.5);

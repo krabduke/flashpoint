@@ -5836,6 +5836,48 @@ ok('the response clock is short enough to fire during a real escape',
 ok('but not so short it fires on a clean median escape', resp.every > resp.median * 0.9,
   `window ${resp.every}s vs median escape ${resp.median}s`);
 
+/* ---- is pushing on ever the right call? ----
+   jobBank() sets mode='won', so banking ENDS the run and `banked` is always
+   zero when the card asks. Every push therefore stakes the whole run, and
+   atRisk only grows. Read naively that means the bar rises with depth while the
+   floors get harder - deep contracts nobody rational would ever see. It does
+   not, because coinValue() scales 1.2^mapIdx and the take roughly doubles each
+   contract. This pins that balance: if the coin curve or the depth bonus moves
+   independently, the break-even odds fan out and this fails. */
+const econ = JSON.parse(await evl(`(() => {
+ try {
+  const jobs = [];
+  let cum = 0;
+  for (let j = 0; j * T.JOB_LEN < MAPS.length; j++) {
+    let earn = 0;
+    for (let f = j * T.JOB_LEN; f < Math.min((j+1) * T.JOB_LEN, MAPS.length); f++) {
+      mapIdx = f; loop = 0; loadMap(f);
+      earn += coinList.filter(c => !c.bonus).length * coinValue() + T.PRIZE_SCORE;
+    }
+    cum += earn;
+    jobs.push({ job: j+1, earn, atRisk: cum,
+                bankNow: Math.round(cum * (1 + T.JOB_BONUS * j)) });
+  }
+  const needs = [];
+  for (let i = 0; i < jobs.length - 1; i++) needs.push(jobs[i].bankNow / jobs[i+1].bankNow);
+  return JSON.stringify({ jobs, needs: needs.map(n => +(n*100).toFixed(0)) });
+ } catch (e) { return JSON.stringify({ threw: e.message }); }
+})()`));
+ok('the contract economy block ran', !econ.threw, econ.threw || 'ok');
+ok('twenty floors is five contracts', econ.jobs.length === 5, `${econ.jobs.length} contracts`);
+/* a push that needs better-than-even odds is a push nobody should take */
+ok('pushing on is a real bet, not a foregone loss',
+  econ.needs.every(n => n > 15 && n < 55),
+  `break-even survival per push: ${econ.needs.map(n=>n+'%').join(' ')}`);
+/* and it should feel the same at depth as it does at the start - a curve that
+   fans out means the last contracts are decoration */
+ok('and it asks about the same at every depth',
+  Math.max(...econ.needs) - Math.min(...econ.needs) < 20,
+  `spread ${Math.min(...econ.needs)}%-${Math.max(...econ.needs)}%`);
+ok('each contract is worth more than the one before it',
+  econ.jobs.every((j, i) => i === 0 || j.earn > econ.jobs[i-1].earn),
+  econ.jobs.map(j => j.earn).join(' -> '));
+
 /* ---- the knock ----
    Three things already made noise to bait a guard and none was load-bearing,
    because avoiding attention is free and manipulating it cost a resource. This
